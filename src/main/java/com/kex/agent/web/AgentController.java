@@ -2,6 +2,8 @@ package com.kex.agent.web;
 
 import com.kex.agent.agent.AgentAnswer;
 import com.kex.agent.agent.AgentService;
+import com.kex.agent.agent.AgentStream;
+import com.kex.agent.agent.AgentTimeoutException;
 import com.kex.agent.mcp.McpServerInfo;
 import com.kex.agent.mcp.McpResourceContent;
 import com.kex.agent.mcp.McpServerUnavailableException;
@@ -14,6 +16,9 @@ import io.modelcontextprotocol.spec.McpError;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -34,6 +39,8 @@ import java.util.Map;
 @RequestMapping("/api/agent")
 class AgentController {
 
+    private static final Logger log = LoggerFactory.getLogger(AgentController.class);
+
     private final AgentService agentService;
     private final McpToolCatalog toolCatalog;
 
@@ -47,9 +54,32 @@ class AgentController {
         return agentService.ask(request.conversationId(), request.message());
     }
 
+    /**
+     * Événements nommés plutôt qu'un flux de texte nu : {@code conversation} porte l'identifiant
+     * (sans quoi un client qui n'en fournit pas ne peut ni enchaîner ni purger), {@code token} le
+     * contenu, {@code error} un échec — une connexion coupée en silence est indiscernable d'une
+     * réponse complète.
+     */
     @PostMapping(path = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    Flux<String> stream(@Valid @RequestBody ChatRequest request) {
-        return agentService.stream(request.conversationId(), request.message());
+    Flux<ServerSentEvent<String>> stream(@Valid @RequestBody ChatRequest request) {
+        AgentStream stream = agentService.stream(request.conversationId(), request.message());
+        return Flux.concat(
+                        Flux.just(event("conversation", stream.conversationId())),
+                        stream.content().map(token -> event("token", token)))
+                .onErrorResume(ex -> Flux.just(event("error", streamErrorMessage(ex))));
+    }
+
+    private static ServerSentEvent<String> event(String name, String data) {
+        return ServerSentEvent.<String>builder().event(name).data(data).build();
+    }
+
+    /** Le détail interne reste dans les journaux : il n'a pas à repartir chez l'appelant. */
+    private static String streamErrorMessage(Throwable ex) {
+        if (ex instanceof AgentTimeoutException timeout) {
+            return timeout.getMessage();
+        }
+        log.error("Échec pendant le flux de chat", ex);
+        return "Le flux s'est interrompu avant la fin de la réponse";
     }
 
     @DeleteMapping("/conversations/{conversationId}")
@@ -79,6 +109,11 @@ class AgentController {
     @GetMapping("/mcp/servers/{server}/resource")
     List<McpResourceContent> resource(@PathVariable String server, @RequestParam String uri) {
         return toolCatalog.readResource(server, uri);
+    }
+
+    @ExceptionHandler(AgentTimeoutException.class)
+    ProblemDetail timeout(AgentTimeoutException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.GATEWAY_TIMEOUT, ex.getMessage());
     }
 
     @ExceptionHandler(UnknownMcpServerException.class)

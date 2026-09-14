@@ -135,6 +135,35 @@ d'avoir le starter JDBC sur le classpath fait échouer le démarrage sans base
 `application.yml`, et le profil **annule** cette liste — une liste de propriétés n'est pas fusionnée
 entre sources, la source la plus prioritaire gagne en entier.
 
+### Le flux SSE porte son identité et ses erreurs
+
+`POST /chat/stream` rendait un flux de texte nu. Deux défauts qui n'en sont pas moins réels pour
+être discrets :
+
+- l'identifiant de conversation généré quand le client n'en fournit pas n'était **jamais rendu** :
+  la conversation était écrite en mémoire sous une clé que personne ne connaissait, donc impossible
+  à poursuivre et impossible à purger par `DELETE /conversations/{id}` ;
+- une erreur en cours de flux fermait la connexion sans un mot, et une réponse tronquée est
+  indiscernable d'une réponse complète côté client.
+
+Le flux émet donc des événements nommés : `conversation` (l'identifiant, en premier), `token`, et
+`error` en cas d'échec. Le détail de l'exception reste dans les journaux ; l'appelant reçoit un
+message court.
+
+### Plafond de durée d'un échange
+
+`kex.agent.request-timeout`, 120s par défaut. `spring.ai.mcp.client.request-timeout` borne *chaque*
+appel MCP, pas l'échange : avec vingt tours d'outils autorisés, le pire cas gardait une connexion
+HTTP ouverte une vingtaine de minutes.
+
+Les deux chemins ne sont pas équivalents, et c'est assumé :
+
+- **flux** — `Flux.timeout` annule réellement l'amont ;
+- **bloquant** — l'appel de Spring AI n'est pas interruptible. Le plafond borne l'attente de
+  l'appelant (`504`), pas le travail, qui continue jusqu'à son terme sur un thread virtuel où un
+  orphelin coûte une pile et non un thread noyau. `spring.threads.virtual.enabled` est activé pour
+  cette raison.
+
 ### L'endpoint d'appel direct
 
 <a id="the-direct-tool-endpoint"></a>

@@ -2,6 +2,11 @@ package com.kex.agent.web;
 
 import com.kex.agent.agent.AgentAnswer;
 import com.kex.agent.agent.AgentService;
+import com.kex.agent.agent.AgentStream;
+import com.kex.agent.agent.AgentTimeoutException;
+import reactor.core.publisher.Flux;
+
+import java.time.Duration;
 import com.kex.agent.mcp.McpServerInfo;
 import com.kex.agent.mcp.McpServerUnavailableException;
 import com.kex.agent.mcp.McpToolCatalog;
@@ -154,5 +159,50 @@ class AgentControllerTest {
                 .given(toolCatalog).call("kafka-explorer", "kex_list_topics", Map.of());
 
         assertThat(mvc.post().uri("/api/agent/mcp/servers/kafka-explorer/tools/kex_list_topics")).hasStatus(503);
+    }
+
+    @Test
+    void le_flux_annonce_la_conversation_puis_les_tokens() throws Exception {
+        given(agentService.stream(null, "bonjour"))
+                .willReturn(new AgentStream("conv-9", Flux.just("sa", "lut")));
+
+        var response = mvc.post().uri("/api/agent/chat/stream")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"message":"bonjour"}""")
+                .exchange();
+
+        assertThat(response).hasStatusOk();
+        String body = response.getResponse().getContentAsString();
+        assertThat(body).contains("event:conversation").contains("data:conv-9")
+                .contains("event:token").contains("data:sa").contains("data:lut");
+    }
+
+    @Test
+    void le_flux_emet_un_evenement_error_au_lieu_de_se_taire() throws Exception {
+        given(agentService.stream("conv-1", "bonjour")).willReturn(new AgentStream("conv-1",
+                Flux.error(new AgentTimeoutException(Duration.ofSeconds(120)))));
+
+        var response = mvc.post().uri("/api/agent/chat/stream")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"conversationId":"conv-1","message":"bonjour"}""")
+                .exchange();
+
+        assertThat(response).hasStatusOk();
+        assertThat(response.getResponse().getContentAsString())
+                .contains("event:error").contains("120s");
+    }
+
+    @Test
+    void retourne_504_quand_l_appel_bloquant_depasse_le_plafond() {
+        willThrow(new AgentTimeoutException(Duration.ofSeconds(120)))
+                .given(agentService).ask("conv-1", "bonjour");
+
+        assertThat(mvc.post().uri("/api/agent/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"conversationId":"conv-1","message":"bonjour"}"""))
+                .hasStatus(504);
     }
 }

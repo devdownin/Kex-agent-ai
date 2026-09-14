@@ -8,7 +8,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.ai.chat.client.ChatClient;
+import com.kex.agent.config.AgentProperties;
 import org.springframework.ai.chat.memory.ChatMemory;
+import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
+
+import java.time.Duration;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -39,13 +44,20 @@ class AgentServiceTest {
     @Mock
     ChatClient.AdvisorSpec advisorSpec;
 
+    @Mock
+    ChatClient.StreamResponseSpec streamSpec;
+
+    private static AgentProperties properties(Duration timeout) {
+        return new AgentProperties("prompt", 40, false, "", timeout);
+    }
+
     private AgentService agentService() {
         given(chatClient.prompt()).willReturn(requestSpec);
         given(requestSpec.user(anyString())).willReturn(requestSpec);
         given(requestSpec.advisors(any(Consumer.class))).willReturn(requestSpec);
         given(requestSpec.call()).willReturn(callSpec);
         given(callSpec.content()).willReturn("pong");
-        return new AgentService(chatClient, chatMemory);
+        return new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)));
     }
 
     @Test
@@ -82,8 +94,55 @@ class AgentServiceTest {
 
     @Test
     void purge_la_memoire_de_la_conversation() {
-        new AgentService(chatClient, chatMemory).clear("conv-1");
+        new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10))).clear("conv-1");
 
         verify(chatMemory).clear("conv-1");
+    }
+
+    @Test
+    void rend_l_identifiant_avec_le_flux() {
+        given(chatClient.prompt()).willReturn(requestSpec);
+        given(requestSpec.user(anyString())).willReturn(requestSpec);
+        given(requestSpec.advisors(any(Consumer.class))).willReturn(requestSpec);
+        given(requestSpec.stream()).willReturn(streamSpec);
+        given(streamSpec.content()).willReturn(Flux.just("pong"));
+
+        var stream = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)))
+                .stream(null, "ping");
+
+        // Sans identifiant rendu, la conversation créée serait inatteignable et impurgeable.
+        assertThat(stream.conversationId()).isNotBlank();
+        StepVerifier.create(stream.content()).expectNext("pong").verifyComplete();
+    }
+
+    @Test
+    void coupe_un_flux_qui_depasse_le_plafond() {
+        given(chatClient.prompt()).willReturn(requestSpec);
+        given(requestSpec.user(anyString())).willReturn(requestSpec);
+        given(requestSpec.advisors(any(Consumer.class))).willReturn(requestSpec);
+        given(requestSpec.stream()).willReturn(streamSpec);
+        given(streamSpec.content()).willReturn(Flux.never());
+
+        var stream = new AgentService(chatClient, chatMemory, properties(Duration.ofMillis(100)))
+                .stream("conv-1", "ping");
+
+        StepVerifier.create(stream.content()).expectError(AgentTimeoutException.class).verify();
+    }
+
+    @Test
+    void borne_l_attente_d_un_appel_bloquant() {
+        given(chatClient.prompt()).willReturn(requestSpec);
+        given(requestSpec.user(anyString())).willReturn(requestSpec);
+        given(requestSpec.advisors(any(Consumer.class))).willReturn(requestSpec);
+        given(requestSpec.call()).willReturn(callSpec);
+        given(callSpec.content()).willAnswer(invocation -> {
+            Thread.sleep(5_000);
+            return "trop tard";
+        });
+
+        AgentService service = new AgentService(chatClient, chatMemory, properties(Duration.ofMillis(100)));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.ask("conv-1", "ping"))
+                .isInstanceOf(AgentTimeoutException.class);
     }
 }

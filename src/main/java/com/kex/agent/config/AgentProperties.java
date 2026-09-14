@@ -3,6 +3,8 @@ package com.kex.agent.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
+import java.time.Duration;
+
 @ConfigurationProperties("kex.agent")
 public record AgentProperties(
 
@@ -22,5 +24,11 @@ public record AgentProperties(
          * Bearer exigé sur /api/**. Vide, l'API refuse tout avec 503 : un agent qui dépense des
          * jetons et exécute des outils MCP ne s'ouvre pas par défaut d'installation.
          */
-        @DefaultValue("") String apiKey) {
+        @DefaultValue("") String apiKey,
+
+        /**
+         * Attente maximale d'un échange complet, tours d'outils compris. Sans elle, 20 appels
+         * d'outils à 60s chacun gardent une connexion HTTP ouverte vingt minutes.
+         */
+        @DefaultValue("120s") Duration requestTimeout) {
 }

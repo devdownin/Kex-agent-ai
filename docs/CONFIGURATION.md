@@ -39,6 +39,7 @@ hors Docker.
 | `max-history-messages` | `40` | Fenêtre de mémoire, en messages par conversation |
 | `log-interactions` | `false` | Journalise prompts et réponses. Debug uniquement : données sensibles |
 | `api-key` | *(vide)* | Bearer de l'API. Vide = API fermée (`503`) |
+| `request-timeout` | `120s` | Attente maximale d'un échange, tours d'outils compris |
 
 ### `kex.mcp.bearer-tokens[]`
 
@@ -61,6 +62,8 @@ Le filtrage par préfixe évite qu'un jeton parte vers un serveur MCP autre que 
 | `spring.ai.mcp.client.initialized` | `false` | Initialisation paresseuse — voir ARCHITECTURE.md |
 | `spring.ai.mcp.client.request-timeout` | `60s` | Timeout des appels MCP |
 | `spring.ai.mcp.client.type` | `sync` | Client synchrone |
+| `spring.threads.virtual.enabled` | `true` | Java 25 : un échange en attente coûte une pile, pas un thread noyau |
+| `spring.mvc.async.request-timeout` | `150s` | Au-delà de `kex.agent.request-timeout`, pour que l'agent rende un `error` explicite |
 
 ## Profils
 

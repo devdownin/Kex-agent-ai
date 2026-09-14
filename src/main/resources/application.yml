@@ -5,6 +5,15 @@ server:
 spring:
   application:
     name: kex-agent-ai
+  threads:
+    # Java 25 : un échange qui attend le modèle et ses outils immobilise une pile, pas un thread noyau.
+    virtual:
+      enabled: true
+  mvc:
+    async:
+      # Au-delà de kex.agent.request-timeout, pour que ce soit l'agent qui rende un événement
+      # `error` explicite plutôt que le conteneur qui coupe la connexion sans rien dire.
+      request-timeout: 150s
   autoconfigure:
     # Mémoire de conversation en mémoire process par défaut : aucune base à installer pour
     # lancer l'agent. Le profil `shared-memory` lève ces exclusions et bascule sur PostgreSQL,
@@ -62,6 +71,7 @@ kex:
         token: ${EXPLORER_MCP_AUTH_TOKEN:}
 
   agent:
+    request-timeout: 120s
     max-history-messages: 40
     log-interactions: false
 

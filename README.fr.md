@@ -142,7 +142,7 @@ y compris ce qu'est MCP si c'est votre premier — est dans [`docs/MCP.md`](docs
 | Méthode | Route | Rôle |
 |---|---|---|
 | `POST` | `/api/agent/chat` | Poser une question, obtenir la réponse et un `conversationId` |
-| `POST` | `/api/agent/chat/stream` | Idem, en flux token par token (SSE) |
+| `POST` | `/api/agent/chat/stream` | Idem, en événements SSE nommés : `conversation`, `token`, `error` |
 | `DELETE` | `/api/agent/conversations/{id}` | Oublier une conversation |
 | `GET` | `/api/agent/mcp/servers` | Quels serveurs MCP sont connectés, et ce qu'ils exposent |
 | `POST` | `/api/agent/mcp/servers/{connection}/tools/{tool}` | Appeler un outil directement, sans modèle |
@@ -151,6 +151,12 @@ y compris ce qu'est MCP si c'est votre premier — est dans [`docs/MCP.md`](docs
 
 Toute route sous `/api/**` exige `Authorization: Bearer $KEX_AGENT_API_KEY`. `/actuator/health`
 reste ouvert pour les sondes de conteneur.
+
+Le flux s'ouvre sur un événement `conversation` portant l'identifiant — un client qui n'en a pas
+fourni peut ainsi enchaîner et purger — et un échec arrive en événement `error` plutôt qu'en socket
+qui s'arrête, ce qu'un client ne distingue pas d'une réponse terminée. Chaque échange est plafonné
+à `kex.agent.request-timeout` (120s par défaut), tours d'outils compris ; au-delà, la route
+bloquante répond `504`.
 
 ## 🔐 Posture de sécurité
 
@@ -178,7 +184,7 @@ reste ouvert pour les sondes de conteneur.
 ./mvnw verify
 ```
 
-41 tests, sans réseau ni secret. Dont un test d'intégration MCP qui monte un **vrai** serveur
+48 tests, sans réseau ni secret. Dont un test d'intégration MCP qui monte un **vrai** serveur
 streamable-HTTP derrière un bearer et fait passer le client réel par le handshake, `tools/list`,
 `tools/call`, `resources/list` et `resources/read` — le transport est exercé, pas simulé.
 
