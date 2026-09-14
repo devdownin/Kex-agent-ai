@@ -64,4 +64,12 @@ class ApiSecurityTest {
             return client.send(request.build(), HttpResponse.BodyHandlers.discarding()).statusCode();
         }
     }
+
+    @Test
+    void expose_les_metriques_mais_pas_sans_jeton() throws Exception {
+        // /actuator/prometheus porte le modèle, le volume de jetons et les outils appelés :
+        // il ne suit pas /health en permitAll.
+        assertThat(status("/actuator/prometheus", null)).isEqualTo(401);
+        assertThat(status("/actuator/prometheus", "Bearer secret")).isEqualTo(200);
+    }
 }

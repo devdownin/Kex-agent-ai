@@ -79,4 +79,14 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
+  metrics:
+    tags:
+      # Distingue les instances dans un Prometheus partagé.
+      application: ${spring.application.name}
+  observations:
+    key-values:
+      application: ${spring.application.name}
+
+  # /actuator/prometheus n'est pas en permitAll : il porte le modèle utilisé, le volume de jetons
+  # et les outils appelés. Le scraper doit présenter le même bearer que l'API.

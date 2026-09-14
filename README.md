@@ -175,6 +175,7 @@ simply stops, which a client cannot tell apart from a finished answer. Exchanges
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Components, request lifecycle, and the design decisions with their reasons |
 | [`docs/MCP.md`](docs/MCP.md) | What MCP is, the three transports, connecting a server, writing your own |
 | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) | Every property and environment variable, the profiles, running from source |
+| [`docs/OBSERVABILITE.md`](docs/OBSERVABILITE.md) | Cost and tool metrics, scraping them, what to alert on |
 
 ## 🧪 Tests
 
@@ -182,7 +183,7 @@ simply stops, which a client cannot tell apart from a finished answer. Exchanges
 ./mvnw verify
 ```
 
-48 tests, no network, no secrets. Including an MCP integration test that stands up a **real**
+50 tests, no network, no secrets. Including an MCP integration test that stands up a **real**
 streamable-HTTP server behind a bearer token and drives the actual client through handshake,
 `tools/list`, `tools/call`, `resources/list` and `resources/read` — the transport is exercised, not
 mocked.

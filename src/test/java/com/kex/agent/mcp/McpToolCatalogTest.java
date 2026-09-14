@@ -1,5 +1,6 @@
 package com.kex.agent.mcp;
 
+import io.micrometer.observation.ObservationRegistry;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,7 @@ class McpToolCatalogTest {
     private McpToolCatalog catalog(boolean initialized) {
         given(client.getClientInfo()).willReturn(new McpSchema.Implementation("kex-agent - kafka-explorer", "0.1.0"));
         given(client.isInitialized()).willReturn(initialized);
-        return new McpToolCatalog(List.of(client));
+        return new McpToolCatalog(List.of(client), ObservationRegistry.NOOP);
     }
 
     private void withResources() {

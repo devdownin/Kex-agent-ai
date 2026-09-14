@@ -1,6 +1,7 @@
 package com.kex.agent.config;
 
 import com.kex.agent.mcp.McpToolCatalog;
+import io.micrometer.observation.ObservationRegistry;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import org.springframework.ai.chat.client.ChatClient;
@@ -28,8 +29,9 @@ class AgentConfig {
 
     /** ObjectProvider : le contexte doit démarrer même sans serveur MCP configuré. */
     @Bean
-    McpToolCatalog mcpToolCatalog(ObjectProvider<List<McpSyncClient>> mcpSyncClients) {
-        return new McpToolCatalog(mcpSyncClients.getIfAvailable(List::of));
+    McpToolCatalog mcpToolCatalog(ObjectProvider<List<McpSyncClient>> mcpSyncClients,
+                                  ObservationRegistry observationRegistry) {
+        return new McpToolCatalog(mcpSyncClients.getIfAvailable(List::of), observationRegistry);
     }
 
     @Bean

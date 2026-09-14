@@ -1,5 +1,7 @@
 package com.kex.agent.mcp;
 
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
@@ -22,9 +24,11 @@ public class McpToolCatalog {
     private static final String CLIENT_NAME_SEPARATOR = " - ";
 
     private final List<McpSyncClient> clients;
+    private final ObservationRegistry observationRegistry;
 
-    public McpToolCatalog(List<McpSyncClient> clients) {
+    public McpToolCatalog(List<McpSyncClient> clients, ObservationRegistry observationRegistry) {
         this.clients = clients;
+        this.observationRegistry = observationRegistry;
     }
 
     // Un appel réseau/stdio par serveur : ne pas exposer sans cache sur un endpoint chaud.
@@ -38,11 +42,18 @@ public class McpToolCatalog {
      * l'appelant, contrairement au flux ChatClient où le LLM choisit l'outil.
      */
     public McpToolResult call(String connection, String tool, Map<String, Object> arguments) {
-        McpSchema.CallToolResult result = client(connection).callTool(
-                new McpSchema.CallToolRequest(tool, arguments == null ? Map.of() : arguments));
-
-        return new McpToolResult(connection, tool, Boolean.TRUE.equals(result.isError()),
-                textOf(result.content()), result.structuredContent());
+        // Ce chemin ne passe pas par Spring AI, donc pas par ses observations : sans ce timer,
+        // la latence et les échecs de l'appel direct ne seraient mesurés nulle part. Connexions et
+        // noms d'outils sont bornés, la cardinalité le reste aussi.
+        return Observation.createNotStarted("kex.mcp.tool.call", observationRegistry)
+                .lowCardinalityKeyValue("connection", connection)
+                .lowCardinalityKeyValue("tool", tool)
+                .observe(() -> {
+                    McpSchema.CallToolResult result = client(connection).callTool(
+                            new McpSchema.CallToolRequest(tool, arguments == null ? Map.of() : arguments));
+                    return new McpToolResult(connection, tool, Boolean.TRUE.equals(result.isError()),
+                            textOf(result.content()), result.structuredContent());
+                });
     }
 
     /** Ressources exposées par un serveur : vide si le serveur ne déclare pas la capacité. */

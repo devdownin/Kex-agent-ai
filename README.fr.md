@@ -177,6 +177,7 @@ bloquante répond `504`.
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Composants, cycle d'une requête, et les décisions avec leur raison |
 | [`docs/MCP.md`](docs/MCP.md) | Ce qu'est MCP, les trois transports, brancher un serveur, écrire le sien |
 | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) | Toutes les propriétés, les profils, lancer depuis les sources |
+| [`docs/OBSERVABILITE.md`](docs/OBSERVABILITE.md) | Métriques de coût et d'outils, scraping, seuils d'alerte |
 
 ## 🧪 Tests
 
@@ -184,7 +185,7 @@ bloquante répond `504`.
 ./mvnw verify
 ```
 
-48 tests, sans réseau ni secret. Dont un test d'intégration MCP qui monte un **vrai** serveur
+50 tests, sans réseau ni secret. Dont un test d'intégration MCP qui monte un **vrai** serveur
 streamable-HTTP derrière un bearer et fait passer le client réel par le handshake, `tools/list`,
 `tools/call`, `resources/list` et `resources/read` — le transport est exercé, pas simulé.
 
