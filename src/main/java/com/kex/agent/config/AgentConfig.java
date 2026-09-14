@@ -2,6 +2,7 @@ package com.kex.agent.config;
 
 import com.kex.agent.mcp.McpToolCatalog;
 import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
@@ -19,6 +20,11 @@ import java.util.List;
 
 @Configuration(proxyBeanMethods = false)
 class AgentConfig {
+
+    @Bean
+    McpSyncHttpClientRequestCustomizer mcpBearerTokenCustomizer(McpAuthProperties properties) {
+        return new McpBearerTokenCustomizer(properties.bearerTokens());
+    }
 
     /** ObjectProvider : le contexte doit démarrer même sans serveur MCP configuré. */
     @Bean

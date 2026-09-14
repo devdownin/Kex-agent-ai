@@ -17,7 +17,7 @@ les outils exposés par les serveurs configurés sont automatiquement présenté
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-./mvnw spring-boot:run
+./mvnw spring-boot:run     # port 8081 (8080 est laissé à Kafka SQL Explorer)
 ```
 
 ## API
@@ -27,13 +27,15 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | `POST` | `/api/agent/chat` | Requête synchrone, retourne `{conversationId, content}` |
 | `POST` | `/api/agent/chat/stream` | Même contrat, réponse en SSE token par token |
 | `DELETE` | `/api/agent/conversations/{id}` | Purge la mémoire d'une conversation |
-| `GET` | `/api/agent/mcp/servers` | Serveurs MCP connectés et outils découverts |
-| `POST` | `/api/agent/mcp/servers/{server}/tools/{tool}` | Appel direct d'un outil MCP, sans passer par le modèle |
+| `GET` | `/api/agent/mcp/servers` | Connexions MCP, état d'initialisation et outils découverts |
+| `POST` | `/api/agent/mcp/servers/{connection}/tools/{tool}` | Appel direct d'un outil MCP, sans passer par le modèle |
+| `GET` | `/api/agent/mcp/servers/{connection}/resources` | Ressources exposées par le serveur |
+| `GET` | `/api/agent/mcp/servers/{connection}/resource?uri=…` | Lecture d'une ressource |
 
 ```bash
-curl -X POST localhost:8080/api/agent/chat \
+curl -X POST localhost:8081/api/agent/chat \
   -H 'Content-Type: application/json' \
-  -d '{"conversationId":"demo","message":"Liste les fichiers de /tmp"}'
+  -d '{"conversationId":"demo","message":"Quels topics Kafka ont reçu des messages aujourd\'hui ?"}'
 ```
 
 `conversationId` est optionnel : s'il est absent, un UUID est généré et renvoyé dans la réponse.
@@ -41,18 +43,33 @@ curl -X POST localhost:8080/api/agent/chat \
 Appel direct d'un outil (utile pour tester un serveur MCP ou l'orchestrer depuis du code) :
 
 ```bash
-curl -X POST localhost:8080/api/agent/mcp/servers/filesystem/tools/read_file \
+curl -X POST localhost:8081/api/agent/mcp/servers/kafka-explorer/tools/kex_list_topics \
   -H 'Content-Type: application/json' \
-  -d '{"arguments":{"path":"/data/notes.md"}}'
+  -d '{"arguments":{"prefix":"demo."}}'
 ```
 
 ```json
-{"server":"filesystem","tool":"read_file","error":false,"content":["..."],"structuredContent":null}
+{"connection":"kafka-explorer","tool":"kex_list_topics","error":false,"content":["demo.orders"],"structuredContent":null}
 ```
 
-`{server}` est le nom renvoyé par `GET /api/agent/mcp/servers` (nom annoncé par le serveur, pas
-la clé de configuration). Serveur inconnu → `404`, erreur de transport MCP → `502`, échec de
-l'outil lui-même → `200` avec `error: true`.
+Ressources :
+
+```bash
+curl localhost:8081/api/agent/mcp/servers/kafka-explorer/resources
+curl 'localhost:8081/api/agent/mcp/servers/kafka-explorer/resource?uri=kafka://cluster/topics'
+```
+
+`{connection}` est la clé de configuration (`…connections.<clé>`), pas le nom annoncé par le
+serveur : elle est connue avant même que le serveur ait répondu. `GET /api/agent/mcp/servers`
+renvoie les deux (`connection` et `serverName`).
+
+| Situation | Code |
+|---|---|
+| Connexion inconnue | `404` |
+| Serveur injoignable | `503` |
+| Capacité `resources` non exposée par le serveur (lecture) | `501` |
+| Erreur protocole MCP | `502` |
+| Échec de l'outil lui-même (`isError`) | `200` avec `error: true` |
 
 ## Brancher un serveur MCP
 
@@ -72,7 +89,7 @@ spring:
                 LOG_LEVEL: info
 ```
 
-Serveur distant (streamable-HTTP) :
+Serveur distant (streamable-HTTP) — Kafka SQL Explorer est câblé par défaut :
 
 ```yaml
 spring:
@@ -81,13 +98,56 @@ spring:
       client:
         streamable-http:
           connections:
-            internal-tools:
-              url: https://mcp.interne.example.com
+            kafka-explorer:
+              url: ${KAFKA_EXPLORER_URL:http://localhost:8080}
               endpoint: /mcp
+
+kex:
+  mcp:
+    bearer-tokens:
+      - url-prefix: ${KAFKA_EXPLORER_URL:http://localhost:8080}
+        token: ${EXPLORER_MCP_AUTH_TOKEN:}
 ```
+
+Le transport MCP de Spring AI n'a pas de propriété d'en-tête : `McpBearerTokenCustomizer` injecte
+`Authorization: Bearer …` et le restreint au préfixe d'URL déclaré, pour qu'un jeton ne parte pas
+vers un autre serveur MCP.
 
 Alternative : pointer un fichier au format `claude_desktop_config.json` via
 `spring.ai.mcp.client.stdio.servers-configuration: classpath:mcp-servers.json`.
+
+## Kafka SQL Explorer ([devdownin/Kafkaexplorer](https://github.com/devdownin/Kafkaexplorer))
+
+Son serveur MCP (`kafka-explorer-mcp`) est un module du même JAR, en streamable-HTTP sur `/mcp`,
+authentifié par bearer et désactivé par défaut. Côté Explorer :
+
+```bash
+export EXPLORER_MCP_ENABLED=true
+export EXPLORER_MCP_AUTH_TOKEN=$(openssl rand -hex 32)
+export EXPLORER_MCP_REQUIRE_TLS=false   # uniquement pour une stack locale en clair
+```
+
+Côté agent, le même jeton et l'URL de l'Explorer :
+
+```bash
+export EXPLORER_MCP_AUTH_TOKEN=…
+export KAFKA_EXPLORER_URL=http://localhost:8080
+./mvnw spring-boot:run     # l'agent écoute sur 8081, l'Explorer occupe 8080
+```
+
+Les outils `kex_*` (`kex_list_topics`, `kex_sql_query`, `kex_trace_key`, `kex_run_audit`…) sont
+alors automatiquement présentés au modèle et appelables directement.
+
+```bash
+curl -X POST localhost:8081/api/agent/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"Quels topics dépassent 1000 messages et lesquels ont une DLQ qui se remplit ?"}'
+```
+
+L'Explorer applique lecture seule, deny-list, rate limit et audit côté serveur : l'agent hérite de
+ces garde-fous, il ne les remplace pas. À ce jour l'Explorer expose des outils et aucune ressource,
+donc `/resources` renvoie une liste vide sur cette connexion — les ressources `kafka://cluster/*`
+sont spécifiées (SPEC-MCP) mais pas implémentées.
 
 ## Configuration applicative
 
@@ -106,8 +166,11 @@ Alternative : pointer un fichier au format `claude_desktop_config.json` via
   publiquement ni le mettre sur un chemin chaud sans cache.
 - Les outils MCP s'exécutent avec les droits du processus : restreindre la racine des serveurs
   filesystem et n'activer que les serveurs de confiance.
-- `POST /api/agent/mcp/servers/{server}/tools/{tool}` exécute l'outil sans médiation du modèle :
+- `POST /api/agent/mcp/servers/{connection}/tools/{tool}` exécute l'outil sans médiation du modèle :
   l'autorisation est entièrement à la charge de l'appelant, à protéger avant toute exposition.
+- Les clients MCP sont initialisés paresseusement (`spring.ai.mcp.client.initialized: false`) :
+  sans cela un serveur distant indisponible fait échouer le démarrage de l'agent. Chaque accès
+  retente l'initialisation, et `GET /api/agent/mcp/servers` montre l'état réel de chaque connexion.
 
 ## Tests
 

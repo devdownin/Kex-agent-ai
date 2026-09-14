@@ -3,10 +3,14 @@ package com.kex.agent.web;
 import com.kex.agent.agent.AgentAnswer;
 import com.kex.agent.agent.AgentService;
 import com.kex.agent.mcp.McpServerInfo;
+import com.kex.agent.mcp.McpServerUnavailableException;
 import com.kex.agent.mcp.McpToolCatalog;
+import com.kex.agent.mcp.McpResourceContent;
+import com.kex.agent.mcp.McpResourceInfo;
 import com.kex.agent.mcp.McpToolInfo;
 import com.kex.agent.mcp.McpToolResult;
 import com.kex.agent.mcp.UnknownMcpServerException;
+import com.kex.agent.mcp.UnsupportedMcpCapabilityException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -67,44 +71,85 @@ class AgentControllerTest {
     @Test
     void liste_les_serveurs_mcp() {
         given(toolCatalog.servers()).willReturn(List.of(
-                new McpServerInfo("filesystem", "1.0.0", "2025-06-18", true,
-                        List.of(new McpToolInfo("read_file", "Lit un fichier")))));
+                new McpServerInfo("kafka-explorer", "kafka-explorer-mcp", "0.1.0", "2025-06-18", true,
+                        List.of(new McpToolInfo("kex_list_topics", "Liste les topics")))));
 
         var response = mvc.get().uri("/api/agent/mcp/servers");
 
         assertThat(response).hasStatusOk();
-        assertThat(response).bodyJson().extractingPath("$[0].name").isEqualTo("filesystem");
-        assertThat(response).bodyJson().extractingPath("$[0].tools[0].name").isEqualTo("read_file");
+        assertThat(response).bodyJson().extractingPath("$[0].connection").isEqualTo("kafka-explorer");
+        assertThat(response).bodyJson().extractingPath("$[0].serverName").isEqualTo("kafka-explorer-mcp");
+        assertThat(response).bodyJson().extractingPath("$[0].tools[0].name").isEqualTo("kex_list_topics");
     }
 
     @Test
     void appelle_un_outil_mcp_directement() {
-        given(toolCatalog.call("filesystem", "read_file", Map.of("path", "/tmp/a.txt")))
-                .willReturn(new McpToolResult("filesystem", "read_file", false, List.of("contenu"), null));
+        given(toolCatalog.call("kafka-explorer", "kex_list_topics", Map.of("prefix", "demo.")))
+                .willReturn(new McpToolResult("kafka-explorer", "kex_list_topics", false, List.of("demo.orders"), null));
 
-        var response = mvc.post().uri("/api/agent/mcp/servers/filesystem/tools/read_file")
+        var response = mvc.post().uri("/api/agent/mcp/servers/kafka-explorer/tools/kex_list_topics")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"arguments":{"path":"/tmp/a.txt"}}""");
+                        {"arguments":{"prefix":"demo."}}""");
 
         assertThat(response).hasStatusOk();
         assertThat(response).bodyJson().extractingPath("$.error").isEqualTo(false);
-        assertThat(response).bodyJson().extractingPath("$.content[0]").isEqualTo("contenu");
+        assertThat(response).bodyJson().extractingPath("$.content[0]").isEqualTo("demo.orders");
     }
 
     @Test
     void accepte_un_appel_sans_arguments() {
-        given(toolCatalog.call("filesystem", "list_roots", Map.of()))
-                .willReturn(new McpToolResult("filesystem", "list_roots", false, List.of("/tmp"), null));
+        given(toolCatalog.call("kafka-explorer", "kex_list_topics", Map.of()))
+                .willReturn(new McpToolResult("kafka-explorer", "kex_list_topics", false, List.of("demo.orders"), null));
 
-        assertThat(mvc.post().uri("/api/agent/mcp/servers/filesystem/tools/list_roots")).hasStatusOk();
+        assertThat(mvc.post().uri("/api/agent/mcp/servers/kafka-explorer/tools/kex_list_topics")).hasStatusOk();
     }
 
     @Test
     void retourne_404_sur_serveur_mcp_inconnu() {
         willThrow(new UnknownMcpServerException("absent"))
-                .given(toolCatalog).call("absent", "read_file", Map.of());
+                .given(toolCatalog).call("absent", "kex_list_topics", Map.of());
 
-        assertThat(mvc.post().uri("/api/agent/mcp/servers/absent/tools/read_file")).hasStatus(404);
+        assertThat(mvc.post().uri("/api/agent/mcp/servers/absent/tools/kex_list_topics")).hasStatus(404);
+    }
+
+    @Test
+    void liste_les_ressources_d_un_serveur() {
+        given(toolCatalog.resources("kafka-explorer")).willReturn(List.of(
+                new McpResourceInfo("kafka://cluster/topics", "topics", null, "application/json", null)));
+
+        var response = mvc.get().uri("/api/agent/mcp/servers/kafka-explorer/resources");
+
+        assertThat(response).hasStatusOk();
+        assertThat(response).bodyJson().extractingPath("$[0].uri").isEqualTo("kafka://cluster/topics");
+    }
+
+    @Test
+    void lit_une_ressource() {
+        given(toolCatalog.readResource("kafka-explorer", "kafka://cluster/topics")).willReturn(List.of(
+                new McpResourceContent("kafka://cluster/topics", "application/json", "[]", null)));
+
+        var response = mvc.get().uri("/api/agent/mcp/servers/kafka-explorer/resource?uri={uri}",
+                "kafka://cluster/topics");
+
+        assertThat(response).hasStatusOk();
+        assertThat(response).bodyJson().extractingPath("$[0].text").isEqualTo("[]");
+    }
+
+    @Test
+    void retourne_501_si_le_serveur_n_expose_pas_de_ressources() {
+        willThrow(new UnsupportedMcpCapabilityException("filesystem", "resources"))
+                .given(toolCatalog).readResource("filesystem", "file:///a");
+
+        assertThat(mvc.get().uri("/api/agent/mcp/servers/filesystem/resource?uri={uri}", "file:///a"))
+                .hasStatus(501);
+    }
+
+    @Test
+    void retourne_503_si_le_serveur_mcp_est_injoignable() {
+        willThrow(new McpServerUnavailableException("kafka-explorer", new IllegalStateException("refused")))
+                .given(toolCatalog).call("kafka-explorer", "kex_list_topics", Map.of());
+
+        assertThat(mvc.post().uri("/api/agent/mcp/servers/kafka-explorer/tools/kex_list_topics")).hasStatus(503);
     }
 }
