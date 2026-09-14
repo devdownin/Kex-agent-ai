@@ -15,6 +15,25 @@ les outils exposés par les serveurs configurés sont automatiquement présenté
 
 ## Démarrage
 
+### Docker Compose (agent + Kafka SQL Explorer + broker)
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+export EXPLORER_MCP_AUTH_TOKEN="$(openssl rand -hex 32)"
+docker compose up -d
+```
+
+Explorer sur http://localhost:8080, agent sur http://localhost:8081. L'Explorer est tiré depuis
+l'image publiée `compagnonsdudev/kafkaexplorer:latest` avec son serveur MCP allumé ; l'agent est
+construit depuis ce dépôt. Voir `.env.example` pour les variables optionnelles (épingler une
+version de l'image, ouvrir les ports hors boucle locale, etc.).
+
+Les deux services partagent le même bearer : `EXPLORER_MCP_AUTH_TOKEN` est passé à l'Explorer, qui
+l'exige sur `/mcp`, et à l'agent, qui l'injecte dans ses appels. Compose refuse de démarrer si l'une
+des deux variables obligatoires manque, plutôt que de laisser un conteneur boucler au démarrage.
+
+### En local
+
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 ./mvnw spring-boot:run     # port 8081 (8080 est laissé à Kafka SQL Explorer)

@@ -31,3 +31,6 @@ target/
 .idea/
 *.iml
 .vscode/
+
+# Secrets docker compose
+.env
