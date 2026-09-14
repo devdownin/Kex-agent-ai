@@ -36,8 +36,17 @@ jobs:
 
       # Aucun secret : le profil `test` fournit une clé Anthropic factice et désactive le
       # client MCP, donc la suite ne sort jamais sur le réseau. Un fork construit à l'identique.
+      # `verify` couvre le format, les en-têtes de licence, les tests, le seuil de couverture
+      # et la génération du SBOM : ce que la CI vérifie est ce qu'un contributeur exécute.
       - name: Build and test
         run: ./mvnw -B --no-transfer-progress verify
+
+      - name: Upload the SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom
+          path: target/classes/META-INF/sbom/*.json
+          retention-days: 30
 
       - name: Upload test reports
         if: failure()

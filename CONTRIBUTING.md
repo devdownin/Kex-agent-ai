@@ -20,6 +20,14 @@ une clé factice et désactive le client MCP.
 - **Pas d'élargissement silencieux.** Une PR fait une chose. Si vous trouvez autre chose en chemin,
   ouvrez une issue.
 
+## Ce que `verify` impose
+
+| Contrôle | Effet |
+|---|---|
+| Spotless | En-tête SPDX sur chaque fichier Java, imports triés, pas d'import inutilisé. `./mvnw spotless:apply` corrige |
+| JaCoCo | Plancher de couverture : 85 % des instructions, 70 % des branches |
+| CycloneDX | SBOM généré dans `target/classes/META-INF/sbom/` |
+
 ## Style
 
 - Java 25 idiomatique : records, streams, `Optional`, switch sur types scellés.
@@ -38,5 +46,6 @@ Ne pas ouvrir d'issue publique pour une faille : voir [SECURITY.md](SECURITY.md)
 | `build` | `./mvnw verify` sur JDK 25 |
 | `docker` | Image construite, conteneur démarré sans serveur MCP, stack de fumée montée |
 | `analyze` | CodeQL |
+| `scorecard` | OpenSSF Scorecard, hebdomadaire |
 
 Une PR ne part en revue que verte.

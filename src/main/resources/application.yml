@@ -81,6 +81,12 @@ kex:
     max-history-messages: 40
     log-interactions: false
 
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    # Les routes sont peu nombreuses : les déplier évite un clic pour rien.
+    doc-expansion: list
+
 management:
   endpoints:
     web:

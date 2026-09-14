@@ -1,0 +1,18 @@
+* text=auto eol=lf
+
+# Le wrapper Maven est exécuté par sh : un CRLF le casse, y compris sur une machine Windows
+# qui monte le dépôt dans un conteneur.
+mvnw text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+mvnw.cmd text eol=crlf
+*.bat text eol=crlf
+
+*.jar binary
+*.png binary
+*.jpg binary
+*.ico binary
+
+# Diffs plus lisibles côté revue.
+*.java diff=java
+*.md diff=markdown

@@ -8,7 +8,8 @@ serveur MCP de [Kafka SQL Explorer](https://github.com/devdownin/Kafkaexplorer).
 ## Commandes
 
 ```bash
-./mvnw verify                              # toute la suite, sans réseau ni secret
+./mvnw verify                              # format, licences, tests, couverture, SBOM
+./mvnw spotless:apply                      # corrige format et en-têtes avant de committer
 ./mvnw test -Dtest=NomDuTest               # un test
 ./mvnw spring-boot:run                     # agent sur 8081
 docker compose -f compose/smoke.yml up -d --wait   # agent + serveur MCP factice
@@ -33,6 +34,8 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   non évidente, pas de commentaire.
 - Injection par constructeur, records pour les DTO et les `@ConfigurationProperties`.
 - Chaque correction de défaut arrive avec le test qui l'aurait attrapée.
+- En-tête SPDX en tête de chaque fichier Java — `spotless:apply` le pose.
+- Plancher de couverture : 85 % instructions, 70 % branches. `verify` échoue en dessous.
 
 ## Pièges déjà rencontrés
 
@@ -46,5 +49,9 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   `/api/**` seulement.
 - **Le refus d'authentification appartient à l'`AuthenticationEntryPoint`**, pas au filtre :
   dans le filtre, il bloque aussi les routes en `permitAll` comme `/actuator/health`.
+
+- **Le nom d'un `@PathVariable` se retrouve dans la spécification OpenAPI.** Il doit correspondre
+  au vocabulaire de la documentation, pas à une variable interne — le test de la spécification a
+  attrapé un `{server}` là où tout le reste disait `{connection}`.
 
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

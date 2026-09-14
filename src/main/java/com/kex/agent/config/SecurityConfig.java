@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.config;
 
 import org.slf4j.Logger;
@@ -38,6 +40,12 @@ class SecurityConfig {
                         // /actuator/prometheus, lui, reste authentifié : il porte le modèle,
                         // le volume de jetons et les outils appelés.
                         .requestMatchers(EndpointRequest.to("health")).permitAll()
+                        // La *forme* de l'API est déjà publique : elle est dans le README et dans
+                        // ce dépôt. Authentifier la spécification cacherait ce que personne ne
+                        // cherche et rendrait Swagger UI inutilisable dans un navigateur. Ce qui
+                        // est protégé, ce sont les routes qui agissent et qui coûtent.
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
+                        .permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new ApiKeyAuthFilter(properties.apiKey()),
                         UsernamePasswordAuthenticationFilter.class)

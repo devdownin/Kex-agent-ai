@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.config;
+
+import java.time.Duration;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
-
-import java.time.Duration;
 
 @ConfigurationProperties("kex.agent")
 public record AgentProperties(

@@ -6,6 +6,7 @@
 
 [![CI](https://github.com/devdownin/Kex-agent-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/devdownin/Kex-agent-ai/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/devdownin/Kex-agent-ai/actions/workflows/codeql.yml/badge.svg)](https://github.com/devdownin/Kex-agent-ai/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/devdownin/Kex-agent-ai/badge)](https://scorecard.dev/viewer/?uri=github.com/devdownin/Kex-agent-ai)
 [![Java 25](https://img.shields.io/badge/Java-25-orange)](pom.xml)
 [![Spring Boot 4.1](https://img.shields.io/badge/Spring_Boot-4.1-6DB33F?logo=springboot&logoColor=white)](pom.xml)
 [![Spring AI 2.0](https://img.shields.io/badge/Spring_AI-2.0-6DB33F)](pom.xml)
@@ -147,6 +148,10 @@ MCP is, if this is your first one — is in [`docs/MCP.md`](docs/MCP.md).
 | `GET` | `/api/agent/mcp/servers/{connection}/resources` | List a server's resources |
 | `GET` | `/api/agent/mcp/servers/{connection}/resource?uri=…` | Read one |
 
+The OpenAPI description is served at `/v3/api-docs`, with Swagger UI at `/swagger-ui.html`. Both are
+open: the *shape* of the API is already public in this repository, and hiding it would only make the
+UI unusable in a browser. What is protected is everything that acts or costs money.
+
 Every route under `/api/**` requires `Authorization: Bearer $KEX_AGENT_API_KEY`. `/actuator/health`
 stays open for container probes.
 
@@ -183,7 +188,7 @@ simply stops, which a client cannot tell apart from a finished answer. Exchanges
 ./mvnw verify
 ```
 
-55 tests, no network, no secrets. Including an MCP integration test that stands up a **real**
+57 tests, no network, no secrets. Including an MCP integration test that stands up a **real**
 streamable-HTTP server behind a bearer token and drives the actual client through handshake,
 `tools/list`, `tools/call`, `resources/list` and `resources/read` — the transport is exercised, not
 mocked.
@@ -202,6 +207,14 @@ the agent discovers the stub, its tool, and calls it through the network with th
 | Spring AI | 2.0.1 |
 | Model | Anthropic (swap the starter for OpenAI, Ollama, Bedrock…) |
 | MCP | `spring-ai-starter-mcp-client` — stdio, SSE, streamable-HTTP |
+
+## 🛡️ Supply chain
+
+Every release image is built from a tagged commit, published multi-arch to GHCR with provenance and
+an SBOM. The build itself emits a CycloneDX SBOM (`target/classes/META-INF/sbom/`), CI enforces the
+license headers, the format, and a coverage floor, CodeQL runs per pull request and weekly, OpenSSF
+Scorecard weekly, and Dependabot watches Maven, Actions and Docker. Every GitHub Action is pinned by
+commit SHA.
 
 ## 🤝 Contributing
 

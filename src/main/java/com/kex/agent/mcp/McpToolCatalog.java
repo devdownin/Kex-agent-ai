@@ -1,4 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.mcp;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
@@ -6,10 +12,6 @@ import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 /**
  * Introspection et invocation directe des serveurs MCP connectés. Les clients sont initialisés

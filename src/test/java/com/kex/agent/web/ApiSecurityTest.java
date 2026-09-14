@@ -1,15 +1,17 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.web;
-
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.test.context.ActiveProfiles;
 
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -71,5 +73,23 @@ class ApiSecurityTest {
         // il ne suit pas /health en permitAll.
         assertThat(status("/actuator/prometheus", null)).isEqualTo(401);
         assertThat(status("/actuator/prometheus", "Bearer secret")).isEqualTo(200);
+    }
+
+    @Test
+    void publie_la_specification_sans_ouvrir_l_api() throws Exception {
+        // La forme de l'API est déjà publique ; ce sont les routes qui agissent qui sont fermées.
+        assertThat(status("/v3/api-docs", null)).isEqualTo(200);
+        assertThat(status("/swagger-ui/index.html", null)).isEqualTo(200);
+        assertThat(status("/api/agent/mcp/servers", null)).isEqualTo(401);
+    }
+
+    @Test
+    void la_specification_decrit_le_schema_bearer() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/v3/api-docs")).build();
+        try (HttpClient client = HttpClient.newHttpClient()) {
+            String body = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
+            assertThat(body).contains("\"bearer\"").contains("/api/agent/chat")
+                    .contains("/api/agent/mcp/servers/{connection}/tools/{tool}");
+        }
     }
 }

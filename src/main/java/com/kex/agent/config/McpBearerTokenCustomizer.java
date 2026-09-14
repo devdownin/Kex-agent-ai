@@ -1,12 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.config;
-
-import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
-import io.modelcontextprotocol.common.McpTransportContext;
-import org.springframework.util.StringUtils;
 
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.util.List;
+
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.common.McpTransportContext;
+import org.springframework.util.StringUtils;
 
 /**
  * Le transport streamable-http de Spring AI ne porte pas d'en-têtes dans ses propriétés :

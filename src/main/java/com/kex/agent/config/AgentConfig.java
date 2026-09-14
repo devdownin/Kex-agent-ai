@@ -1,4 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.config;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import com.kex.agent.mcp.McpToolCatalog;
 import io.micrometer.observation.ObservationRegistry;
@@ -15,9 +20,6 @@ import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
-import java.util.ArrayList;
-import java.util.List;
 
 @Configuration(proxyBeanMethods = false)
 class AgentConfig {

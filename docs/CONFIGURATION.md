@@ -140,6 +140,16 @@ L'agent et un serveur MCP factice, sans Kafka ni Explorer. C'est ce que monte la
 que la stack se parle vraiment — image, réseau, propagation du bearer, découverte MCP — sans faire
 dépendre le résultat d'un pull Docker Hub anonyme.
 
+## Documentation de l'API
+
+| Route | Contenu |
+|---|---|
+| `/v3/api-docs` | Description OpenAPI 3.1, générée depuis le code |
+| `/swagger-ui.html` | Interface d'exploration |
+
+Les deux sont accessibles sans jeton : la forme de l'API est publique, ses effets ne le sont pas.
+Le bouton « Authorize » de Swagger UI attend la valeur de `kex.agent.api-key`.
+
 ## Tests
 
 ```bash

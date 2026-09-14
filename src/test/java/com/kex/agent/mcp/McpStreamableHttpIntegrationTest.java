@@ -1,4 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.mcp;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.Map;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -7,10 +13,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

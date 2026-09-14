@@ -1,25 +1,30 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.web;
+
+import java.util.List;
+import java.util.Map;
 
 import com.kex.agent.agent.AgentAnswer;
 import com.kex.agent.agent.AgentService;
 import com.kex.agent.agent.AgentStream;
 import com.kex.agent.agent.AgentTimeoutException;
-import com.kex.agent.mcp.McpServerInfo;
 import com.kex.agent.mcp.McpResourceContent;
-import com.kex.agent.mcp.McpServerUnavailableException;
 import com.kex.agent.mcp.McpResourceInfo;
+import com.kex.agent.mcp.McpServerInfo;
+import com.kex.agent.mcp.McpServerUnavailableException;
 import com.kex.agent.mcp.McpToolCatalog;
 import com.kex.agent.mcp.McpToolResult;
 import com.kex.agent.mcp.UnknownMcpServerException;
 import com.kex.agent.mcp.UnsupportedMcpCapabilityException;
 import io.modelcontextprotocol.spec.McpError;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.codec.ServerSentEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,9 +36,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
-
-import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/agent")
@@ -94,21 +96,21 @@ class AgentController {
     }
 
     /** Invocation directe d'un outil MCP, sans passer par le modèle. */
-    @PostMapping("/mcp/servers/{server}/tools/{tool}")
-    McpToolResult callTool(@PathVariable String server,
+    @PostMapping("/mcp/servers/{connection}/tools/{tool}")
+    McpToolResult callTool(@PathVariable String connection,
                            @PathVariable String tool,
                            @RequestBody(required = false) McpToolCallRequest request) {
-        return toolCatalog.call(server, tool, request == null ? Map.of() : request.arguments());
+        return toolCatalog.call(connection, tool, request == null ? Map.of() : request.arguments());
     }
 
-    @GetMapping("/mcp/servers/{server}/resources")
-    List<McpResourceInfo> resources(@PathVariable String server) {
-        return toolCatalog.resources(server);
+    @GetMapping("/mcp/servers/{connection}/resources")
+    List<McpResourceInfo> resources(@PathVariable String connection) {
+        return toolCatalog.resources(connection);
     }
 
-    @GetMapping("/mcp/servers/{server}/resource")
-    List<McpResourceContent> resource(@PathVariable String server, @RequestParam String uri) {
-        return toolCatalog.readResource(server, uri);
+    @GetMapping("/mcp/servers/{connection}/resource")
+    List<McpResourceContent> resource(@PathVariable String connection, @RequestParam String uri) {
+        return toolCatalog.readResource(connection, uri);
     }
 
     @ExceptionHandler(AgentTimeoutException.class)

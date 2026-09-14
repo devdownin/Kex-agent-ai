@@ -1,17 +1,20 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.web;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 
 import com.kex.agent.agent.AgentAnswer;
 import com.kex.agent.agent.AgentService;
 import com.kex.agent.agent.AgentStream;
 import com.kex.agent.agent.AgentTimeoutException;
-import reactor.core.publisher.Flux;
-
-import java.time.Duration;
+import com.kex.agent.mcp.McpResourceContent;
+import com.kex.agent.mcp.McpResourceInfo;
 import com.kex.agent.mcp.McpServerInfo;
 import com.kex.agent.mcp.McpServerUnavailableException;
 import com.kex.agent.mcp.McpToolCatalog;
-import com.kex.agent.mcp.McpResourceContent;
-import com.kex.agent.mcp.McpResourceInfo;
 import com.kex.agent.mcp.McpToolInfo;
 import com.kex.agent.mcp.McpToolResult;
 import com.kex.agent.mcp.UnknownMcpServerException;
@@ -23,9 +26,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
-
-import java.util.List;
-import java.util.Map;
+import reactor.core.publisher.Flux;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
