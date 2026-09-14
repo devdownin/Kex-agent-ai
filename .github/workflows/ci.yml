@@ -89,6 +89,11 @@ jobs:
         if: failure()
         run: docker logs kex-agent-smoke || true
 
+      # Le conteneur occupe 8081, que la stack de fumée publie aussi.
+      - name: Stop the single-container smoke test
+        if: always()
+        run: docker rm -f kex-agent-smoke || true
+
       - name: Validate the compose stacks
         env:
           ANTHROPIC_API_KEY: ci-dummy
@@ -97,3 +102,38 @@ jobs:
         run: |
           docker compose config --quiet
           docker compose -f docker-compose.yml -f compose/shared-memory.yml config --quiet
+
+      # Valider la syntaxe ne prouve pas que la stack se parle. Celle-ci est montée pour de vrai,
+      # avec un serveur MCP factice au lieu de Kafka SQL Explorer : ce qui est vérifié ici
+      # appartient à ce dépôt (image, réseau, propagation du bearer, découverte MCP), et la CI ne
+      # dépend pas d'un pull Docker Hub anonyme et de son quota par IP.
+      - name: Bring the smoke stack up
+        env:
+          KEX_AGENT_API_KEY: smoke-secret
+          EXPLORER_MCP_AUTH_TOKEN: smoke-token
+        run: |
+          docker tag kex-agent-ai:ci kex-agent-ai:smoke
+          docker compose -f compose/smoke.yml up -d --wait
+
+      - name: The agent must discover the stub through the stack
+        run: |
+          set -euo pipefail
+          servers=$(curl -fsS -H 'Authorization: Bearer smoke-secret' \
+            http://localhost:8081/api/agent/mcp/servers)
+          echo "$servers"
+          echo "$servers" | grep -q '"serverName":"mcp-stub"'
+          echo "$servers" | grep -q '"initialized":true'
+          echo "$servers" | grep -q '"name":"echo"'
+          result=$(curl -fsS -X POST -H 'Authorization: Bearer smoke-secret' \
+            -H 'Content-Type: application/json' -d '{"arguments":{"texte":"ping"}}' \
+            http://localhost:8081/api/agent/mcp/servers/kafka-explorer/tools/echo)
+          echo "$result"
+          echo "$result" | grep -q 'pong'
+
+      - name: Smoke stack logs on failure
+        if: failure()
+        run: docker compose -f compose/smoke.yml logs || true
+
+      - name: Tear the smoke stack down
+        if: always()
+        run: docker compose -f compose/smoke.yml down -v || true

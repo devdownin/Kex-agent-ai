@@ -1,0 +1,20 @@
+name: Proposition
+description: Une capacité manquante
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Le problème
+      description: Ce que vous n'arrivez pas à faire aujourd'hui. Pas la solution — le problème.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Ce que vous proposez
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Ce que vous faites en attendant
+      description: Le contournement actuel, s'il y en a un. Il dit souvent où est la vraie gêne.

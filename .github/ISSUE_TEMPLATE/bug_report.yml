@@ -1,0 +1,46 @@
+name: Rapport de bug
+description: Un comportement observé qui diffère de celui attendu
+labels: ["bug"]
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Ce qui se passe
+      description: Le comportement observé, et celui que vous attendiez.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction
+      description: Les étapes, aussi minimales que possible. Un appel curl vaut mieux qu'une description.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Journaux
+      description: Sortie pertinente. Retirez jetons et clés avant de coller.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Version ou commit
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: Mode de lancement
+      options:
+        - docker compose
+        - image Docker seule
+        - depuis les sources (./mvnw spring-boot:run)
+    validations:
+      required: true
+  - type: input
+    id: mcp
+    attributes:
+      label: Serveurs MCP branchés
+      description: Kafka SQL Explorer, un serveur maison, aucun…

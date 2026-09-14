@@ -14,7 +14,7 @@ import java.net.http.HttpResponse;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "kex.agent.api-key=secret")
+        properties = {"kex.agent.api-key=secret", "kex.agent.rate-limit.enabled=false"})
 @ActiveProfiles("test")
 class ApiSecurityTest {
 

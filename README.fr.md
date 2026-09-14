@@ -185,12 +185,14 @@ bloquante répond `504`.
 ./mvnw verify
 ```
 
-50 tests, sans réseau ni secret. Dont un test d'intégration MCP qui monte un **vrai** serveur
+55 tests, sans réseau ni secret. Dont un test d'intégration MCP qui monte un **vrai** serveur
 streamable-HTTP derrière un bearer et fait passer le client réel par le handshake, `tools/list`,
 `tools/call`, `resources/list` et `resources/read` — le transport est exercé, pas simulé.
 
-La CI construit en plus l'image Docker et la teste : le conteneur doit démarrer **sans aucun serveur
-MCP joignable**, refuser un appel non authentifié, et servir un appel authentifié.
+La CI construit en plus l'image Docker et la teste — le conteneur doit démarrer **sans aucun serveur
+MCP joignable**, refuser un appel non authentifié, et servir un appel authentifié — puis monte une
+vraie stack compose (`compose/smoke.yml` : l'agent et un serveur MCP factice) et vérifie que l'agent
+découvre le serveur, son outil, et l'appelle à travers le réseau avec le bearer partagé.
 
 ## 🗺️ Stack
 
@@ -201,6 +203,11 @@ MCP joignable**, refuser un appel non authentifié, et servir un appel authentif
 | Spring AI | 2.0.1 |
 | Modèle | Anthropic (remplacer le starter pour OpenAI, Ollama, Bedrock…) |
 | MCP | `spring-ai-starter-mcp-client` — stdio, SSE, streamable-HTTP |
+
+## 🤝 Contribuer
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md) pour la marche à suivre et les règles de la maison,
+[`SECURITY.md`](SECURITY.md) pour signaler une faille — en privé, jamais en issue.
 
 ## 📄 Licence
 

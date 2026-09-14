@@ -1,0 +1,39 @@
+# Stack de fumée : l'agent et un serveur MCP factice, sans Kafka ni Kafka SQL Explorer.
+#
+#   docker compose -f compose/smoke.yml up -d --wait
+#
+# Vérifie ce qui appartient à ce dépôt — l'image de l'agent, le réseau, la propagation du bearer,
+# la découverte MCP — sans faire dépendre la CI d'un pull Docker Hub anonyme pour l'Explorer.
+services:
+  mcp-stub:
+    build: ../ci/mcp-stub
+    environment:
+      MCP_STUB_TOKEN: ${EXPLORER_MCP_AUTH_TOKEN:-smoke-token}
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  agent:
+    # `image` + `build` : compose réutilise l'image si elle existe déjà (la CI la construit une
+    # fois et la tague), et la construit sinon pour un usage local.
+    image: kex-agent-ai:smoke
+    build: ..
+    ports:
+      - "127.0.0.1:${KEX_AGENT_PORT:-8081}:8081"
+    depends_on:
+      mcp-stub:
+        condition: service_healthy
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-smoke-dummy}
+      KEX_AGENT_API_KEY: ${KEX_AGENT_API_KEY:-smoke-secret}
+      EXPLORER_MCP_AUTH_TOKEN: ${EXPLORER_MCP_AUTH_TOKEN:-smoke-token}
+      KAFKA_EXPLORER_URL: http://mcp-stub:8080
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8081'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s

@@ -183,13 +183,15 @@ simply stops, which a client cannot tell apart from a finished answer. Exchanges
 ./mvnw verify
 ```
 
-50 tests, no network, no secrets. Including an MCP integration test that stands up a **real**
+55 tests, no network, no secrets. Including an MCP integration test that stands up a **real**
 streamable-HTTP server behind a bearer token and drives the actual client through handshake,
 `tools/list`, `tools/call`, `resources/list` and `resources/read` — the transport is exercised, not
 mocked.
 
-CI additionally builds the Docker image and smoke-tests it: the container must start with **no MCP
-server reachable at all**, refuse an unauthenticated call, and serve an authenticated one.
+CI additionally builds the Docker image and smoke-tests it — the container must start with **no MCP
+server reachable at all**, refuse an unauthenticated call, and serve an authenticated one — then
+brings a real compose stack up (`compose/smoke.yml`: the agent plus a stub MCP server) and checks
+the agent discovers the stub, its tool, and calls it through the network with the shared bearer.
 
 ## 🗺️ Stack
 
@@ -200,6 +202,11 @@ server reachable at all**, refuse an unauthenticated call, and serve an authenti
 | Spring AI | 2.0.1 |
 | Model | Anthropic (swap the starter for OpenAI, Ollama, Bedrock…) |
 | MCP | `spring-ai-starter-mcp-client` — stdio, SSE, streamable-HTTP |
+
+## 🤝 Contributing
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the workflow and the house rules, [`SECURITY.md`](SECURITY.md)
+for reporting a vulnerability — privately, never as an issue.
 
 ## 📄 License
 

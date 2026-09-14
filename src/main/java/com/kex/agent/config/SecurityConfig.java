@@ -9,6 +9,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.util.StringUtils;
 
@@ -19,11 +20,12 @@ class SecurityConfig {
     private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, AgentProperties properties) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, AgentProperties properties,
+                                            RateLimitProperties rateLimit) throws Exception {
         if (!StringUtils.hasText(properties.apiKey())) {
             log.warn("kex.agent.api-key est vide : /api/** répondra 503. Définir KEX_AGENT_API_KEY.");
         }
-        return http
+        http
                 // CSRF levé uniquement sur /api/**, pas globalement : ces routes n'acceptent qu'un
                 // bearer explicite, qu'un navigateur n'attache jamais de lui-même en cross-site —
                 // il n'y a donc aucun credential ambiant à détourner. Partout ailleurs la
@@ -33,12 +35,20 @@ class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests
                         // Sondes de conteneur : ouvertes, elles ne divulguent rien d'exploitable.
+                        // /actuator/prometheus, lui, reste authentifié : il porte le modèle,
+                        // le volume de jetons et les outils appelés.
                         .requestMatchers(EndpointRequest.to("health")).permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new ApiKeyAuthFilter(properties.apiKey()),
                         UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(handling -> handling
-                        .authenticationEntryPoint(new ApiKeyAuthenticationEntryPoint(properties.apiKey())))
-                .build();
+                        .authenticationEntryPoint(new ApiKeyAuthenticationEntryPoint(properties.apiKey())));
+
+        if (rateLimit.enabled()) {
+            // Après l'autorisation : un appel non authentifié doit être refusé, pas consommer
+            // le quota des appelants légitimes.
+            http.addFilterAfter(new RateLimitFilter(rateLimit), AuthorizationFilter.class);
+        }
+        return http.build();
     }
 }

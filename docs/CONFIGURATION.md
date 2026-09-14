@@ -40,6 +40,9 @@ hors Docker.
 | `log-interactions` | `false` | Journalise prompts et réponses. Debug uniquement : données sensibles |
 | `api-key` | *(vide)* | Bearer de l'API. Vide = API fermée (`503`) |
 | `request-timeout` | `120s` | Attente maximale d'un échange, tours d'outils compris |
+| `rate-limit.enabled` | `true` | Limite de débit sur `/api/agent/chat` et `/chat/stream` |
+| `rate-limit.requests-per-minute` | `60` | Débit soutenu. Limite **d'instance**, pas par appelant |
+| `rate-limit.burst` | `20` | Pointe tolérée au-delà du débit soutenu |
 
 ### `kex.mcp.bearer-tokens[]`
 
@@ -126,6 +129,16 @@ export KAFKA_EXPLORER_URL=http://localhost:8080
 ```
 
 L'agent écoute sur 8081 ; 8080 est laissé à l'Explorer.
+
+## Stack de fumée
+
+```bash
+docker compose -f compose/smoke.yml up -d --wait
+```
+
+L'agent et un serveur MCP factice, sans Kafka ni Explorer. C'est ce que monte la CI pour vérifier
+que la stack se parle vraiment — image, réseau, propagation du bearer, découverte MCP — sans faire
+dépendre le résultat d'un pull Docker Hub anonyme.
 
 ## Tests
 
