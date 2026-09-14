@@ -72,6 +72,14 @@ kex:
 
   agent:
     request-timeout: 120s
+    knowledge:
+      # Éteinte : elle exige un modèle d'embeddings, donc une infrastructure que l'agent n'impose
+      # pas pour démarrer. Voir docs/CONNAISSANCE.md pour l'allumer.
+      enabled: false
+      top-k: 4
+      similarity-threshold: 0.6
+      store-path: ""
+
     rate-limit:
       # Limite d'instance, pas par appelant : le bearer est unique et partagé. Elle protège le
       # budget ; en multi-instance, diviser le seuil par le nombre de répliques.

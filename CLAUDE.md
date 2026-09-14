@@ -25,6 +25,7 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 | `agent/` | Conversation : mémoire, appel bloquant, flux SSE |
 | `mcp/` | Introspection et invocation des serveurs MCP |
 | `config/` | `ChatClient`, propriétés, bearer MCP, seau à jetons |
+| `knowledge/` | Base de connaissance optionnelle : magasin vectoriel, advisor, ingestion |
 
 ## Conventions
 
@@ -43,6 +44,8 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   serveur MCP injoignable fait échouer le démarrage de l'application entière.
 - **Les serveurs MCP s'adressent par clé de connexion**, jamais par le nom qu'ils annoncent :
   celui-ci est inconnu avant le handshake.
+- **Ne pas déclarer de bean `VectorStore` hors de `kex.agent.knowledge.enabled`** : sans modèle
+  d'embeddings, le contexte ne démarre pas. Même piège que le starter JDBC ci-dessous.
 - **Ne pas ajouter le starter JDBC hors du profil `shared-memory`** : sa seule présence sur le
   classpath fait échouer le démarrage quand aucune base n'est configurée.
 - **Ne pas désactiver CSRF globalement** — CodeQL le signale, à juste titre. Il est levé sur

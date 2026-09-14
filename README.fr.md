@@ -150,6 +150,7 @@ y compris ce qu'est MCP si c'est votre premier — est dans [`docs/MCP.md`](docs
 | `POST` | `/api/agent/mcp/servers/{connection}/tools/{tool}` | Appeler un outil directement, sans modèle |
 | `GET` | `/api/agent/mcp/servers/{connection}/resources` | Lister les ressources d'un serveur |
 | `GET` | `/api/agent/mcp/servers/{connection}/resource?uri=…` | En lire une |
+| `POST` `GET` `DELETE` | `/api/agent/knowledge` | Alimenter, chercher et élaguer la base de connaissance (si activée) |
 
 La description OpenAPI est servie sur `/v3/api-docs`, Swagger UI sur `/swagger-ui.html`. Les deux
 sont ouverts : la *forme* de l'API est déjà publique dans ce dépôt, et la cacher ne ferait que
@@ -188,6 +189,7 @@ bloquante répond `504`.
 | [`docs/MCP.md`](docs/MCP.md) | Ce qu'est MCP, les trois transports, brancher un serveur, écrire le sien |
 | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) | Toutes les propriétés, les profils, lancer depuis les sources |
 | [`docs/OBSERVABILITE.md`](docs/OBSERVABILITE.md) | Métriques de coût et d'outils, scraping, seuils d'alerte |
+| [`docs/CONNAISSANCE.md`](docs/CONNAISSANCE.md) | La base de connaissance : pourquoi éteinte, comment l'allumer, l'alimenter et la diagnostiquer |
 
 ## 🧪 Tests
 
@@ -195,7 +197,7 @@ bloquante répond `504`.
 ./mvnw verify
 ```
 
-68 tests, sans réseau ni secret. Dont un test d'intégration MCP qui monte un **vrai** serveur
+78 tests, sans réseau ni secret. Dont un test d'intégration MCP qui monte un **vrai** serveur
 streamable-HTTP derrière un bearer et fait passer le client réel par le handshake, `tools/list`,
 `tools/call`, `resources/list` et `resources/read` — le transport est exercé, pas simulé.
 
@@ -213,6 +215,25 @@ découvre le serveur, son outil, et l'appelle à travers le réseau avec le bear
 | Spring AI | 2.0.1 |
 | Modèle | Anthropic (remplacer le starter pour OpenAI, Ollama, Bedrock…) |
 | MCP | `spring-ai-starter-mcp-client` — stdio, SSE, streamable-HTTP |
+
+## 📖 Lui donner ce que votre équipe sait
+
+Les outils MCP disent ce qui **est** dans le cluster. Ils ne disent pas ce que votre équipe **sait** :
+la convention de nommage des topics, le runbook d'une DLQ qui se remplit, pourquoi `demo.orders`
+garde 7 jours. Activez la base de connaissance et chaque question y est cherchée d'abord, les
+passages pertinents étant ajoutés au prompt.
+
+```bash
+curl -X POST localhost:8081/api/agent/knowledge \
+  -H "Authorization: Bearer $KEX_AGENT_API_KEY" -H 'Content-Type: application/json' \
+  -d '[{"text":"demo.orders garde 7 jours — exigence d audit, ticket OPS-412.",
+        "metadata":{"source":"runbook"}}]'
+```
+
+Elle est livrée **éteinte** : la recherche exige un modèle d'embeddings, une infrastructure que
+l'agent n'impose pas pour démarrer. [`docs/CONNAISSANCE.md`](docs/CONNAISSANCE.md) donne les trois
+façons d'en fournir un, et la route `GET` qui exécute exactement la recherche que le modèle voit —
+une réponse décevante se diagnostique donc contre la base, elle ne se devine pas.
 
 ## 🛡️ Chaîne d'approvisionnement
 

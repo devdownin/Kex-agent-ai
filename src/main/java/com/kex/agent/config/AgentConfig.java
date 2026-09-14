@@ -67,10 +67,14 @@ class AgentConfig {
     ChatClient agentChatClient(ChatClient.Builder builder,
                                ChatMemory chatMemory,
                                ObjectProvider<ToolCallbackProvider> toolCallbackProviders,
+                               ObjectProvider<Advisor> declaredAdvisors,
                                AgentProperties properties) {
 
         List<Advisor> advisors = new ArrayList<>();
         advisors.add(MessageChatMemoryAdvisor.builder(chatMemory).build());
+        // Les advisors déclarés en beans — dont le QuestionAnswerAdvisor quand la connaissance
+        // est activée — s'ajoutent sans que cette méthode ait à les connaître.
+        declaredAdvisors.orderedStream().forEach(advisors::add);
         if (properties.logInteractions()) {
             advisors.add(new SimpleLoggerAdvisor());
         }

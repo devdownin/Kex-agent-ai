@@ -152,4 +152,29 @@ class AgentServiceTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.ask("conv-1", "ping"))
                 .isInstanceOf(AgentTimeoutException.class);
     }
+
+    @Test
+    void rend_une_sortie_structuree() {
+        given(chatClient.prompt()).willReturn(requestSpec);
+        given(requestSpec.user(anyString())).willReturn(requestSpec);
+        given(requestSpec.toolContext(any())).willReturn(requestSpec);
+        given(requestSpec.advisors(any(Consumer.class))).willReturn(requestSpec);
+        given(requestSpec.call()).willReturn(callSpec);
+        given(callSpec.entity(any(org.springframework.ai.converter.StructuredOutputConverter.class)))
+                .willReturn(Map.of("total", 8));
+
+        var answer = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)))
+                .askStructured("conv-1", "combien ?", Map.of("type", "object"));
+
+        assertThat(answer.conversationId()).isEqualTo("conv-1");
+        assertThat(answer.content()).containsEntry("total", 8);
+    }
+
+    @Test
+    void refuse_une_sortie_structuree_sans_schema() {
+        AgentService service = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.askStructured("c", "m", Map.of()))
+                .isInstanceOf(InvalidJsonSchemaException.class);
+    }
 }

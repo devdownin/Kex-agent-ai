@@ -65,4 +65,14 @@ class KexAgentApplicationTests {
 
         assertThat(meta).containsExactly(org.assertj.core.api.Assertions.entry("tenant", "acme"));
     }
+
+    @Test
+    void ne_charge_pas_la_connaissance_par_defaut() {
+        // Éteinte, elle ne doit laisser aucun bean : les déclarer exigerait un modèle
+        // d'embeddings et ferait échouer le démarrage, comme le starter JDBC de la mémoire.
+        assertThat(context.getBeanNamesForType(
+                org.springframework.ai.vectorstore.VectorStore.class)).isEmpty();
+        assertThat(context.getBeanNamesForType(
+                com.kex.agent.knowledge.KnowledgeService.class)).isEmpty();
+    }
 }
