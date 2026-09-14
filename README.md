@@ -135,8 +135,11 @@ export KAFKA_EXPLORER_URL=http://localhost:8080
 ./mvnw spring-boot:run     # l'agent écoute sur 8081, l'Explorer occupe 8080
 ```
 
-Les outils `kex_*` (`kex_list_topics`, `kex_sql_query`, `kex_trace_key`, `kex_run_audit`…) sont
-alors automatiquement présentés au modèle et appelables directement.
+L'Explorer déclare 15 outils `kex_*`, tous en lecture (`kex_list_topics`, `kex_describe_topic`,
+`kex_preview_messages`, `kex_infer_schema`, `kex_sql_query`, `kex_list_tables`, `kex_build_join`,
+`kex_trace_key`, `kex_resume_trace`, `kex_compare_traces`, `kex_deduce_data_model`,
+`kex_consumer_lag`, `kex_run_audit`, `kex_get_audit`, `kex_suggest_kpis`). Ils sont automatiquement
+présentés au modèle et appelables directement.
 
 ```bash
 curl -X POST localhost:8081/api/agent/chat \
@@ -145,9 +148,13 @@ curl -X POST localhost:8081/api/agent/chat \
 ```
 
 L'Explorer applique lecture seule, deny-list, rate limit et audit côté serveur : l'agent hérite de
-ces garde-fous, il ne les remplace pas. À ce jour l'Explorer expose des outils et aucune ressource,
-donc `/resources` renvoie une liste vide sur cette connexion — les ressources `kafka://cluster/*`
-sont spécifiées (SPEC-MCP) mais pas implémentées.
+ces garde-fous, il ne les remplace pas.
+
+Sa surface MCP est aujourd'hui **uniquement des outils** : aucun `@McpResource` ni `@McpPrompt`
+dans `src/main/java` (vérifié sur `main`, commit `50d54ea`). `/resources` renvoie donc une liste
+vide sur cette connexion — les ressources `kafka://cluster/*` sont spécifiées (SPEC-MCP) mais pas
+implémentées. Les endpoints ressources de l'agent restent génériques et fonctionnent avec tout
+serveur MCP qui déclare la capacité.
 
 ## Configuration applicative
 
