@@ -1,205 +1,199 @@
-# kex-agent-ai
+<div align="center">
 
-Agent IA Spring Boot 4 / Spring AI 2, Java 25. Client de serveurs MCP (stdio, SSE, streamable-HTTP) :
-les outils exposés par les serveurs configurés sont automatiquement présentés au modèle.
+# 🧭 Kex Agent AI
 
-## Stack
+### An AI agent that actually uses your tools — Spring Boot 4, Spring AI 2, Java 25.
 
-| Composant | Version |
-|---|---|
-| Java | 25 |
-| Spring Boot | 4.1.1 |
-| Spring AI | 2.0.1 |
-| Modèle | Anthropic (`spring-ai-starter-model-anthropic`) |
-| MCP | `spring-ai-starter-mcp-client` (client sync, transport JDK HttpClient + stdio) |
+[![CI](https://github.com/devdownin/Kex-agent-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/devdownin/Kex-agent-ai/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/devdownin/Kex-agent-ai/actions/workflows/codeql.yml/badge.svg)](https://github.com/devdownin/Kex-agent-ai/actions/workflows/codeql.yml)
+[![Java 25](https://img.shields.io/badge/Java-25-orange)](pom.xml)
+[![Spring Boot 4.1](https://img.shields.io/badge/Spring_Boot-4.1-6DB33F?logo=springboot&logoColor=white)](pom.xml)
+[![Spring AI 2.0](https://img.shields.io/badge/Spring_AI-2.0-6DB33F)](pom.xml)
+[![MCP](https://img.shields.io/badge/MCP-stdio_·_SSE_·_streamable--HTTP-5A45FF)](docs/MCP.md)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-## Démarrage
+[Quick start](#-quick-start) · [What you can ask it](#-what-you-can-ask-it) · [How it works](#-how-it-works) · [Docs](#-documentation) · [🇫🇷 Français](README.fr.md)
 
-### Docker Compose (agent + Kafka SQL Explorer + broker)
+</div>
+
+---
+
+**Most "AI agent" demos answer from the model's memory. This one goes and looks.**
+
+Kex Agent AI is a Spring Boot service that connects to [MCP](https://modelcontextprotocol.io) servers,
+discovers the tools they expose, and hands them to a Claude model — so a question like *"which topics
+received nothing today?"* becomes a real query against a real cluster, not a plausible-sounding guess.
+
+It ships wired to [Kafka SQL Explorer](https://github.com/devdownin/Kafkaexplorer), whose MCP server
+exposes 15 read-only tools over Kafka: topic listing, Flink SQL, schema inference, cross-topic key
+tracing, cluster audits. One `docker compose up` and you are asking questions of your broker in
+plain language.
+
+## ⚡ Quick start
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 export EXPLORER_MCP_AUTH_TOKEN="$(openssl rand -hex 32)"
+export KEX_AGENT_API_KEY="$(openssl rand -hex 32)"
+
 docker compose up -d
 ```
 
-Explorer sur http://localhost:8080, agent sur http://localhost:8081. L'Explorer est tiré depuis
-l'image publiée `compagnonsdudev/kafkaexplorer:latest` avec son serveur MCP allumé ; l'agent est
-construit depuis ce dépôt. Voir `.env.example` pour les variables optionnelles (épingler une
-version de l'image, ouvrir les ports hors boucle locale, etc.).
-
-Les deux services partagent le même bearer : `EXPLORER_MCP_AUTH_TOKEN` est passé à l'Explorer, qui
-l'exige sur `/mcp`, et à l'agent, qui l'injecte dans ses appels. Compose refuse de démarrer si l'une
-des deux variables obligatoires manque, plutôt que de laisser un conteneur boucler au démarrage.
-
-### En local
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-./mvnw spring-boot:run     # port 8081 (8080 est laissé à Kafka SQL Explorer)
-```
-
-## API
-
-| Méthode | Route | Rôle |
-|---|---|---|
-| `POST` | `/api/agent/chat` | Requête synchrone, retourne `{conversationId, content}` |
-| `POST` | `/api/agent/chat/stream` | Même contrat, réponse en SSE token par token |
-| `DELETE` | `/api/agent/conversations/{id}` | Purge la mémoire d'une conversation |
-| `GET` | `/api/agent/mcp/servers` | Connexions MCP, état d'initialisation et outils découverts |
-| `POST` | `/api/agent/mcp/servers/{connection}/tools/{tool}` | Appel direct d'un outil MCP, sans passer par le modèle |
-| `GET` | `/api/agent/mcp/servers/{connection}/resources` | Ressources exposées par le serveur |
-| `GET` | `/api/agent/mcp/servers/{connection}/resource?uri=…` | Lecture d'une ressource |
+Three containers: a Kafka 4.3 broker (KRaft), Kafka SQL Explorer with its MCP server switched on,
+and this agent wired to it. Explorer lands on **http://localhost:8080**, the agent on
+**http://localhost:8081**.
 
 ```bash
 curl -X POST localhost:8081/api/agent/chat \
+  -H "Authorization: Bearer $KEX_AGENT_API_KEY" \
   -H 'Content-Type: application/json' \
-  -d '{"conversationId":"demo","message":"Quels topics Kafka ont reçu des messages aujourd\'hui ?"}'
-```
-
-`conversationId` est optionnel : s'il est absent, un UUID est généré et renvoyé dans la réponse.
-
-Appel direct d'un outil (utile pour tester un serveur MCP ou l'orchestrer depuis du code) :
-
-```bash
-curl -X POST localhost:8081/api/agent/mcp/servers/kafka-explorer/tools/kex_list_topics \
-  -H 'Content-Type: application/json' \
-  -d '{"arguments":{"prefix":"demo."}}'
+  -d '{"message":"List the topics whose name starts with demo. and tell me which ones are empty."}'
 ```
 
 ```json
-{"connection":"kafka-explorer","tool":"kex_list_topics","error":false,"content":["demo.orders"],"structuredContent":null}
+{"conversationId":"3f2b…","content":"Eight topics match demo.*. Three are empty: demo.returns, …"}
 ```
 
-Ressources :
+No Docker? [Run it from source](docs/CONFIGURATION.md#running-from-source) — JDK 25 and `./mvnw spring-boot:run`.
 
-```bash
-curl localhost:8081/api/agent/mcp/servers/kafka-explorer/resources
-curl 'localhost:8081/api/agent/mcp/servers/kafka-explorer/resource?uri=kafka://cluster/topics'
+## 💬 What you can ask it
+
+With Kafka SQL Explorer connected, the model has real verbs instead of vague recall:
+
+| You ask | The agent calls | You get |
+|---|---|---|
+| *"What's in demo.orders?"* | `kex_preview_messages`, `kex_infer_schema` | Real records, plus the structure inferred from them |
+| *"Where did order ORD-1042 go?"* | `kex_trace_key` | Its path across topics, hop by hop, with latency |
+| *"Why is the DLQ filling up?"* | `kex_run_audit`, `kex_get_audit` | A graded diagnosis, not a metadata dump |
+| *"Which consumer groups are behind?"* | `kex_consumer_lag` | Time lag — the age of the oldest unread message |
+| *"Count yesterday's orders over 100 €"* | `kex_sql_query` | The Flink SQL it ran, and the rows it got back |
+
+The model picks the tool; the server enforces the guardrails. Explorer is read-only by default, with
+a deny-list, rate limiting and an audit trail — **the agent inherits those, it does not replace them.**
+
+## 🧩 How it works
+
+```mermaid
+flowchart LR
+    U([Client]) -->|Bearer + JSON| A
+    subgraph A["Kex Agent AI :8081"]
+        C[ChatClient] --- M[(Conversation<br/>memory)]
+        C --- T[MCP tool<br/>callbacks]
+    end
+    C -->|Messages API| AN([Claude])
+    T -->|streamable-HTTP<br/>+ Bearer| E
+    T -.->|stdio / SSE| O([Any other<br/>MCP server])
+    subgraph E["Kafka SQL Explorer :8080"]
+        G[Guards: read-only,<br/>deny-list, rate limit, audit]
+        K[15 kex_* tools]
+    end
+    E --> KA([Kafka cluster])
 ```
 
-`{connection}` est la clé de configuration (`…connections.<clé>`), pas le nom annoncé par le
-serveur : elle est connue avant même que le serveur ait répondu. `GET /api/agent/mcp/servers`
-renvoie les deux (`connection` et `serverName`).
+One request, end to end:
 
-| Situation | Code |
-|---|---|
-| Connexion inconnue | `404` |
-| Serveur injoignable | `503` |
-| Capacité `resources` non exposée par le serveur (lecture) | `501` |
-| Erreur protocole MCP | `502` |
-| Échec de l'outil lui-même (`isError`) | `200` avec `error: true` |
+1. The client posts a message with its bearer token. Anything under `/api/**` is authenticated —
+   the agent spends money and executes tools, so it is closed by default.
+2. The `ChatClient` replays the conversation window, then asks Claude with **every MCP tool attached**.
+   The tool list is re-read from the MCP clients on each request, so a server that publishes a new
+   tool is picked up without a restart.
+3. Claude answers, or asks for a tool. Spring AI runs the call over MCP, feeds the result back, and
+   loops — capped at 20 tool calls per exchange so a confused model cannot run up a bill.
+4. The answer comes back, and the exchange is appended to that conversation's memory.
 
-## Brancher un serveur MCP
+**The details that matter are the boring ones**, and they are written down: why MCP clients are
+initialized lazily, why servers are addressed by connection key, why the tool-call endpoint is a
+loaded gun. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-Serveur local (processus enfant, stdio) :
+## 🔌 Plug in your own MCP server
+
+Three transports, no code:
 
 ```yaml
 spring:
   ai:
     mcp:
       client:
-        stdio:
+        stdio:                       # a local process
           connections:
             filesystem:
               command: npx
               args: ["-y", "@modelcontextprotocol/server-filesystem", "/data"]
-              env:
-                LOG_LEVEL: info
-```
-
-Serveur distant (streamable-HTTP) — Kafka SQL Explorer est câblé par défaut :
-
-```yaml
-spring:
-  ai:
-    mcp:
-      client:
-        streamable-http:
+        streamable-http:             # a remote server
           connections:
-            kafka-explorer:
-              url: ${KAFKA_EXPLORER_URL:http://localhost:8080}
+            my-tools:
+              url: https://mcp.internal.example.com
               endpoint: /mcp
 
 kex:
   mcp:
-    bearer-tokens:
-      - url-prefix: ${KAFKA_EXPLORER_URL:http://localhost:8080}
-        token: ${EXPLORER_MCP_AUTH_TOKEN:}
+    bearer-tokens:                   # if it needs authentication
+      - url-prefix: https://mcp.internal.example.com
+        token: ${MY_MCP_TOKEN}
 ```
 
-Le transport MCP de Spring AI n'a pas de propriété d'en-tête : `McpBearerTokenCustomizer` injecte
-`Authorization: Bearer …` et le restreint au préfixe d'URL déclaré, pour qu'un jeton ne parte pas
-vers un autre serveur MCP.
+Restart, then `GET /api/agent/mcp/servers` tells you what it found. The whole story — including what
+MCP is, if this is your first one — is in [`docs/MCP.md`](docs/MCP.md).
 
-Alternative : pointer un fichier au format `claude_desktop_config.json` via
-`spring.ai.mcp.client.stdio.servers-configuration: classpath:mcp-servers.json`.
+## 🔭 API
 
-## Kafka SQL Explorer ([devdownin/Kafkaexplorer](https://github.com/devdownin/Kafkaexplorer))
-
-Son serveur MCP (`kafka-explorer-mcp`) est un module du même JAR, en streamable-HTTP sur `/mcp`,
-authentifié par bearer et désactivé par défaut. Côté Explorer :
-
-```bash
-export EXPLORER_MCP_ENABLED=true
-export EXPLORER_MCP_AUTH_TOKEN=$(openssl rand -hex 32)
-export EXPLORER_MCP_REQUIRE_TLS=false   # uniquement pour une stack locale en clair
-```
-
-Côté agent, le même jeton et l'URL de l'Explorer :
-
-```bash
-export EXPLORER_MCP_AUTH_TOKEN=…
-export KAFKA_EXPLORER_URL=http://localhost:8080
-./mvnw spring-boot:run     # l'agent écoute sur 8081, l'Explorer occupe 8080
-```
-
-L'Explorer déclare 15 outils `kex_*`, tous en lecture (`kex_list_topics`, `kex_describe_topic`,
-`kex_preview_messages`, `kex_infer_schema`, `kex_sql_query`, `kex_list_tables`, `kex_build_join`,
-`kex_trace_key`, `kex_resume_trace`, `kex_compare_traces`, `kex_deduce_data_model`,
-`kex_consumer_lag`, `kex_run_audit`, `kex_get_audit`, `kex_suggest_kpis`). Ils sont automatiquement
-présentés au modèle et appelables directement.
-
-```bash
-curl -X POST localhost:8081/api/agent/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"Quels topics dépassent 1000 messages et lesquels ont une DLQ qui se remplit ?"}'
-```
-
-L'Explorer applique lecture seule, deny-list, rate limit et audit côté serveur : l'agent hérite de
-ces garde-fous, il ne les remplace pas.
-
-Sa surface MCP est aujourd'hui **uniquement des outils** : aucun `@McpResource` ni `@McpPrompt`
-dans `src/main/java` (vérifié sur `main`, commit `50d54ea`). `/resources` renvoie donc une liste
-vide sur cette connexion — les ressources `kafka://cluster/*` sont spécifiées (SPEC-MCP) mais pas
-implémentées. Les endpoints ressources de l'agent restent génériques et fonctionnent avec tout
-serveur MCP qui déclare la capacité.
-
-## Configuration applicative
-
-| Propriété | Défaut | Rôle |
+| Method | Route | What it does |
 |---|---|---|
-| `kex.agent.system-prompt` | prompt outillé | Prompt système par défaut |
-| `kex.agent.max-history-messages` | `40` | Fenêtre de mémoire par conversation |
-| `kex.agent.log-interactions` | `false` | Journalise prompts/réponses (debug uniquement) |
+| `POST` | `/api/agent/chat` | Ask a question, get an answer and a `conversationId` |
+| `POST` | `/api/agent/chat/stream` | Same, streamed token by token (SSE) |
+| `DELETE` | `/api/agent/conversations/{id}` | Forget a conversation |
+| `GET` | `/api/agent/mcp/servers` | Which MCP servers are connected, and what they expose |
+| `POST` | `/api/agent/mcp/servers/{connection}/tools/{tool}` | Call a tool directly, no model involved |
+| `GET` | `/api/agent/mcp/servers/{connection}/resources` | List a server's resources |
+| `GET` | `/api/agent/mcp/servers/{connection}/resource?uri=…` | Read one |
 
-## Points d'attention
+Every route under `/api/**` requires `Authorization: Bearer $KEX_AGENT_API_KEY`. `/actuator/health`
+stays open for container probes.
 
-- La mémoire de conversation est en mémoire process (`InMemoryChatMemoryRepository`) : pour du
-  multi-instance, ajouter `spring-ai-starter-model-chat-memory-repository-jdbc` (ou redis) — le
-  bean `ChatMemoryRepository` est alors remplacé sans changer le code.
-- `/api/agent/mcp/servers` déclenche un `listTools` synchrone par serveur : ne pas l'exposer
-  publiquement ni le mettre sur un chemin chaud sans cache.
-- Les outils MCP s'exécutent avec les droits du processus : restreindre la racine des serveurs
-  filesystem et n'activer que les serveurs de confiance.
-- `POST /api/agent/mcp/servers/{connection}/tools/{tool}` exécute l'outil sans médiation du modèle :
-  l'autorisation est entièrement à la charge de l'appelant, à protéger avant toute exposition.
-- Les clients MCP sont initialisés paresseusement (`spring.ai.mcp.client.initialized: false`) :
-  sans cela un serveur distant indisponible fait échouer le démarrage de l'agent. Chaque accès
-  retente l'initialisation, et `GET /api/agent/mcp/servers` montre l'état réel de chaque connexion.
+## 🔐 Security posture
 
-## Tests
+- **Closed by default.** No `kex.agent.api-key` configured → `/api/**` answers `503`, not `200`.
+  An agent that spends tokens and executes tools does not ship open.
+- **Loopback by default.** Compose binds every port to `127.0.0.1`; `BIND_ADDR=0.0.0.0` is a decision
+  you make, not one you inherit.
+- **Tokens stay where they belong.** The MCP bearer is injected only on requests matching the
+  declared URL prefix, so one server's credential never reaches another.
+- **The direct tool endpoint has no model in the loop.** Authorization is entirely on the caller.
+  Read [`docs/ARCHITECTURE.md#the-direct-tool-endpoint`](docs/ARCHITECTURE.md#the-direct-tool-endpoint)
+  before exposing it.
+
+## 📚 Documentation
+
+| Document | What's in it |
+|---|---|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Components, request lifecycle, and the design decisions with their reasons |
+| [`docs/MCP.md`](docs/MCP.md) | What MCP is, the three transports, connecting a server, writing your own |
+| [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) | Every property and environment variable, the profiles, running from source |
+
+## 🧪 Tests
 
 ```bash
-./mvnw test
+./mvnw verify
 ```
+
+41 tests, no network, no secrets. Including an MCP integration test that stands up a **real**
+streamable-HTTP server behind a bearer token and drives the actual client through handshake,
+`tools/list`, `tools/call`, `resources/list` and `resources/read` — the transport is exercised, not
+mocked.
+
+CI additionally builds the Docker image and smoke-tests it: the container must start with **no MCP
+server reachable at all**, refuse an unauthenticated call, and serve an authenticated one.
+
+## 🗺️ Stack
+
+| Component | Version |
+|---|---|
+| Java | 25 |
+| Spring Boot | 4.1.1 |
+| Spring AI | 2.0.1 |
+| Model | Anthropic (swap the starter for OpenAI, Ollama, Bedrock…) |
+| MCP | `spring-ai-starter-mcp-client` — stdio, SSE, streamable-HTTP |
+
+## 📄 License
+
+GPL-3.0 — see [LICENSE](LICENSE).
