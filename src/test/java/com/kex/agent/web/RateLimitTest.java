@@ -41,7 +41,7 @@ class RateLimitTest {
 
     @Test
     void refuse_au_dela_de_la_pointe_autorisee() throws Exception {
-        given(agentService.ask(any(), anyString())).willReturn(new AgentAnswer("conv-1", "ok"));
+        given(agentService.ask(any(), anyString())).willReturn(new AgentAnswer("conv-1", "ok", java.util.List.of()));
 
         List<Integer> codes = IntStream.range(0, 5).mapToObj(i -> chat()).toList();
 

@@ -16,6 +16,7 @@ import org.springframework.ai.chat.client.advisor.api.Advisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.mcp.ToolContextToMcpMetaConverter;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
@@ -34,6 +35,20 @@ class AgentConfig {
     McpToolCatalog mcpToolCatalog(ObjectProvider<List<McpSyncClient>> mcpSyncClients,
                                   ObservationRegistry observationRegistry) {
         return new McpToolCatalog(mcpSyncClients.getIfAvailable(List::of), observationRegistry);
+    }
+
+    /**
+     * Le convertisseur par défaut recopie tout le {@code ToolContext} dans le {@code _meta} envoyé
+     * au serveur MCP : nos clés internes — dont le collecteur d'événements, non sérialisable —
+     * partiraient sur le réseau. Elles sont filtrées, le reste passe pour les serveurs qui s'en
+     * servent.
+     */
+    @Bean
+    ToolContextToMcpMetaConverter toolContextToMcpMetaConverter() {
+        return context -> context.getContext().entrySet().stream()
+                .filter(entry -> !entry.getKey().startsWith("kex.") && !"exchange".equals(entry.getKey()))
+                .collect(java.util.stream.Collectors.toMap(java.util.Map.Entry::getKey,
+                        java.util.Map.Entry::getValue));
     }
 
     @Bean
@@ -62,7 +77,9 @@ class AgentConfig {
 
         return builder
                 .defaultSystem(properties.systemPrompt())
-                .defaultToolCallbacks(toolCallbackProviders.stream().toArray(ToolCallbackProvider[]::new))
+                .defaultToolCallbacks(toolCallbackProviders.stream()
+                        .map(RecordingToolCallbackProvider::new)
+                        .toArray(ToolCallbackProvider[]::new))
                 .defaultAdvisors(advisors)
                 .build();
     }

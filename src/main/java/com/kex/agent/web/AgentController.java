@@ -6,9 +6,13 @@ import java.util.List;
 import java.util.Map;
 
 import com.kex.agent.agent.AgentAnswer;
+import com.kex.agent.agent.AgentEvent;
 import com.kex.agent.agent.AgentService;
 import com.kex.agent.agent.AgentStream;
+import com.kex.agent.agent.AgentStructuredAnswer;
 import com.kex.agent.agent.AgentTimeoutException;
+import com.kex.agent.agent.InvalidJsonSchemaException;
+import com.kex.agent.agent.StructuredOutputException;
 import com.kex.agent.mcp.McpResourceContent;
 import com.kex.agent.mcp.McpResourceInfo;
 import com.kex.agent.mcp.McpServerInfo;
@@ -56,19 +60,34 @@ class AgentController {
         return agentService.ask(request.conversationId(), request.message());
     }
 
+    @PostMapping("/chat/structured")
+    AgentStructuredAnswer chatStructured(@Valid @RequestBody StructuredChatRequest request) {
+        return agentService.askStructured(request.conversationId(), request.message(), request.schema());
+    }
+
     /**
      * Événements nommés plutôt qu'un flux de texte nu : {@code conversation} porte l'identifiant
      * (sans quoi un client qui n'en fournit pas ne peut ni enchaîner ni purger), {@code token} le
-     * contenu, {@code error} un échec — une connexion coupée en silence est indiscernable d'une
-     * réponse complète.
+     * contenu, {@code tool} l'outil qui vient de s'exécuter — sans quoi le flux reste muet pendant
+     * son exécution — et {@code error} un échec, une connexion coupée en silence étant
+     * indiscernable d'une réponse complète.
      */
     @PostMapping(path = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     Flux<ServerSentEvent<String>> stream(@Valid @RequestBody ChatRequest request) {
         AgentStream stream = agentService.stream(request.conversationId(), request.message());
         return Flux.concat(
                         Flux.just(event("conversation", stream.conversationId())),
-                        stream.content().map(token -> event("token", token)))
+                        stream.events().map(AgentController::event))
                 .onErrorResume(ex -> Flux.just(event("error", streamErrorMessage(ex))));
+    }
+
+    private static ServerSentEvent<String> event(AgentEvent agentEvent) {
+        return switch (agentEvent) {
+            case AgentEvent.Token token -> event("token", token.text());
+            case AgentEvent.ToolCall call -> event("tool",
+                    "{\"tool\":\"%s\",\"durationMillis\":%d,\"failed\":%b}"
+                            .formatted(call.tool(), call.durationMillis(), call.failed()));
+        };
     }
 
     private static ServerSentEvent<String> event(String name, String data) {
@@ -111,6 +130,18 @@ class AgentController {
     @GetMapping("/mcp/servers/{connection}/resource")
     List<McpResourceContent> resource(@PathVariable String connection, @RequestParam String uri) {
         return toolCatalog.readResource(connection, uri);
+    }
+
+    @ExceptionHandler(InvalidJsonSchemaException.class)
+    ProblemDetail invalidSchema(InvalidJsonSchemaException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    /** Le modèle n'a pas tenu le contrat : panne amont, pas erreur d'appelant. */
+    @ExceptionHandler(StructuredOutputException.class)
+    ProblemDetail structuredOutput(StructuredOutputException ex) {
+        log.warn("Sortie structurée non conforme", ex);
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
     }
 
     @ExceptionHandler(AgentTimeoutException.class)

@@ -142,8 +142,9 @@ y compris ce qu'est MCP si c'est votre premier — est dans [`docs/MCP.md`](docs
 
 | Méthode | Route | Rôle |
 |---|---|---|
-| `POST` | `/api/agent/chat` | Poser une question, obtenir la réponse et un `conversationId` |
-| `POST` | `/api/agent/chat/stream` | Idem, en événements SSE nommés : `conversation`, `token`, `error` |
+| `POST` | `/api/agent/chat` | Poser une question, obtenir la réponse, le `conversationId` et les outils utilisés |
+| `POST` | `/api/agent/chat/structured` | Idem, réponse en JSON conforme à un schéma que vous fournissez |
+| `POST` | `/api/agent/chat/stream` | Idem, en événements SSE nommés : `conversation`, `token`, `tool`, `error` |
 | `DELETE` | `/api/agent/conversations/{id}` | Oublier une conversation |
 | `GET` | `/api/agent/mcp/servers` | Quels serveurs MCP sont connectés, et ce qu'ils exposent |
 | `POST` | `/api/agent/mcp/servers/{connection}/tools/{tool}` | Appeler un outil directement, sans modèle |
@@ -158,6 +159,9 @@ coûte.
 Toute route sous `/api/**` exige `Authorization: Bearer $KEX_AGENT_API_KEY`. `/actuator/health`
 reste ouvert pour les sondes de conteneur.
 
+Le flux émet un événement `tool` à chaque outil terminé — nom, durée, échec ou non — pour que la
+connexion ne reste jamais muette pendant la minute que peut prendre un outil, et qu'une interface
+puisse montrer ce que l'agent fait. La route bloquante rend la même liste dans son champ `tools`.
 Le flux s'ouvre sur un événement `conversation` portant l'identifiant — un client qui n'en a pas
 fourni peut ainsi enchaîner et purger — et un échec arrive en événement `error` plutôt qu'en socket
 qui s'arrête, ce qu'un client ne distingue pas d'une réponse terminée. Chaque échange est plafonné
@@ -191,7 +195,7 @@ bloquante répond `504`.
 ./mvnw verify
 ```
 
-57 tests, sans réseau ni secret. Dont un test d'intégration MCP qui monte un **vrai** serveur
+68 tests, sans réseau ni secret. Dont un test d'intégration MCP qui monte un **vrai** serveur
 streamable-HTTP derrière un bearer et fait passer le client réel par le handshake, `tools/list`,
 `tools/call`, `resources/list` et `resources/read` — le transport est exercé, pas simulé.
 

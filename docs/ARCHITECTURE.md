@@ -150,6 +150,32 @@ Le flux émet donc des événements nommés : `conversation` (l'identifiant, en 
 `error` en cas d'échec. Le détail de l'exception reste dans les journaux ; l'appelant reçoit un
 message court.
 
+### Les outils exécutés sont rendus à l'appelant
+
+Les observations de Spring AI donnent des métriques agrégées ; elles ne disent pas ce qu'un échange
+précis a fait. `RecordingToolCallbackProvider` enveloppe chaque outil et mesure son appel, et le
+résultat sort par deux chemins : un événement `tool` dans le flux, et le champ `tools` de la réponse
+bloquante.
+
+Le collecteur voyage dans le `ToolContext` de la requête, **pas** dans un ThreadLocal : la boucle
+d'outils du chemin en flux s'exécute sur des threads Reactor, où un ThreadLocal ne suit pas.
+
+Ce choix a un piège, et il est testé : le convertisseur par défaut de Spring AI
+(`ToolContextToMcpMetaConverter.defaultConverter()`) recopie **tout** le `ToolContext` dans le
+`_meta` envoyé au serveur MCP à chaque appel d'outil. Laissé tel quel, le collecteur — non
+sérialisable — serait poussé sur le réseau. Le convertisseur déclaré ici filtre les clés préfixées
+`kex.` et laisse passer le reste, pour les serveurs qui exploitent ce champ.
+
+### Sortie structurée contre un schéma d'appelant
+
+Les convertisseurs de Spring AI partent d'un type Java ; ici le schéma n'est connu qu'à la requête.
+`JsonSchemaOutputConverter` implémente `StructuredOutputConverter` en décrivant le schéma au modèle
+et en renseignant aussi `getJsonSchema()`, que les fournisseurs capables de contraindre le décodage
+utilisent au lieu d'espérer que le modèle lise la consigne.
+
+Une réponse non conforme rend `502`, pas `400` : le contrat n'a pas été tenu en amont, l'appelant
+n'a rien fait de mal. Un schéma vide, lui, rend `400`.
+
 ### Plafond de durée d'un échange
 
 `kex.agent.request-timeout`, 120s par défaut. `spring.ai.mcp.client.request-timeout` borne *chaque*

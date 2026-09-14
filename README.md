@@ -140,8 +140,9 @@ MCP is, if this is your first one — is in [`docs/MCP.md`](docs/MCP.md).
 
 | Method | Route | What it does |
 |---|---|---|
-| `POST` | `/api/agent/chat` | Ask a question, get an answer and a `conversationId` |
-| `POST` | `/api/agent/chat/stream` | Same, streamed as named SSE events: `conversation`, `token`, `error` |
+| `POST` | `/api/agent/chat` | Ask a question, get an answer, the `conversationId`, and the tools it used |
+| `POST` | `/api/agent/chat/structured` | Same, answered as JSON matching a schema you supply |
+| `POST` | `/api/agent/chat/stream` | Same, streamed as named SSE events: `conversation`, `token`, `tool`, `error` |
 | `DELETE` | `/api/agent/conversations/{id}` | Forget a conversation |
 | `GET` | `/api/agent/mcp/servers` | Which MCP servers are connected, and what they expose |
 | `POST` | `/api/agent/mcp/servers/{connection}/tools/{tool}` | Call a tool directly, no model involved |
@@ -155,7 +156,10 @@ UI unusable in a browser. What is protected is everything that acts or costs mon
 Every route under `/api/**` requires `Authorization: Bearer $KEX_AGENT_API_KEY`. `/actuator/health`
 stays open for container probes.
 
-The stream opens with a `conversation` event carrying the id — a client that did not supply one can
+The stream emits a `tool` event each time one finishes — name, duration, whether it failed — so the
+connection is never silent for the minute a tool may take, and a UI can show what the agent is doing.
+The blocking route returns the same list in its `tools` field. The stream opens with a `conversation`
+event carrying the id — a client that did not supply one can
 still follow up and clean up — and a failure arrives as an `error` event rather than a socket that
 simply stops, which a client cannot tell apart from a finished answer. Exchanges are capped at
 `kex.agent.request-timeout` (120s by default), tool rounds included; the blocking route answers
@@ -188,7 +192,7 @@ simply stops, which a client cannot tell apart from a finished answer. Exchanges
 ./mvnw verify
 ```
 
-57 tests, no network, no secrets. Including an MCP integration test that stands up a **real**
+68 tests, no network, no secrets. Including an MCP integration test that stands up a **real**
 streamable-HTTP server behind a bearer token and drives the actual client through handshake,
 `tools/list`, `tools/call`, `resources/list` and `resources/read` — the transport is exercised, not
 mocked.
