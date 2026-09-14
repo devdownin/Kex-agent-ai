@@ -7,6 +7,11 @@ Versionnement [sémantique](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- Base de connaissance optionnelle (RAG) : ingestion, recherche et purge par API, recherche
+  automatique avant chaque échange. Éteinte par défaut.
+- Événements `tool` dans le flux SSE et champ `tools` sur la réponse bloquante.
+- Route de sortie structurée contre un schéma JSON fourni par l'appelant.
+
 - Agent conversationnel Spring Boot 4 / Spring AI 2 sur Java 25, client de serveurs MCP
   (stdio, SSE, streamable-HTTP).
 - Connexion par défaut au serveur MCP de Kafka SQL Explorer, avec injection du bearer restreinte au

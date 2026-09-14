@@ -1,0 +1,79 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
+package com.kex.agent.config;
+
+import java.util.Map;
+
+import com.kex.agent.agent.AgentEvent;
+import com.kex.agent.agent.ToolCallRecorder;
+import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.model.ToolContext;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.ai.tool.definition.DefaultToolDefinition;
+import org.springframework.ai.tool.definition.ToolDefinition;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class RecordingToolCallbackProviderTest {
+
+    private static ToolCallback callback(String result, RuntimeException failure) {
+        return new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return DefaultToolDefinition.builder().name("echo").description("echo")
+                        .inputSchema("{}").build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return call(toolInput, null);
+            }
+
+            @Override
+            public String call(String toolInput, ToolContext toolContext) {
+                if (failure != null) {
+                    throw failure;
+                }
+                return result;
+            }
+        };
+    }
+
+    private static ToolCallback wrap(ToolCallback delegate) {
+        return new RecordingToolCallbackProvider(ToolCallbackProvider.from(delegate)).getToolCallbacks()[0];
+    }
+
+    @Test
+    void enregistre_l_appel_reussi() {
+        ToolCallRecorder recorder = new ToolCallRecorder();
+
+        String result = wrap(callback("pong", null))
+                .call("{}", new ToolContext(Map.of(ToolCallRecorder.CONTEXT_KEY, recorder)));
+
+        assertThat(result).isEqualTo("pong");
+        assertThat(recorder.calls()).singleElement().satisfies(call -> {
+            assertThat(call.tool()).isEqualTo("echo");
+            assertThat(call.failed()).isFalse();
+            assertThat(call.durationMillis()).isNotNegative();
+        });
+    }
+
+    @Test
+    void enregistre_l_appel_en_echec() {
+        ToolCallRecorder recorder = new ToolCallRecorder();
+        ToolCallback wrapped = wrap(callback(null, new IllegalStateException("boum")));
+        ToolContext context = new ToolContext(Map.of(ToolCallRecorder.CONTEXT_KEY, recorder));
+
+        assertThatThrownBy(() -> wrapped.call("{}", context)).isInstanceOf(IllegalStateException.class);
+
+        assertThat(recorder.calls()).singleElement()
+                .extracting(AgentEvent.ToolCall::failed).isEqualTo(true);
+    }
+
+    @Test
+    void reste_transparent_sans_collecteur() {
+        assertThat(wrap(callback("pong", null)).call("{}", new ToolContext(Map.of()))).isEqualTo("pong");
+    }
+}

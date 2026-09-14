@@ -7,9 +7,12 @@ import java.util.List;
 import java.util.Map;
 
 import com.kex.agent.agent.AgentAnswer;
+import com.kex.agent.agent.AgentEvent;
 import com.kex.agent.agent.AgentService;
 import com.kex.agent.agent.AgentStream;
+import com.kex.agent.agent.AgentStructuredAnswer;
 import com.kex.agent.agent.AgentTimeoutException;
+import com.kex.agent.agent.StructuredOutputException;
 import com.kex.agent.mcp.McpResourceContent;
 import com.kex.agent.mcp.McpResourceInfo;
 import com.kex.agent.mcp.McpServerInfo;
@@ -49,7 +52,7 @@ class AgentControllerTest {
 
     @Test
     void repond_avec_le_contenu_de_l_agent() {
-        given(agentService.ask("conv-1", "bonjour")).willReturn(new AgentAnswer("conv-1", "salut"));
+        given(agentService.ask("conv-1", "bonjour")).willReturn(new AgentAnswer("conv-1", "salut", List.of()));
 
         var response = mvc.post().uri("/api/agent/chat")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -164,8 +167,9 @@ class AgentControllerTest {
 
     @Test
     void le_flux_annonce_la_conversation_puis_les_tokens() throws Exception {
-        given(agentService.stream(null, "bonjour"))
-                .willReturn(new AgentStream("conv-9", Flux.just("sa", "lut")));
+        given(agentService.stream(null, "bonjour")).willReturn(new AgentStream("conv-9",
+                Flux.just(new AgentEvent.Token("sa"), new AgentEvent.ToolCall("echo", 12, false),
+                        new AgentEvent.Token("lut"))));
 
         var response = mvc.post().uri("/api/agent/chat/stream")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -176,7 +180,9 @@ class AgentControllerTest {
         assertThat(response).hasStatusOk();
         String body = response.getResponse().getContentAsString();
         assertThat(body).contains("event:conversation").contains("data:conv-9")
-                .contains("event:token").contains("data:sa").contains("data:lut");
+                .contains("event:token").contains("data:sa").contains("data:lut")
+                // Sans cet événement, le flux reste muet pendant l'exécution de l'outil.
+                .contains("event:tool").contains("\"tool\":\"echo\"").contains("\"durationMillis\":12");
     }
 
     @Test
@@ -205,5 +211,55 @@ class AgentControllerTest {
                 .content("""
                         {"conversationId":"conv-1","message":"bonjour"}"""))
                 .hasStatus(504);
+    }
+
+    @Test
+    void rend_une_sortie_structuree() {
+        given(agentService.askStructured("conv-1", "combien de topics ?", Map.of("type", "object")))
+                .willReturn(new AgentStructuredAnswer("conv-1", Map.of("total", 8), List.of()));
+
+        var response = mvc.post().uri("/api/agent/chat/structured")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"conversationId":"conv-1","message":"combien de topics ?",
+                         "schema":{"type":"object"}}""");
+
+        assertThat(response).hasStatusOk();
+        assertThat(response).bodyJson().extractingPath("$.content.total").isEqualTo(8);
+    }
+
+    @Test
+    void rejette_une_sortie_structuree_sans_schema() {
+        assertThat(mvc.post().uri("/api/agent/chat/structured")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"message":"bonjour","schema":{}}"""))
+                .hasStatus(400);
+    }
+
+    @Test
+    void retourne_502_quand_le_modele_ne_respecte_pas_le_schema() {
+        willThrow(new StructuredOutputException(new IllegalStateException("pas du json")))
+                .given(agentService).askStructured(null, "bonjour", Map.of("type", "object"));
+
+        assertThat(mvc.post().uri("/api/agent/chat/structured")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"message":"bonjour","schema":{"type":"object"}}"""))
+                .hasStatus(502);
+    }
+
+    @Test
+    void expose_les_outils_utilises_par_une_reponse() {
+        given(agentService.ask("conv-1", "bonjour")).willReturn(new AgentAnswer("conv-1", "salut",
+                List.of(new AgentEvent.ToolCall("kex_list_topics", 42, false))));
+
+        var response = mvc.post().uri("/api/agent/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"conversationId":"conv-1","message":"bonjour"}""");
+
+        assertThat(response).hasStatusOk();
+        assertThat(response).bodyJson().extractingPath("$.tools[0].tool").isEqualTo("kex_list_topics");
     }
 }
