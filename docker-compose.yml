@@ -94,6 +94,8 @@ services:
       - explorer
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?requis, cle Anthropic de l-agent}
+      # Bearer exigé sur /api/** : sans lui l'agent répond 503 et ne sert personne.
+      KEX_AGENT_API_KEY: ${KEX_AGENT_API_KEY:?requis, generer avec openssl rand -hex 32}
       # Le token doit être identique des deux côtés : c'est le même bearer.
       EXPLORER_MCP_AUTH_TOKEN: ${EXPLORER_MCP_AUTH_TOKEN:?requis, generer avec openssl rand -hex 32}
       KAFKA_EXPLORER_URL: http://explorer:8080

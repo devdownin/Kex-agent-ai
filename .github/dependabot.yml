@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Spring Boot et Spring AI se mettent à jour par familles : une PR par artefact
+      # produirait une douzaine de branches qui se contredisent au merge.
+      spring:
+        patterns:
+          - "org.springframework*"
+      test:
+        patterns:
+          - "org.mockito*"
+          - "org.junit*"
+          - "org.assertj*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

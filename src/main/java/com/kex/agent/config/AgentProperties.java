@@ -16,5 +16,11 @@ public record AgentProperties(
         @DefaultValue("40") int maxHistoryMessages,
 
         /** Journalise prompts et réponses : à laisser à false hors debug (données sensibles). */
-        @DefaultValue("false") boolean logInteractions) {
+        @DefaultValue("false") boolean logInteractions,
+
+        /**
+         * Bearer exigé sur /api/**. Vide, l'API refuse tout avec 503 : un agent qui dépense des
+         * jetons et exécute des outils MCP ne s'ouvre pas par défaut d'installation.
+         */
+        @DefaultValue("") String apiKey) {
 }

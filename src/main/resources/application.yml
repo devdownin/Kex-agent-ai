@@ -5,6 +5,13 @@ server:
 spring:
   application:
     name: kex-agent-ai
+  autoconfigure:
+    # Mémoire de conversation en mémoire process par défaut : aucune base à installer pour
+    # lancer l'agent. Le profil `shared-memory` lève ces exclusions et bascule sur PostgreSQL,
+    # seul moyen de faire tourner plusieurs instances derrière un load balancer.
+    exclude:
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+      - org.springframework.ai.model.chat.memory.repository.jdbc.autoconfigure.JdbcChatMemoryRepositoryAutoConfiguration
   ai:
     anthropic:
       api-key: ${ANTHROPIC_API_KEY}
@@ -13,6 +20,13 @@ spring:
           model: claude-opus-5
           max-tokens: 4096
           temperature: 0.2
+    tools:
+      limits:
+        # Sans plafond, un modèle qui boucle sur un outil tourne jusqu'au timeout HTTP, à nos frais.
+        # RETURN_ERROR_RESPONSE plutôt que THROW : le modèle reçoit l'erreur et conclut, là où
+        # l'exception rendrait une 500 sans réponse à l'appelant.
+        max-total-tool-calls: 20
+        on-limit-exceeded: return_error_response
     mcp:
       client:
         name: kex-agent

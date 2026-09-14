@@ -1,0 +1,36 @@
+# Mémoire de conversation partagée, en surcouche de docker-compose.yml.
+#
+#   docker compose -f docker-compose.yml -f compose/shared-memory.yml up -d
+#
+# Sans cette surcouche, la mémoire vit dans le processus : une seconde instance de l'agent
+# ne verrait pas les conversations de la première.
+services:
+  postgres:
+    image: postgres:18.1-alpine
+    environment:
+      POSTGRES_DB: kex
+      POSTGRES_USER: kex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kex}
+    volumes:
+      - agent_memory:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kex -d kex"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  agent:
+    # Ici l'attente est justifiée : sans la base, le contexte Spring ne démarre pas.
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: shared-memory
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/kex
+      SPRING_DATASOURCE_USERNAME: kex
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-kex}
+
+volumes:
+  agent_memory:

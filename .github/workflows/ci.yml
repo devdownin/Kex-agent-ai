@@ -46,3 +46,54 @@ jobs:
           name: surefire-reports
           path: target/surefire-reports/
           retention-days: 7
+
+  # Le Dockerfile et le compose sont livrés avec l'application : sans ce job ils ne sont
+  # vérifiés par personne avant un `docker compose up` en production.
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Build the agent image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: kex-agent-ai:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # L'image doit démarrer sans serveur MCP joignable : c'est l'invariant que
+      # l'initialisation paresseuse des clients MCP existe pour tenir.
+      - name: Smoke test the image
+        run: |
+          set -euo pipefail
+          docker run -d --name kex-agent-smoke -p 8081:8081 \
+            -e ANTHROPIC_API_KEY=ci-dummy -e KEX_AGENT_API_KEY=ci-secret \
+            kex-agent-ai:ci
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8081/actuator/health > /dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8081/actuator/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/api/agent/mcp/servers)" = 401
+          curl -fsS -H 'Authorization: Bearer ci-secret' http://localhost:8081/api/agent/mcp/servers
+
+      - name: Agent logs on failure
+        if: failure()
+        run: docker logs kex-agent-smoke || true
+
+      - name: Validate the compose stacks
+        env:
+          ANTHROPIC_API_KEY: ci-dummy
+          EXPLORER_MCP_AUTH_TOKEN: ci-token
+          KEX_AGENT_API_KEY: ci-secret
+        run: |
+          docker compose config --quiet
+          docker compose -f docker-compose.yml -f compose/shared-memory.yml config --quiet

@@ -13,6 +13,7 @@ import com.kex.agent.mcp.UnknownMcpServerException;
 import com.kex.agent.mcp.UnsupportedMcpCapabilityException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -27,6 +28,8 @@ import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
 
 @WebMvcTest(AgentController.class)
+// Sécurité désactivée ici : elle a son propre test (ApiSecurityTest), ces cas visent le contrôleur.
+@AutoConfigureMockMvc(addFilters = false)
 class AgentControllerTest {
 
     @Autowired
