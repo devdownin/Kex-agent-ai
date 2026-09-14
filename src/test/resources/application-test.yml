@@ -1,0 +1,7 @@
+spring:
+  ai:
+    anthropic:
+      api-key: test-key
+    mcp:
+      client:
+        enabled: false

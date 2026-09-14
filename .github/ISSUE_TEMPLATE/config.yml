@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Faille de sécurité
+    url: https://github.com/devdownin/Kex-agent-ai/security/advisories/new
+    about: Ne pas ouvrir d'issue publique — passer par un avis privé.
+  - name: Documentation
+    url: https://github.com/devdownin/Kex-agent-ai/tree/main/docs
+    about: Architecture, MCP, configuration et observabilité.

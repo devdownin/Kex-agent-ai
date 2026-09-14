@@ -1,0 +1,20 @@
+# Mémoire de conversation partagée entre instances (PostgreSQL).
+#
+#   SPRING_PROFILES_ACTIVE=shared-memory
+#   SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/kex
+#
+# La liste d'exclusions remplace celle d'application.yml : une liste n'est pas fusionnée entre
+# sources de propriétés, la source la plus prioritaire gagne en entier.
+spring:
+  autoconfigure:
+    exclude: []
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/kex}
+    username: ${SPRING_DATASOURCE_USERNAME:kex}
+    password: ${SPRING_DATASOURCE_PASSWORD:kex}
+  ai:
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: always

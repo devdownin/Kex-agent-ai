@@ -1,0 +1,104 @@
+server:
+  # 8080 est pris par Kafka SQL Explorer sur un poste de dev.
+  port: ${KEX_AGENT_PORT:8081}
+
+spring:
+  application:
+    name: kex-agent-ai
+  threads:
+    # Java 25 : un échange qui attend le modèle et ses outils immobilise une pile, pas un thread noyau.
+    virtual:
+      enabled: true
+  mvc:
+    async:
+      # Au-delà de kex.agent.request-timeout, pour que ce soit l'agent qui rende un événement
+      # `error` explicite plutôt que le conteneur qui coupe la connexion sans rien dire.
+      request-timeout: 150s
+  autoconfigure:
+    # Mémoire de conversation en mémoire process par défaut : aucune base à installer pour
+    # lancer l'agent. Le profil `shared-memory` lève ces exclusions et bascule sur PostgreSQL,
+    # seul moyen de faire tourner plusieurs instances derrière un load balancer.
+    exclude:
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+      - org.springframework.ai.model.chat.memory.repository.jdbc.autoconfigure.JdbcChatMemoryRepositoryAutoConfiguration
+  ai:
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY}
+      chat:
+        options:
+          model: claude-opus-5
+          max-tokens: 4096
+          temperature: 0.2
+    tools:
+      limits:
+        # Sans plafond, un modèle qui boucle sur un outil tourne jusqu'au timeout HTTP, à nos frais.
+        # RETURN_ERROR_RESPONSE plutôt que THROW : le modèle reçoit l'erreur et conclut, là où
+        # l'exception rendrait une 500 sans réponse à l'appelant.
+        max-total-tool-calls: 20
+        on-limit-exceeded: return_error_response
+    mcp:
+      client:
+        name: kex-agent
+        version: 0.1.0
+        type: sync
+        request-timeout: 60s
+        # Initialisation paresseuse : un serveur MCP distant indisponible ferait sinon échouer
+        # le démarrage de l'agent. McpToolCatalog retente à chaque accès.
+        initialized: false
+        toolcallback:
+          enabled: true
+        # Serveurs MCP locaux (processus enfant, protocole stdio) — exemple, décommenter au besoin
+        stdio:
+          connections: {}
+            # filesystem:
+            #   command: npx
+            #   args: ["-y", "@modelcontextprotocol/server-filesystem", "/data"]
+        # Serveurs MCP distants (HTTP streamable)
+        streamable-http:
+          connections:
+            # Kafka SQL Explorer (devdownin/Kafkaexplorer) : serveur MCP in-process du JAR,
+            # à démarrer avec EXPLORER_MCP_ENABLED=true et EXPLORER_MCP_AUTH_TOKEN.
+            kafka-explorer:
+              url: ${KAFKA_EXPLORER_URL:http://localhost:8080}
+              endpoint: /mcp
+
+kex:
+  mcp:
+    # Le transport MCP n'a pas de propriété d'en-tête : le jeton est injecté par
+    # McpBearerTokenCustomizer, restreint au préfixe d'URL pour ne pas le diffuser ailleurs.
+    bearer-tokens:
+      - url-prefix: ${KAFKA_EXPLORER_URL:http://localhost:8080}
+        token: ${EXPLORER_MCP_AUTH_TOKEN:}
+
+  agent:
+    request-timeout: 120s
+    rate-limit:
+      # Limite d'instance, pas par appelant : le bearer est unique et partagé. Elle protège le
+      # budget ; en multi-instance, diviser le seuil par le nombre de répliques.
+      enabled: true
+      requests-per-minute: 60
+      burst: 20
+    max-history-messages: 40
+    log-interactions: false
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    # Les routes sont peu nombreuses : les déplier évite un clic pour rien.
+    doc-expansion: list
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    tags:
+      # Distingue les instances dans un Prometheus partagé.
+      application: ${spring.application.name}
+  observations:
+    key-values:
+      application: ${spring.application.name}
+
+  # /actuator/prometheus n'est pas en permitAll : il porte le modèle utilisé, le volume de jetons
+  # et les outils appelés. Le scraper doit présenter le même bearer que l'API.

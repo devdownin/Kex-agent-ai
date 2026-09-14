@@ -1,0 +1,7 @@
+# Relecteurs par défaut de tout le dépôt.
+*                       @devdownin
+
+# Surfaces où une erreur ne se voit pas en relecture rapide.
+/.github/               @devdownin
+/src/main/java/com/kex/agent/config/   @devdownin
+/SECURITY.md            @devdownin

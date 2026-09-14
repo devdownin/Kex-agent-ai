@@ -1,0 +1,148 @@
+name: CI
+
+# `push` ne vise que main : une branche de travail est couverte par sa pull request,
+# et lister les deux construirait chaque commit deux fois (les événements push et
+# pull_request portent des refs différentes, la concurrency ne peut pas les fusionner).
+# `pull_request` sans filtre de base pour qu'une PR empilée sur une autre branche soit
+# construite elle aussi.
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # La suite tourne en ~1 minute ; sans plafond un test bloqué irait au défaut de 360.
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      # Aucun secret : le profil `test` fournit une clé Anthropic factice et désactive le
+      # client MCP, donc la suite ne sort jamais sur le réseau. Un fork construit à l'identique.
+      # `verify` couvre le format, les en-têtes de licence, les tests, le seuil de couverture
+      # et la génération du SBOM : ce que la CI vérifie est ce qu'un contributeur exécute.
+      - name: Build and test
+        run: ./mvnw -B --no-transfer-progress verify
+
+      - name: Upload the SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom
+          path: target/classes/META-INF/sbom/*.json
+          retention-days: 30
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          retention-days: 7
+
+  # Le Dockerfile et le compose sont livrés avec l'application : sans ce job ils ne sont
+  # vérifiés par personne avant un `docker compose up` en production.
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Build the agent image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: kex-agent-ai:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # L'image doit démarrer sans serveur MCP joignable : c'est l'invariant que
+      # l'initialisation paresseuse des clients MCP existe pour tenir.
+      - name: Smoke test the image
+        run: |
+          set -euo pipefail
+          docker run -d --name kex-agent-smoke -p 8081:8081 \
+            -e ANTHROPIC_API_KEY=ci-dummy -e KEX_AGENT_API_KEY=ci-secret \
+            kex-agent-ai:ci
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8081/actuator/health > /dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8081/actuator/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/api/agent/mcp/servers)" = 401
+          curl -fsS -H 'Authorization: Bearer ci-secret' http://localhost:8081/api/agent/mcp/servers
+
+      - name: Agent logs on failure
+        if: failure()
+        run: docker logs kex-agent-smoke || true
+
+      # Le conteneur occupe 8081, que la stack de fumée publie aussi.
+      - name: Stop the single-container smoke test
+        if: always()
+        run: docker rm -f kex-agent-smoke || true
+
+      - name: Validate the compose stacks
+        env:
+          ANTHROPIC_API_KEY: ci-dummy
+          EXPLORER_MCP_AUTH_TOKEN: ci-token
+          KEX_AGENT_API_KEY: ci-secret
+        run: |
+          docker compose config --quiet
+          docker compose -f docker-compose.yml -f compose/shared-memory.yml config --quiet
+
+      # Valider la syntaxe ne prouve pas que la stack se parle. Celle-ci est montée pour de vrai,
+      # avec un serveur MCP factice au lieu de Kafka SQL Explorer : ce qui est vérifié ici
+      # appartient à ce dépôt (image, réseau, propagation du bearer, découverte MCP), et la CI ne
+      # dépend pas d'un pull Docker Hub anonyme et de son quota par IP.
+      - name: Bring the smoke stack up
+        env:
+          KEX_AGENT_API_KEY: smoke-secret
+          EXPLORER_MCP_AUTH_TOKEN: smoke-token
+        run: |
+          docker tag kex-agent-ai:ci kex-agent-ai:smoke
+          docker compose -f compose/smoke.yml up -d --wait
+
+      - name: The agent must discover the stub through the stack
+        run: |
+          set -euo pipefail
+          servers=$(curl -fsS -H 'Authorization: Bearer smoke-secret' \
+            http://localhost:8081/api/agent/mcp/servers)
+          echo "$servers"
+          echo "$servers" | grep -q '"serverName":"mcp-stub"'
+          echo "$servers" | grep -q '"initialized":true'
+          echo "$servers" | grep -q '"name":"echo"'
+          result=$(curl -fsS -X POST -H 'Authorization: Bearer smoke-secret' \
+            -H 'Content-Type: application/json' -d '{"arguments":{"texte":"ping"}}' \
+            http://localhost:8081/api/agent/mcp/servers/kafka-explorer/tools/echo)
+          echo "$result"
+          echo "$result" | grep -q 'pong'
+
+      - name: Smoke stack logs on failure
+        if: failure()
+        run: docker compose -f compose/smoke.yml logs || true
+
+      - name: Tear the smoke stack down
+        if: always()
+        run: docker compose -f compose/smoke.yml down -v || true
