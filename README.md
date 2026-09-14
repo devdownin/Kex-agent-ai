@@ -28,6 +28,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | `POST` | `/api/agent/chat/stream` | Même contrat, réponse en SSE token par token |
 | `DELETE` | `/api/agent/conversations/{id}` | Purge la mémoire d'une conversation |
 | `GET` | `/api/agent/mcp/servers` | Serveurs MCP connectés et outils découverts |
+| `POST` | `/api/agent/mcp/servers/{server}/tools/{tool}` | Appel direct d'un outil MCP, sans passer par le modèle |
 
 ```bash
 curl -X POST localhost:8080/api/agent/chat \
@@ -36,6 +37,22 @@ curl -X POST localhost:8080/api/agent/chat \
 ```
 
 `conversationId` est optionnel : s'il est absent, un UUID est généré et renvoyé dans la réponse.
+
+Appel direct d'un outil (utile pour tester un serveur MCP ou l'orchestrer depuis du code) :
+
+```bash
+curl -X POST localhost:8080/api/agent/mcp/servers/filesystem/tools/read_file \
+  -H 'Content-Type: application/json' \
+  -d '{"arguments":{"path":"/data/notes.md"}}'
+```
+
+```json
+{"server":"filesystem","tool":"read_file","error":false,"content":["..."],"structuredContent":null}
+```
+
+`{server}` est le nom renvoyé par `GET /api/agent/mcp/servers` (nom annoncé par le serveur, pas
+la clé de configuration). Serveur inconnu → `404`, erreur de transport MCP → `502`, échec de
+l'outil lui-même → `200` avec `error: true`.
 
 ## Brancher un serveur MCP
 
@@ -89,6 +106,8 @@ Alternative : pointer un fichier au format `claude_desktop_config.json` via
   publiquement ni le mettre sur un chemin chaud sans cache.
 - Les outils MCP s'exécutent avec les droits du processus : restreindre la racine des serveurs
   filesystem et n'activer que les serveurs de confiance.
+- `POST /api/agent/mcp/servers/{server}/tools/{tool}` exécute l'outil sans médiation du modèle :
+  l'autorisation est entièrement à la charge de l'appelant, à protéger avant toute exposition.
 
 ## Tests
 
