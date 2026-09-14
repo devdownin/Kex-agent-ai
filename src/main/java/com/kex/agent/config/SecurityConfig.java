@@ -24,8 +24,12 @@ class SecurityConfig {
             log.warn("kex.agent.api-key est vide : /api/** répondra 503. Définir KEX_AGENT_API_KEY.");
         }
         return http
-                // API stateless sans cookie : ni session ni CSRF à protéger.
-                .csrf(csrf -> csrf.disable())
+                // CSRF levé uniquement sur /api/**, pas globalement : ces routes n'acceptent qu'un
+                // bearer explicite, qu'un navigateur n'attache jamais de lui-même en cross-site —
+                // il n'y a donc aucun credential ambiant à détourner. Partout ailleurs la
+                // protection reste active, pour qu'une future route servie à un navigateur ne
+                // l'hérite pas désactivée.
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests
                         // Sondes de conteneur : ouvertes, elles ne divulguent rien d'exploitable.

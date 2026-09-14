@@ -37,6 +37,20 @@ class ApiSecurityTest {
     }
 
     @Test
+    void accepte_un_post_authentifie_sans_jeton_csrf() throws Exception {
+        // La protection CSRF n'est levée que sur /api/** : un POST porteur du bearer doit aboutir
+        // à la logique métier (404 : connexion inconnue), pas être refusé en 403 par le filtre CSRF.
+        HttpRequest request = HttpRequest.newBuilder(
+                        URI.create("http://localhost:" + port + "/api/agent/mcp/servers/inconnu/tools/x"))
+                .header("Authorization", "Bearer secret")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+        try (HttpClient client = HttpClient.newHttpClient()) {
+            assertThat(client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode()).isEqualTo(404);
+        }
+    }
+
+    @Test
     void laisse_passer_la_sonde_de_sante() throws Exception {
         assertThat(status("/actuator/health", null)).isEqualTo(200);
     }
