@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: kex-agent-ai
+  ai:
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY}
+      chat:
+        options:
+          model: claude-opus-5
+          max-tokens: 4096
+          temperature: 0.2
+    mcp:
+      client:
+        name: kex-agent
+        version: 0.1.0
+        type: sync
+        request-timeout: 60s
+        toolcallback:
+          enabled: true
+        # Serveurs MCP locaux (processus enfant, protocole stdio)
+        stdio:
+          connections:
+            filesystem:
+              command: npx
+              args:
+                - -y
+                - "@modelcontextprotocol/server-filesystem"
+                - ${KEX_MCP_FS_ROOT:/tmp}
+        # Serveurs MCP distants (HTTP streamable)
+        streamable-http:
+          connections: {}
+            # exemple:
+            # internal-tools:
+            #   url: https://mcp.interne.example.com
+            #   endpoint: /mcp
+
+kex:
+  agent:
+    max-history-messages: 40
+    log-interactions: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
