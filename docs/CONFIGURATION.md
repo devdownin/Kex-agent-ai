@@ -24,7 +24,7 @@ arrive.
 | Variable | Défaut | Rôle |
 |---|---|---|
 | `KEX_AGENT_LLM_PROVIDER` | `anthropic` | Fournisseur du modèle de conversation : `anthropic` ou `openai` (OpenRouter) |
-| `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4.5` | Modèle OpenRouter, au format `fournisseur/modèle` |
+| `OPENROUTER_MODEL` | `openai/gpt-oss-120b:free` | Modèle OpenRouter, au format `fournisseur/modèle` |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | Toute autre passerelle compatible OpenAI se règle ici |
 | `KAFKA_EXPLORER_URL` | `http://localhost:8080` | URL de l'Explorer, côté agent |
 | `KEX_AGENT_PORT` | `8081` | Port publié de l'agent (côté hôte) |
@@ -69,7 +69,7 @@ Le filtrage par préfixe évite qu'un jeton parte vers un serveur MCP autre que 
 | `spring.ai.anthropic.chat.options.max-tokens` | `4096` | Plafond de sortie |
 | `spring.ai.anthropic.chat.options.temperature` | `0.2` | Basse : on veut des faits, pas du style |
 | `spring.ai.openai.base-url` | `https://openrouter.ai/api/v1` | Passerelle, quand le fournisseur est `openai` |
-| `spring.ai.openai.chat.options.model` | `anthropic/claude-sonnet-4.5` | Modèle OpenRouter |
+| `spring.ai.openai.chat.options.model` | `openai/gpt-oss-120b:free` | Modèle OpenRouter |
 | `spring.ai.tools.limits.max-total-tool-calls` | `20` | Plafond d'appels d'outils par échange |
 | `spring.ai.tools.limits.on-limit-exceeded` | `return_error_response` | Le modèle conclut au lieu de lever une 500 |
 | `spring.ai.mcp.client.initialized` | `false` | Initialisation paresseuse — voir ARCHITECTURE.md |
@@ -122,7 +122,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 ```bash
 export KEX_AGENT_LLM_PROVIDER=openai
 export OPENROUTER_API_KEY=sk-or-v1-...
-export OPENROUTER_MODEL=anthropic/claude-sonnet-4.5   # optionnel
+export OPENROUTER_MODEL=openai/gpt-oss-120b:free   # optionnel, c'est déjà le défaut
 ```
 
 OpenRouter parle l'API d'OpenAI : c'est le même client Spring AI, une autre base d'URL. Trois
@@ -135,6 +135,12 @@ choses à savoir avant de basculer :
   modèles d'OpenRouter n'en sont pas capables. Le catalogue le signale par modèle.
 - **La sortie structurée varie selon le modèle.** Le cycle de supervision demande du JSON conforme
   à un schéma ; un modèle qui ne le respecte pas rend un cycle en échec, pas une analyse fausse.
+  Le défaut, `openai/gpt-oss-120b:free`, applique le schéma plutôt que de s'en approcher —
+  vérifié avant de le retenir, tous les modèles gratuits ne le garantissent pas.
+- **Le tiers gratuit limite en requêtes, pas en jetons.** 20/min, 200/jour, observé sur
+  `openai/gpt-oss-120b:free` — et `spring.ai.tools.limits.max-total-tool-calls` autorise jusqu'à
+  20 allers-retours outil *dans un seul cycle*, chacun un appel au modèle. Un cycle qui creuse
+  plusieurs topics peut à lui seul approcher le plafond par minute.
 
 `OPENROUTER_BASE_URL` pointe ailleurs pour toute autre passerelle compatible OpenAI — un LiteLLM
 ou un vLLM interne, par exemple.

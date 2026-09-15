@@ -47,7 +47,7 @@ variables de plus :
 ```bash
 export KEX_AGENT_LLM_PROVIDER=openai
 export OPENROUTER_API_KEY=sk-or-v1-...
-export OPENROUTER_MODEL=anthropic/claude-sonnet-4.5   # n'importe quel modèle sachant appeler des outils
+export OPENROUTER_MODEL=openai/gpt-oss-120b:free   # ou n'importe quel modèle sachant appeler des outils
 ```
 
 C'est une passerelle hébergée : les prompts et les résultats d'outils — donc les messages Kafka que

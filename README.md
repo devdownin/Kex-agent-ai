@@ -46,7 +46,7 @@ variables swapped:
 ```bash
 export KEX_AGENT_LLM_PROVIDER=openai
 export OPENROUTER_API_KEY=sk-or-v1-...
-export OPENROUTER_MODEL=anthropic/claude-sonnet-4.5   # any tool-calling model on the gateway
+export OPENROUTER_MODEL=openai/gpt-oss-120b:free   # or any tool-calling model on the gateway
 ```
 
 It is a hosted gateway, so prompts and tool results — including the Kafka records the agent reads —

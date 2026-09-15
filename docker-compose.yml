@@ -103,7 +103,7 @@ services:
       KEX_AGENT_LLM_PROVIDER: ${KEX_AGENT_LLM_PROVIDER:-anthropic}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-anthropic/claude-sonnet-4.5}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-oss-120b:free}
       # Bearer exigé sur /api/** : sans lui l'agent répond 503 et ne sert personne.
       KEX_AGENT_API_KEY: ${KEX_AGENT_API_KEY:?requis, generer avec openssl rand -hex 32}
       # Le token doit être identique des deux côtés : c'est le même bearer.

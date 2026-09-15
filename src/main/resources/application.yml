@@ -58,8 +58,10 @@ spring:
       chat:
         options:
           # OpenRouter nomme ses modèles fournisseur/modèle. Celui-ci sait appeler des outils, ce
-          # dont cet agent ne peut pas se passer : sans appel d'outils il ne sert plus à rien.
-          model: ${OPENROUTER_MODEL:anthropic/claude-sonnet-4.5}
+          # dont cet agent ne peut pas se passer : sans appel d'outils il ne sert plus à rien — et
+          # sur le tiers gratuit, il applique le schéma de la sortie structurée du cycle plutôt que
+          # de s'en approcher, ce que le tiers gratuit de Qwen3-235B, par exemple, ne garantit pas.
+          model: ${OPENROUTER_MODEL:openai/gpt-oss-120b:free}
           max-tokens: 4096
           temperature: 0.2
     tools:
