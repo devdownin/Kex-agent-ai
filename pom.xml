@@ -11,7 +11,7 @@
 
   <groupId>com.kex</groupId>
   <artifactId>kex-agent-ai</artifactId>
-  <version>0.2.0</version>
+  <version>0.2.1</version>
   <name>kex-agent-ai</name>
   <description>Agent IA Spring Boot / Spring AI, client de serveurs MCP</description>
 
@@ -23,6 +23,10 @@
     <cyclonedx.version>2.9.3</cyclonedx.version>
     <maven.compiler.release>25</maven.compiler.release>
     <spring-ai.version>2.0.1</spring-ai.version>
+    <!-- CVE-2026-65182, CVE-2026-65905, CVE-2026-68525 : Spring Boot 4.1.1 gère 11.0.24, corrigé
+         en 11.0.25. Propriété documentée par Spring Boot pour avancer un composant géré sans
+         attendre une version mineure du parent — publish.yml bloquait dessus, à raison. -->
+    <tomcat.version>11.0.25</tomcat.version>
   </properties>
 
   <dependencyManagement>

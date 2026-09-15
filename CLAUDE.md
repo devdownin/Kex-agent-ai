@@ -86,6 +86,13 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   cache et ne reconstruit quasiment rien. Pousser d'abord et scanner après publierait une image
   vulnérable avant de savoir qu'elle l'est.
 
+- **Un binaire de l'image de base qu'on n'appelle jamais se retire, il ne se tolère pas.** `pebble`
+  vient d'`eclipse-temurin:25-jre`, pas de notre arbre de dépendances : aucune ligne de `pom.xml`
+  ne le corrige, et attendre une image amont bloquerait chaque publication jusque-là. L'ENTRYPOINT
+  lance `java` directement ; rien ne l'invoque. `tomcat.version` en revanche se corrige dans le
+  pom — c'est une propriété que Spring Boot gère et documente pour avancer un composant sans
+  attendre sa version mineure suivante.
+
 - **Un état illisible vaut `UNKNOWN`, jamais `OK`.** Une donnée manquante et une donnée saine se
   ressemblent dans un tableau de bord, et les confondre fait rater une panne.
 
