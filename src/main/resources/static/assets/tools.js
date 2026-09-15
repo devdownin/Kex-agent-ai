@@ -5,6 +5,7 @@
 // bord métier n'en soit pas saturé — les signaux bruts sont au second niveau, jamais au premier.
 
 import { $, api, el, empty, errorState, loading, report, stateTag } from './core.js';
+import * as kafka from './kafka.js';
 
 export async function servers() {
   const host = $('#servers');
@@ -193,7 +194,10 @@ export async function health() {
 }
 
 export async function view() {
-  await Promise.all([servers(), health()]);
+  await Promise.all([servers(), kafka.topics(), health()]);
 }
 
-export const wire = () => $('#refresh-servers').addEventListener('click', servers);
+export function wire() {
+  $('#refresh-servers').addEventListener('click', servers);
+  kafka.wire();
+}

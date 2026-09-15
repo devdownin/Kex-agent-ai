@@ -245,6 +245,16 @@
         <div class="servers" id="servers"></div>
       </section>
       <section class="panel">
+        <div class="panel-head">
+          <h1>Cluster Kafka</h1>
+          <button type="button" class="ghost" id="refresh-kafka">Rafraîchir</button>
+        </div>
+        <p class="hint">Relevé par les outils du serveur MCP, jamais recalculé ici : les verdicts de
+          retard sont ceux que l'outil rend, et une mesure absente s'affiche « non mesurée », pas zéro.</p>
+        <div id="kafka-topics"></div>
+      </section>
+
+      <section class="panel">
         <div class="panel-head"><h2>Santé de l'instance</h2></div>
         <div class="tiles" id="metric-tiles"></div>
         <pre class="dump" id="health-dump">—</pre>

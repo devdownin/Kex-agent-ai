@@ -44,6 +44,7 @@ flowchart TB
 | `SupervisionService` | Le cycle : observer, analyser, décider, agir ; la politique et l'audit |
 | `SupervisionController` | Le Control Center côté API : vue d'ensemble, décisions, politique, audit |
 | `CycleAnalysis` | Le schéma imposé au modèle et la lecture défensive de ce qu'il rend |
+| `KafkaViewService` | Vue technique du cluster : traduit les outils MCP, ne recalcule aucune sémantique Kafka |
 | `static/` | La Control Center : console d'exploitation servie par l'agent, sans étape de build |
 
 ## Le cycle d'une requête
@@ -311,6 +312,30 @@ modèle, le motif d'arrêt est ce que l'outil a réellement rendu.
 Comme un relevé partiel donne `UNKNOWN`, il fait basculer l'agent en `DEGRADED` par le chemin qui
 existait déjà — un processus dont on ne sait rien ne ressemble pas à un processus sain.
 
+### La vue technique traduit, elle ne recalcule pas
+
+`kafka/` appelle `kex_list_topics` et `kex_consumer_lag` et traduit leur réponse. Toute la
+sémantique Kafka reste chez Kafka SQL Explorer : les verdicts de retard (`CAUGHT_UP`, `BEHIND`,
+`STALLED`) sont repris **tels quels** plutôt que relus depuis les nombres — c'est l'outil qui sait
+qu'un retard sans membre assigné ne se résorbera pas de lui-même, et le recalculer ici reviendrait
+à réimplémenter sa sémantique moins bien.
+
+`MeasuredValue` prolonge la même règle que `Coverage` d'un cran : une mesure absente n'est pas
+zéro. Un lag à `0` affirme « rattrapé » ; les confondre fait lire un consumer à l'arrêt comme un
+consumer à jour. L'écran affiche « non mesuré » avec le motif en infobulle, jamais un tiret
+ambigu ni un chiffre.
+
+L'écart entre `groupsExamined` et `groupsInCluster` est affiché pour la même raison : le taire
+ferait lire une liste courte comme une liste complète.
+
+Rien n'y lève d'exception vers l'appelant. Un outil absent, un serveur injoignable ou une réponse
+illisible produisent une vue vide **qui dit pourquoi**, en `200`. Un serveur MCP absent est une
+information d'exploitation, pas une panne de l'agent : rendre une erreur HTTP ferait tomber l'écran
+au lieu de l'informer.
+
+Les noms d'outils sont configurables. L'agent peut être branché sur un autre serveur MCP, et une
+vue qui échoue en nommant l'outil attendu se règle — une vue qui échoue en silence se contourne.
+
 ### Ce que le serveur MCP de Kafka SQL Explorer expose réellement
 
 Vérifié dans son dépôt, pas dans sa spécification : quinze outils, **tous en lecture seule**
@@ -415,6 +440,7 @@ MCP hostile pourrait sinon placer un XSS sur la même origine que l'API.
 | `SharedMemoryProfileTest` | Le profil `shared-memory` remplace bien le dépôt en mémoire |
 | `KexAgentApplicationTests` | Le contexte démarre sans aucun serveur MCP configuré |
 | `ConsoleTest` | La console est servie sans jeton, n'ouvre ni `/api/**` ni le `POST`, et appelle les routes qui existent |
+| `KafkaViewServiceTest` | La traduction des outils sur des charges utiles conformes à la forme réelle d'Explorer : mesure absente jamais lue comme zéro, verdict repris tel quel, serveur injoignable rendu en vue vide motivée |
 | `SupervisionCycleIntegrationTest` | Le cycle jusqu'à un appel d'outil MCP réel : contexte Spring complet, transport streamable-HTTP, bearer, audit. Seul le modèle est simulé |
 | `SupervisionServiceTest` | Autonomie, seuil de confiance, expiration, pause, cycle en échec, péremption des données |
 | `CycleAnalysisTest` | Ce qui arrive quand le modèle rend autre chose que le schéma demandé, et l'asymétrie de la couverture : un `OK` partiel devient `UNKNOWN`, une erreur partielle reste une erreur |

@@ -3,6 +3,7 @@
 package com.kex.agent.supervision;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Ce qu'un relevé a réellement couvert. Miroir de l'enveloppe {@code coverage} que portent les
@@ -22,6 +23,49 @@ public record Coverage(boolean complete, StopReason stopReason, List<String> not
     /** Aucune enveloppe remontée : ni complet, ni déclaré incomplet. */
     public static Coverage notReported() {
         return new Coverage(false, StopReason.NOT_REPORTED, List.of(), null);
+    }
+
+    /**
+     * Lit une enveloppe telle qu'elle arrive — d'un outil MCP ou d'un modèle. Défensive par
+     * principe : ce qui est illisible vaut « non rendue », jamais « complète ».
+     *
+     * <p>La complétude exige les <em>deux</em> : le drapeau et {@code EXHAUSTED}. Le drapeau seul
+     * est une affirmation qu'on ne peut pas vérifier, le motif d'arrêt est ce que la source a
+     * réellement rendu, et sur-déclarer une complétude est la seule erreur qui fasse conclure à
+     * tort qu'il n'y a rien à voir.
+     */
+    public static Coverage from(Object candidate) {
+        if (!(candidate instanceof Map<?, ?> envelope)) {
+            return notReported();
+        }
+        StopReason stop = stopReason(text(envelope.get("stopReason")));
+        boolean complete = envelope.get("complete") instanceof Boolean flag && flag
+                && stop == StopReason.EXHAUSTED;
+        return new Coverage(complete, stop, notReached(envelope.get("topicsNotReached"), envelope.get("notReached")),
+                text(envelope.get("detail")));
+    }
+
+    private static List<String> notReached(Object explorerField, Object ownField) {
+        // `topicsNotReached` est le nom que portent les outils de Kafka SQL Explorer ; `notReached`
+        // celui de notre schéma. Une seule lecture pour les deux, plutôt que deux parseurs.
+        Object value = explorerField != null ? explorerField : ownField;
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream().filter(String.class::isInstance).map(String.class::cast).toList();
+    }
+
+    private static String text(Object value) {
+        return value instanceof String string && !string.isBlank() ? string : null;
+    }
+
+    private static StopReason stopReason(String value) {
+        try {
+            return value == null ? StopReason.NOT_REPORTED : StopReason.valueOf(value);
+        }
+        catch (IllegalArgumentException ex) {
+            return StopReason.NOT_REPORTED;
+        }
     }
 
     /**

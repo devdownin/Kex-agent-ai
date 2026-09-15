@@ -72,6 +72,17 @@ kex:
 
   agent:
     request-timeout: 120s
+
+    kafka:
+      # Vue technique du cluster, adossée aux outils de Kafka SQL Explorer. Les noms d'outils sont
+      # configurables et non codés en dur : l'agent peut être branché sur un autre serveur MCP, et
+      # une vue qui échoue en nommant l'outil attendu se règle, là où une vue qui échoue en silence
+      # se contourne. Connexion vide : la vue se déclare non configurée plutôt que d'afficher un
+      # écran vide qu'on lirait comme « aucun topic ».
+      connection: kafka-explorer
+      topics-tool: kex_list_topics
+      lag-tool: kex_consumer_lag
+      max-topics: 200
     knowledge:
       # Éteinte : elle exige un modèle d'embeddings, donc une infrastructure que l'agent n'impose
       # pas pour démarrer. Voir docs/CONNAISSANCE.md pour l'allumer.

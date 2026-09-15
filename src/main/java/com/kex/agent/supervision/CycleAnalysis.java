@@ -215,35 +215,8 @@ final class CycleAnalysis {
         return state == ProcessState.OK && coverage.knownIncomplete() ? ProcessState.UNKNOWN : state;
     }
 
-    @SuppressWarnings("unchecked")
     private static Coverage coverage(Map<String, Object> row) {
-        if (!(row.get("coverage") instanceof Map<?, ?> raw)) {
-            return Coverage.notReported();
-        }
-        Map<String, Object> envelope = (Map<String, Object>) raw;
-        StopReason stop = stopReason(string(envelope, "stopReason"));
-        // Une complétude affirmée sans EXHAUSTED n'est pas une complétude : le drapeau est une
-        // opinion du modèle, le motif d'arrêt est ce que l'outil a réellement rendu.
-        boolean complete = envelope.get("complete") instanceof Boolean flag && flag
-                && stop != StopReason.NOT_REPORTED
-                && stop == StopReason.EXHAUSTED;
-        return new Coverage(complete, stop, texts(envelope), string(envelope, "detail"));
-    }
-
-    private static List<String> texts(Map<String, Object> envelope) {
-        if (!(envelope.get("notReached") instanceof List<?> list)) {
-            return List.of();
-        }
-        return list.stream().filter(String.class::isInstance).map(String.class::cast).toList();
-    }
-
-    private static StopReason stopReason(String value) {
-        try {
-            return value == null ? StopReason.NOT_REPORTED : StopReason.valueOf(value);
-        }
-        catch (IllegalArgumentException ex) {
-            return StopReason.NOT_REPORTED;
-        }
+        return Coverage.from(row.get("coverage"));
     }
 
     private static ProcessState state(String value) {

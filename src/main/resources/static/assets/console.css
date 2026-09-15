@@ -486,6 +486,24 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 
 .stack-panels { display: flex; flex-direction: column; gap: 16px; }
 
+.unmeasured {
+  font-style: italic;
+  color: var(--ink-3);
+  border-bottom: 1px dotted var(--ink-3);
+  cursor: help;
+}
+
+.definition-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 13px;
+}
+.definition-row .label { color: var(--ink-3); font-size: 12px; }
+
 .perf { display: flex; flex-direction: column; gap: 14px; }
 .perf-group h3 { margin: 0 0 6px; }
 .perf-row {

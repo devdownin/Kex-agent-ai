@@ -76,7 +76,7 @@ L'agent sert sa propre console d'exploitation sur `/`, construite autour d'une s
 | Configuration | Seuils de détection et plancher de confiance, versionnés et audités |
 | Alertes | Regroupées, actionnables, liées à un processus et à une recommandation |
 | Audit | Acteur, action, motif, version de politique, résultat, identifiant de corrélation |
-| Technique | Serveurs MCP, invocation directe d'un outil, santé et métriques |
+| Technique | Topics Kafka et retard des groupes, serveurs MCP, invocation directe, santé |
 | Conversation | Le chat, en flux, avec les outils qu'il a exécutés |
 
 Quelques partis pris explicites :
@@ -206,6 +206,8 @@ y compris ce qu'est MCP si c'est votre premier — est dans [`docs/MCP.md`](docs
 | `POST` | `/api/agent/supervision/decisions/{id}/approve` `…/reject` | Valider ou refuser une action en attente |
 | `GET` `PUT` | `/api/agent/supervision/policy` | Mode, autonomie et plancher de confiance par capacité, seuils — versionnés |
 | `POST` | `/api/agent/supervision/pause` `…/resume` | Suspendre et reprendre les analyses |
+| `GET` | `/api/agent/kafka/topics` | Topics, avec les mesures absentes rendues absentes, jamais à zéro |
+| `GET` | `/api/agent/kafka/topics/{topic}/lag` | Les groupes qui lisent un topic, avec le verdict de retard de l'outil |
 | `GET` | `/api/agent/supervision/alerts` | Dédupliquées, priorisées, portant chacune son action en attente |
 | `GET` | `/api/agent/supervision/performance` | Ce que vaut l'agent lui-même — pertinence, autonomie, délais |
 | `GET` | `/api/agent/supervision/audit` | Qui a fait quoi, pourquoi, sous quelle politique, avec quel résultat |

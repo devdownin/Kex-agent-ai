@@ -27,6 +27,7 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 | `config/` | `ChatClient`, propriétés, bearer MCP, seau à jetons |
 | `knowledge/` | Base de connaissance optionnelle : magasin vectoriel, advisor, ingestion |
 | `supervision/` | Cycle d'analyse, politique d'autonomie, décisions, validation humaine, audit |
+| `kafka/` | Vue technique du cluster : traduit les outils MCP d'Explorer, ne recalcule rien |
 | `resources/static/` | La Control Center : console d'exploitation, sans étape de build |
 
 ## Conventions
@@ -61,6 +62,9 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 - **Un relevé partiel prouve une présence, jamais une absence.** Un `OK` rendu sur une passe
   incomplète redevient `UNKNOWN` ; un `ERROR` tient. Une couverture non remontée ne dégrade rien —
   la plupart des serveurs MCP n'en portent pas.
+
+- **Une mesure absente n'est jamais zéro.** Un lag à `0` affirme « rattrapé » ; une mesure absente
+  n'affirme rien. Les confondre fait lire un consumer à l'arrêt comme un consumer à jour.
 
 - **Le serveur MCP de Kafka SQL Explorer est en lecture seule.** Quinze outils, aucun mutant :
   devant lui l'agent observe et recommande, il n'agit pas.

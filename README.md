@@ -74,7 +74,7 @@ The agent ships with its own operations console at `/`, built around one loop:
 | Configuration | Detection thresholds and confidence floor, versioned and audited |
 | Alerts | Grouped, actionable, each tied to a process and a recommendation |
 | Audit | Actor, action, reason, policy version, result, correlation id |
-| Technical | MCP servers, direct tool invocation, health and metrics |
+| Technical | Kafka topics and consumer-group lag, MCP servers, direct tool invocation, health |
 | Conversation | The chat, streamed, with the tools it ran |
 
 A few things it deliberately does:
@@ -203,6 +203,8 @@ MCP is, if this is your first one — is in [`docs/MCP.md`](docs/MCP.md).
 | `POST` | `/api/agent/supervision/decisions/{id}/approve` `…/reject` | Human-in-the-loop on a pending action |
 | `GET` `PUT` | `/api/agent/supervision/policy` | Mode, per-capability autonomy and confidence floors, thresholds — versioned |
 | `POST` | `/api/agent/supervision/pause` `…/resume` | Stop and restart analysis |
+| `GET` | `/api/agent/kafka/topics` | Topics, with unmeasured values shown as unmeasured, never as zero |
+| `GET` | `/api/agent/kafka/topics/{topic}/lag` | The groups reading a topic, with the tool's own lag verdict |
 | `GET` | `/api/agent/supervision/alerts` | Deduplicated, prioritized, each carrying its pending action |
 | `GET` | `/api/agent/supervision/performance` | How the agent itself is doing — relevance, autonomy, delays |
 | `GET` | `/api/agent/supervision/audit` | Who did what, why, under which policy, with what result |
