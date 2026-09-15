@@ -113,25 +113,71 @@ class SupervisionServiceTest {
         service.runCycle("test");
 
         assertThat(service.pending()).singleElement()
-                .extracting(Decision::result).asString().contains("sous le seuil");
+                .extracting(Decision::result).asString().contains("sous le plancher de 85 %");
         verify(toolCatalog, never()).call(anyString(), anyString(), any());
+    }
+
+    @Test
+    void un_plancher_de_confiance_par_capacite_bloque_ce_que_le_plancher_global_laissait_passer() {
+        // 0,90 de confiance : au-dessus du plancher global de 0,85, sous celui de la capacité.
+        analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.90));
+        SupervisionService service = service(properties(ExecutionMode.AUTOMATIC, List.of(ORDERS),
+                Map.of(Capability.RESTART_CONSUMER, Autonomy.AUTOMATIC),
+                Map.of(Capability.RESTART_CONSUMER, new ActionBinding("kafka-explorer", "restart", Map.of())),
+                Map.of(Capability.RESTART_CONSUMER, 0.95)));
+
+        service.runCycle("test");
+
+        assertThat(service.pending()).singleElement()
+                .extracting(Decision::result).asString()
+                .contains("sous le plancher de 95 %").contains("RESTART_CONSUMER");
+        verify(toolCatalog, never()).call(anyString(), anyString(), any());
+    }
+
+    @Test
+    void au_dessus_du_plancher_de_la_capacite_l_action_part() {
+        analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.97));
+        when(toolCatalog.call(anyString(), anyString(), any()))
+                .thenReturn(new McpToolResult("kafka-explorer", "restart", false, List.of("lag 850"), null));
+        SupervisionService service = service(properties(ExecutionMode.AUTOMATIC, List.of(ORDERS),
+                Map.of(Capability.RESTART_CONSUMER, Autonomy.AUTOMATIC),
+                Map.of(Capability.RESTART_CONSUMER, new ActionBinding("kafka-explorer", "restart", Map.of())),
+                Map.of(Capability.RESTART_CONSUMER, 0.95)));
+
+        service.runCycle("test");
+
+        assertThat(service.decisions()).singleElement()
+                .extracting(Decision::status).isEqualTo(DecisionStatus.EXECUTED);
+    }
+
+    @Test
+    void un_plancher_par_capacite_ne_peut_pas_abaisser_le_plancher_global() {
+        SupervisionPolicy policy = new SupervisionPolicy("v", ExecutionMode.AUTOMATIC,
+                Map.of(), 0.85, Map.of(Capability.NOTIFY, 0.40, Capability.RESTART_CONSUMER, 0.95),
+                thresholds());
+
+        // Un réglage plus permissif est ignoré : il affaiblirait en silence la garantie globale.
+        assertThat(policy.confidenceThresholdOf(Capability.NOTIFY)).isEqualTo(0.85);
+        assertThat(policy.confidenceThresholdOf(Capability.RESTART_CONSUMER)).isEqualTo(0.95);
+        // Une capacité sans réglage propre suit le plancher global.
+        assertThat(policy.confidenceThresholdOf(Capability.REPLAY_MESSAGES)).isEqualTo(0.85);
     }
 
     @Test
     void le_mode_ne_peut_que_restreindre_l_autonomie_declaree() {
         SupervisionPolicy supervised = new SupervisionPolicy("v", ExecutionMode.SUPERVISED,
-                Map.of(Capability.NOTIFY, Autonomy.AUTOMATIC), 0.8, thresholds());
+                Map.of(Capability.NOTIFY, Autonomy.AUTOMATIC), 0.8, Map.of(), thresholds());
         assertThat(supervised.effectiveAutonomy(Capability.NOTIFY)).isEqualTo(Autonomy.SUPERVISED);
 
         SupervisionPolicy manual = new SupervisionPolicy("v", ExecutionMode.MANUAL,
                 Map.of(Capability.NOTIFY, Autonomy.AUTOMATIC, Capability.REPLAY_MESSAGES, Autonomy.FORBIDDEN),
-                0.8, thresholds());
+                0.8, Map.of(), thresholds());
         assertThat(manual.effectiveAutonomy(Capability.NOTIFY)).isEqualTo(Autonomy.SUPERVISED);
         // Le mode manuel n'autorise rien : une capacité interdite le reste.
         assertThat(manual.effectiveAutonomy(Capability.REPLAY_MESSAGES)).isEqualTo(Autonomy.FORBIDDEN);
 
         SupervisionPolicy automatic = new SupervisionPolicy("v", ExecutionMode.AUTOMATIC,
-                Map.of(Capability.NOTIFY, Autonomy.SUPERVISED), 0.8, thresholds());
+                Map.of(Capability.NOTIFY, Autonomy.SUPERVISED), 0.8, Map.of(), thresholds());
         assertThat(automatic.effectiveAutonomy(Capability.NOTIFY)).isEqualTo(Autonomy.SUPERVISED);
         // Une capacité absente de la politique est interdite, pas permissive.
         assertThat(automatic.effectiveAutonomy(Capability.MODIFY_CONFIGURATION)).isEqualTo(Autonomy.FORBIDDEN);
@@ -245,11 +291,13 @@ class SupervisionServiceTest {
         assertThat(service.policy().version()).isEqualTo("policy-v1");
 
         SupervisionPolicy updated = service.updatePolicy(new PolicyUpdate(ExecutionMode.AUTOMATIC,
-                Map.of(Capability.NOTIFY, Autonomy.AUTOMATIC), 0.7, null, "montée en autonomie"), "opérateur");
+                Map.of(Capability.NOTIFY, Autonomy.AUTOMATIC), 0.7,
+                Map.of(Capability.RESTART_CONSUMER, 0.95), null, "montée en autonomie"), "opérateur");
 
         assertThat(updated.version()).isEqualTo("policy-v2");
         assertThat(updated.mode()).isEqualTo(ExecutionMode.AUTOMATIC);
         assertThat(updated.confidenceThreshold()).isEqualTo(0.7);
+        assertThat(updated.confidenceThresholdOf(Capability.RESTART_CONSUMER)).isEqualTo(0.95);
         // Les seuils non fournis restent ceux d'avant.
         assertThat(updated.thresholds()).isEqualTo(thresholds());
         assertThat(service.audit()).anySatisfy(entry ->
@@ -335,8 +383,15 @@ class SupervisionServiceTest {
     private static SupervisionProperties properties(ExecutionMode mode, List<MonitoredProcess> processes,
                                                     Map<Capability, Autonomy> autonomy,
                                                     Map<Capability, ActionBinding> actions) {
+        return properties(mode, processes, autonomy, actions, Map.of());
+    }
+
+    private static SupervisionProperties properties(ExecutionMode mode, List<MonitoredProcess> processes,
+                                                    Map<Capability, Autonomy> autonomy,
+                                                    Map<Capability, ActionBinding> actions,
+                                                    Map<Capability, Double> floors) {
         return new SupervisionProperties(true, processes, mode, 0.85, thresholds(),
-                autonomy, actions, 200, Duration.ofMinutes(30), Duration.ofMinutes(15));
+                autonomy, floors, actions, 200, Duration.ofMinutes(30), Duration.ofMinutes(15));
     }
 
     /** Horloge pilotable : l'expiration et la péremption se testent en avançant, pas en attendant. */

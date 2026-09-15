@@ -108,14 +108,17 @@
 
             <fieldset>
               <legend>Autonomie par capacité</legend>
-              <p class="hint">Toute capacité non réglée est interdite : le droit d'agir ne s'hérite pas.</p>
+              <p class="hint">Toute capacité non réglée est interdite : le droit d'agir ne s'hérite pas.
+                Le champ de droite est le plancher de confiance propre à la capacité — il ne peut que
+                relever le plancher global, jamais l'abaisser.</p>
               <div id="autonomy-rows"></div>
             </fieldset>
 
             <fieldset>
               <legend>Seuil de confiance</legend>
-              <p class="hint">En deçà, une action autonome repasse par une validation humaine au lieu de s'exécuter.</p>
-              <label for="confidence">Seuil</label>
+              <p class="hint">Plancher global : en deçà, une action autonome repasse par une validation
+                humaine au lieu de s'exécuter. Chaque capacité peut exiger davantage, jamais moins.</p>
+              <label for="confidence">Plancher</label>
               <input type="range" id="confidence" min="0" max="100" step="5">
               <output id="confidence-output" for="confidence">85 %</output>
             </fieldset>

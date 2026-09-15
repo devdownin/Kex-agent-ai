@@ -74,7 +74,8 @@ public class SupervisionService {
         this.decisions = new History<>(properties.historySize());
         this.audit = new History<>(properties.historySize());
         this.policy.set(new SupervisionPolicy("policy-v1", properties.mode(),
-                Map.copyOf(properties.autonomy()), properties.confidenceThreshold(), properties.thresholds()));
+                Map.copyOf(properties.autonomy()), properties.confidenceThreshold(),
+                Map.copyOf(properties.confidenceThresholds()), properties.thresholds()));
         this.snapshots = properties.processes().stream()
                 .map(process -> new ProcessSnapshot(process.id(), process.name(), ProcessState.UNKNOWN,
                         null, null, null, "Aucune analyse exécutée"))
@@ -191,6 +192,9 @@ public class SupervisionService {
                 update.mode() == null ? current.mode() : update.mode(),
                 update.autonomy() == null ? current.autonomy() : Map.copyOf(update.autonomy()),
                 update.confidenceThreshold() == null ? current.confidenceThreshold() : update.confidenceThreshold(),
+                update.confidenceThresholds() == null
+                        ? current.confidenceThresholds()
+                        : Map.copyOf(update.confidenceThresholds()),
                 update.thresholds() == null ? current.thresholds() : update.thresholds()));
         record(actor, "Politique modifiée", null, null, update.reason(),
                 "Nouvelle version : " + updated.version());
@@ -318,6 +322,7 @@ public class SupervisionService {
         // Sans capacité recommandée, il reste toujours celle de prévenir quelqu'un.
         Capability capability = anomaly.capability() == null ? Capability.NOTIFY : anomaly.capability();
         Autonomy autonomy = current.effectiveAutonomy(capability);
+        double floor = current.confidenceThresholdOf(capability);
         Instant at = clock.instant();
 
         Decision decision = new Decision(UUID.randomUUID().toString(), cycleId, anomaly.id(),
@@ -331,19 +336,13 @@ public class SupervisionService {
             decision = decision.resolvedAs(DecisionStatus.BLOCKED,
                     "Capacité %s interdite par la politique : recommandation seule".formatted(capability), at);
         }
-        else if (autonomy == Autonomy.AUTOMATIC && anomaly.confidence() >= current.confidenceThreshold()) {
+        else if (autonomy == Autonomy.AUTOMATIC && anomaly.confidence() >= floor) {
             decision = execute(decision, AGENT);
         }
         else if (autonomy == Autonomy.AUTOMATIC) {
             // Autonome mais pas assez sûr : la validation humaine est le repli, pas l'abandon.
-            decision = new Decision(decision.id(), decision.cycleId(), decision.anomalyId(),
-                    decision.processId(), decision.processName(), decision.capability(), decision.objective(),
-                    decision.context(), decision.action(), decision.observations(), decision.estimatedImpact(),
-                    decision.confidence(), DecisionStatus.PENDING_APPROVAL,
-                    "Confiance %.0f %% sous le seuil de %.0f %%".formatted(anomaly.confidence() * 100,
-                            current.confidenceThreshold() * 100),
-                    decision.policyVersion(), decision.correlationId(), decision.decidedAt(), null,
-                    decision.expiresAt());
+            decision = decision.withResult("Confiance %.0f %% sous le plancher de %.0f %% pour %s"
+                    .formatted(anomaly.confidence() * 100, floor * 100, capability));
         }
 
         store(decision);

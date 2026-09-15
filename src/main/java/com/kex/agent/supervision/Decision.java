@@ -19,6 +19,13 @@ public record Decision(String id, String cycleId, String anomalyId, String proce
                        DecisionStatus status, String result, String policyVersion, String correlationId,
                        Instant decidedAt, Instant resolvedAt, Instant expiresAt) {
 
+    /** Annote une décision sans la trancher : elle attend toujours, mais on sait pourquoi. */
+    public Decision withResult(String note) {
+        return new Decision(id, cycleId, anomalyId, processId, processName, capability, objective, context,
+                action, observations, estimatedImpact, confidence, status, note, policyVersion,
+                correlationId, decidedAt, resolvedAt, expiresAt);
+    }
+
     public Decision resolvedAs(DecisionStatus newStatus, String outcome, Instant at) {
         return new Decision(id, cycleId, anomalyId, processId, processName, capability, objective, context,
                 action, observations, estimatedImpact, confidence, newStatus, outcome, policyVersion,

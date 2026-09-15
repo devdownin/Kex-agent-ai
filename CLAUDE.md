@@ -61,6 +61,9 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 - **Le mode d'exécution ne peut que restreindre l'autonomie d'une capacité.** L'élargir depuis le
   mode ouvrirait d'un coup des actions délibérément mises sous supervision.
 
+- **Un plancher de confiance par capacité ne peut que relever le plancher global.** L'abaisser
+  rendrait le plancher global illisible : sa valeur ne dirait plus rien sans relire chaque ligne.
+
 - **Pas de `@Scheduled` sur le cycle de supervision.** En multi-instance, chaque réplique lancerait
   le sien et les actions partiraient en double.
 

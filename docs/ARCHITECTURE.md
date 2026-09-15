@@ -252,8 +252,19 @@ Une capacité absente de la politique est `FORBIDDEN`, pas permissive : même po
 répond `503` sans clé plutôt que de s'ouvrir. Et le droit d'agir ne suffit pas : sans outil MCP lié
 à la capacité, l'exécution échoue en le disant, au lieu de réussir à moitié.
 
-L'écran Agent affiche les deux colonnes — déclarée et effective. Régler une autonomie sans voir ce
-qu'elle donnera vraiment, c'est régler à l'aveugle.
+La même doctrine s'applique au plancher de confiance, sur une seconde dimension :
+`confidenceThresholdOf` retient le maximum du plancher global et de celui déclaré pour la capacité.
+Un réglage par capacité ne peut donc que *durcir*. Laisser l'inverse rendrait le plancher global
+illisible — sa valeur ne dirait plus rien tant qu'on n'a pas relu chaque ligne de la politique pour
+vérifier qu'aucune ne le contourne. Une capacité qui doit se déclencher plus facilement se traite
+en abaissant le plancher global et en relevant celui des capacités coûteuses.
+
+L'écran Agent affiche les deux colonnes — déclarée et effective — et la confiance à partir de
+laquelle chaque action autonome part réellement. Régler une autonomie sans voir ce qu'elle donnera
+vraiment, c'est régler à l'aveugle. Le champ de plancher affiche d'ailleurs la valeur *appliquée*
+et non celle qui est stockée : un réglage sous le plancher global n'a aucun effet, et le laisser à
+l'écran rendrait le champ invalide au regard de son propre minimum — formulaire insoumettable, sans
+rien pour l'expliquer.
 
 ### La sortie du modèle est contrainte, pas garantie
 

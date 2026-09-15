@@ -131,9 +131,20 @@ class SupervisionControllerTest {
     }
 
     @Test
+    void refuse_un_plancher_par_capacite_hors_bornes() {
+        // La validation porte sur la valeur de la carte, pas seulement sur le champ scalaire.
+        assertThat(mvc.put().uri("/api/agent/supervision/policy")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"confidenceThresholds":{"RESTART_CONSUMER":1.8}}"""))
+                .hasStatus(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     void met_a_jour_la_politique() {
         given(supervision.updatePolicy(any(), anyString())).willReturn(new SupervisionPolicy("policy-v2",
                 ExecutionMode.AUTOMATIC, Map.of(Capability.NOTIFY, Autonomy.AUTOMATIC), 0.7,
+                Map.of(Capability.RESTART_CONSUMER, 0.95),
                 new Thresholds(1000, 2.0, Duration.ofMinutes(5), 50, Duration.ofMinutes(15))));
 
         assertThat(mvc.put().uri("/api/agent/supervision/policy")

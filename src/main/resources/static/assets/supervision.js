@@ -537,11 +537,13 @@ function fillAgentForm(loaded) {
 
   const rows = $('#autonomy-rows');
   rows.replaceChildren();
+  const global = Math.round(loaded.confidenceThreshold * 100);
   for (const [capability, label] of Object.entries(CAPABILITIES)) {
     const row = el('div', 'autonomy-row');
     const id = `autonomy-${capability}`;
     const name = el('label', null, label);
     name.htmlFor = id;
+
     const select = el('select');
     select.id = id;
     select.name = capability;
@@ -551,7 +553,36 @@ function fillAgentForm(loaded) {
       select.append(option);
     }
     select.value = loaded.autonomy?.[capability] || 'FORBIDDEN';
-    row.append(name, select);
+
+    // Le plancher propre à la capacité ne peut que relever le plancher global : le champ le dit
+    // en le prenant pour minimum, plutôt que de laisser saisir une valeur qui sera ignorée.
+    const floor = el('input');
+    floor.type = 'number';
+    floor.id = `floor-${capability}`;
+    floor.className = 'floor';
+    floor.min = String(global);
+    floor.max = '100';
+    floor.step = '1';
+    floor.placeholder = `${global} %`;
+    // On affiche le plancher qui s'applique, pas celui qui a été saisi : un réglage sous le
+    // plancher global n'a aucun effet, et le laisser à l'écran rendrait le champ invalide au
+    // regard de son propre `min` — formulaire insoumettable, sans rien pour l'expliquer.
+    const declared = loaded.confidenceThresholds?.[capability];
+    const applied = declared == null ? null : Math.round(Math.max(loaded.confidenceThreshold, declared) * 100);
+    floor.value = applied == null ? '' : String(applied);
+    floor.title = declared != null && Math.round(declared * 100) < global
+      ? `Réglé à ${Math.round(declared * 100)} %, relevé au plancher global de ${global} % : `
+        + 'un plancher par capacité ne peut que durcir le plancher global.'
+      : `Plancher de confiance pour « ${label} ». Vide : le plancher global de ${global} %.`;
+    // Seule une capacité automatique consulte un plancher : ailleurs il ne changerait rien.
+    floor.disabled = select.value !== 'AUTOMATIC';
+    select.addEventListener('change', () => {
+      floor.disabled = select.value !== 'AUTOMATIC';
+    });
+
+    const floorLabel = el('label', 'sr-only', `Plancher de confiance pour ${label}`);
+    floorLabel.htmlFor = floor.id;
+    row.append(name, select, floorLabel, floor);
     rows.append(row);
   }
 
@@ -575,7 +606,8 @@ function capabilityMatrix(loaded) {
   const table = el('table', 'grid');
   const head = el('thead');
   const headRow = el('tr');
-  ['Action', 'Déclarée', 'Effective'].forEach((label) => headRow.append(el('th', null, label)));
+  ['Action', 'Déclarée', 'Effective', 'À partir de'].forEach((label) =>
+    headRow.append(el('th', null, label)));
   head.append(headRow);
   table.append(head);
   const body = el('tbody');
@@ -589,12 +621,23 @@ function capabilityMatrix(loaded) {
     cell.append(stateTag(effective === 'AUTOMATIC' ? 'OK' : effective === 'SUPERVISED' ? 'PENDING' : 'ERROR',
       AUTONOMY[effective]));
     line.append(cell);
+    // Le plancher n'a de sens que pour ce qui peut partir seul : ailleurs, un humain tranche.
+    line.append(el('td', 'mono', effective === 'AUTOMATIC'
+      ? percent(effectiveFloor(loaded, capability))
+      : '—'));
     body.append(line);
   }
   table.append(body);
   const scroll = el('div', 'scroll-x');
   scroll.append(table);
   return scroll;
+}
+
+// Miroir de SupervisionPolicy.confidenceThresholdOf : un plancher par capacité ne peut que
+// relever le plancher global.
+function effectiveFloor(loaded, capability) {
+  const declared = loaded.confidenceThresholds?.[capability];
+  return declared == null ? loaded.confidenceThreshold : Math.max(loaded.confidenceThreshold, declared);
 }
 
 // Miroir de SupervisionPolicy.effectiveAutonomy : le serveur reste l'autorité, l'interface se
@@ -728,8 +771,12 @@ export function wire() {
     event.preventDefault();
     const mode = document.querySelector('input[name="mode"]:checked')?.value;
     const autonomy = {};
+    const confidenceThresholds = {};
     Object.keys(CAPABILITIES).forEach((capability) => {
       autonomy[capability] = $(`#autonomy-${capability}`).value;
+      const floor = $(`#floor-${capability}`).value.trim();
+      // Champ vide : la capacité suit le plancher global, on n'envoie pas de réglage propre.
+      if (floor !== '') confidenceThresholds[capability] = Number(floor) / 100;
     });
     const threshold = Number($('#confidence').value) / 100;
 
@@ -744,13 +791,20 @@ export function wire() {
         lines: [
           ['Passent en automatique', opened.join(', ')],
           ['Mode', mode],
-          ['Seuil de confiance', `${Math.round(threshold * 100)} %`],
-          ['Conséquence', 'Ces actions pourront s’exécuter sans validation humaine.'],
+          ['Plancher global', `${Math.round(threshold * 100)} %`],
+          ['Planchers propres', Object.entries(confidenceThresholds)
+            .map(([capability, value]) => `${CAPABILITIES[capability]} ${Math.round(value * 100)} %`)
+            .join(', ') || 'aucun'],
+          ['Conséquence', 'Ces actions pourront s’exécuter sans validation humaine dès que la '
+            + 'confiance atteint leur plancher.'],
         ],
       });
       if (!confirmed) return;
     }
-    await savePolicy({ mode, autonomy, confidenceThreshold: threshold, reason: $('#policy-reason').value });
+    await savePolicy({
+      mode, autonomy, confidenceThreshold: threshold, confidenceThresholds,
+      reason: $('#policy-reason').value,
+    });
     $('#policy-reason').value = '';
   });
 

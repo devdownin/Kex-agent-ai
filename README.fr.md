@@ -89,6 +89,10 @@ Quelques partis pris explicites :
   paraît sain parce que la donnée manque est exactement ce qui fait rater une panne.
 - **L'autonomie se règle par capacité, et le mode ne peut que la restreindre.** Une capacité absente
   de la politique est interdite : le droit d'agir ne s'hérite pas d'une installation.
+- **Chaque capacité peut exiger plus de confiance que le plancher global, jamais moins.** Redémarrer
+  un consumer mérite plus de certitude que notifier. Un plancher par capacité ne peut que relever le
+  plancher global : l'abaisser affaiblirait en silence la garantie que ce dernier est censé porter,
+  et plus personne ne pourrait lire une politique sans vérifier chaque ligne.
 - **La confiance ne s'affiche jamais seule.** Elle est toujours accompagnée des observations qui la
   fondent, parce qu'un pourcentage rendu par un modèle n'est pas une probabilité mesurée.
 - **La couleur ne porte jamais un état à elle seule.** Chaque état vient avec un glyphe et un libellé.
@@ -191,7 +195,7 @@ y compris ce qu'est MCP si c'est votre premier — est dans [`docs/MCP.md`](docs
 | `POST` | `/api/agent/supervision/cycles` | Lancer un cycle d'analyse maintenant |
 | `GET` | `/api/agent/supervision/decisions` | Chaque décision, ses observations et son résultat |
 | `POST` | `/api/agent/supervision/decisions/{id}/approve` `…/reject` | Valider ou refuser une action en attente |
-| `GET` `PUT` | `/api/agent/supervision/policy` | Mode, autonomie par capacité, seuils — versionnés |
+| `GET` `PUT` | `/api/agent/supervision/policy` | Mode, autonomie et plancher de confiance par capacité, seuils — versionnés |
 | `POST` | `/api/agent/supervision/pause` `…/resume` | Suspendre et reprendre les analyses |
 | `GET` | `/api/agent/supervision/audit` | Qui a fait quoi, pourquoi, sous quelle politique, avec quel résultat |
 

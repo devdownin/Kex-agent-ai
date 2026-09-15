@@ -34,6 +34,12 @@ public record SupervisionProperties(
 
         @DefaultValue Map<Capability, Autonomy> autonomy,
 
+        /**
+         * Plancher de confiance propre à une capacité. Il ne peut que relever le plancher global :
+         * « redémarrer un consumer » mérite plus de certitude que « notifier ».
+         */
+        @DefaultValue Map<Capability, Double> confidenceThresholds,
+
         @DefaultValue Map<Capability, ActionBinding> actions,
 
         /** Rétention en mémoire. Au-delà, les entrées les plus anciennes sortent. */

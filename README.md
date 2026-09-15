@@ -87,6 +87,10 @@ A few things it deliberately does:
   because the data is missing is exactly what makes an outage go unnoticed.
 - **Autonomy is set per capability, and the mode can only narrow it.** A capability not named in
   the policy is forbidden — the right to act is not inherited from an install.
+- **Each capability can demand more confidence than the global floor, never less.** Restarting a
+  consumer deserves more certainty than sending a notification. A per-capability floor can only
+  raise the global one: letting it lower the floor would quietly weaken the guarantee the global
+  setting is there to carry, and nobody could read a policy without checking every line.
 - **Confidence never travels alone.** It is always shown next to the observations it rests on,
   because a percentage produced by a model is not a measured probability.
 - **Colour never carries a state by itself.** Every state ships a glyph and a label too.
@@ -189,7 +193,7 @@ MCP is, if this is your first one — is in [`docs/MCP.md`](docs/MCP.md).
 | `POST` | `/api/agent/supervision/cycles` | Run an analysis cycle now |
 | `GET` | `/api/agent/supervision/decisions` | Every decision, with its observations and outcome |
 | `POST` | `/api/agent/supervision/decisions/{id}/approve` `…/reject` | Human-in-the-loop on a pending action |
-| `GET` `PUT` | `/api/agent/supervision/policy` | Mode, per-capability autonomy, thresholds — versioned |
+| `GET` `PUT` | `/api/agent/supervision/policy` | Mode, per-capability autonomy and confidence floors, thresholds — versioned |
 | `POST` | `/api/agent/supervision/pause` `…/resume` | Stop and restart analysis |
 | `GET` | `/api/agent/supervision/audit` | Who did what, why, under which policy, with what result |
 

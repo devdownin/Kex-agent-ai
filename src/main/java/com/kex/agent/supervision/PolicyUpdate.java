@@ -15,6 +15,7 @@ import jakarta.validation.constraints.DecimalMin;
 public record PolicyUpdate(ExecutionMode mode,
                            Map<Capability, Autonomy> autonomy,
                            @DecimalMin("0.0") @DecimalMax("1.0") Double confidenceThreshold,
+                           Map<Capability, @DecimalMin("0.0") @DecimalMax("1.0") Double> confidenceThresholds,
                            Thresholds thresholds,
                            String reason) {
 }
