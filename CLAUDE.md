@@ -24,7 +24,7 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 | `web/` | Contrôleur REST, sécurité, filtre de débit |
 | `agent/` | Conversation : mémoire, appel bloquant, flux SSE |
 | `mcp/` | Introspection et invocation des serveurs MCP |
-| `config/` | `ChatClient`, propriétés, bearer MCP, seau à jetons |
+| `config/` | `ChatClient`, propriétés, bearer MCP, seau à jetons, lecture de la configuration du modèle |
 | `knowledge/` | Base de connaissance optionnelle : magasin vectoriel, advisor, ingestion |
 | `supervision/` | Cycle d'analyse, politique d'autonomie, décisions, validation humaine, audit |
 | `kafka/` | Vue technique du cluster : traduit les outils MCP d'Explorer, ne recalcule rien |

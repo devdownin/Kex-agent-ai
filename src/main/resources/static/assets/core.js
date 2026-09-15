@@ -199,6 +199,16 @@ export const percent = (ratio) => `${Math.round((ratio ?? 0) * 100)} %`;
 const MARKS = { OK: '●', WARNING: '▲', ERROR: '✕', UNKNOWN: '?', PENDING: '◷', RUNNING: '◌', PAUSED: '⏸' };
 const LABELS = { OK: 'OK', WARNING: 'Warning', ERROR: 'Erreur', UNKNOWN: 'Inconnu' };
 
+/** Une ligne « intitulé / valeur ». Partagée : la supervision et la vue du modèle la rendent toutes deux. */
+export function definition(label, value) {
+  const row = el('dl', 'definition');
+  row.append(el('dt', null, label));
+  const dd = el('dd');
+  dd.append(value);
+  row.append(dd);
+  return row;
+}
+
 export function stateTag(state, label) {
   const tag = el('span', 'state-tag');
   tag.dataset.state = state;

@@ -310,6 +310,9 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
 .hint { color: var(--ink-3); font-size: 12px; margin: 0 0 8px; }
 .muted { color: var(--ink-3); }
 .strong { font-weight: 600; }
+/* Une valeur composée — pastille, nom lisible, valeur brute — qui passe à la ligne au lieu
+   de pousser la colonne hors de l'écran. */
+.inline { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .warn { color: var(--warn); }
 .mono, code, pre { font-family: var(--mono); }
 
@@ -336,6 +339,8 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
   max-height: 380px;
   overflow: auto;
 }
+/* Du texte suivi, pas du JSON : il se replie plutôt que de défiler latéralement. */
+.dump.prose { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* ── États UX ────────────────────────────────────────────────────────── */
 

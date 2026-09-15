@@ -10,6 +10,7 @@ import {
   stamp, toast, viewName,
 } from './core.js';
 import * as chat from './chat.js';
+import * as llm from './llm.js';
 import * as supervision from './supervision.js';
 import * as tools from './tools.js';
 
@@ -20,7 +21,12 @@ const VIEWS = {
   agent: { title: 'Agent', load: supervision.agent },
   processes: { title: 'Processus', load: supervision.processes },
   decisions: { title: 'Décisions', load: supervision.decisions },
-  settings: { title: 'Configuration', load: supervision.settings },
+  // La configuration réunit deux lectures indépendantes : les seuils, modifiables, et le modèle,
+  // qui ne l'est pas. Un seul écran, deux requêtes — celle du modèle ne doit pas retarder les seuils.
+  settings: {
+    title: 'Configuration',
+    load: () => Promise.all([supervision.settings(), llm.view()]),
+  },
   alerts: { title: 'Alertes', load: supervision.alerts },
   audit: { title: 'Audit', load: supervision.audit },
   tools: { title: 'Technique', load: tools.view },
@@ -229,11 +235,23 @@ async function route() {
   await supervision.restoreFromUrl();
 }
 
+/**
+ * Recharge l'écran courant, que {@link route} laisserait intact faute de changement de vue. Sans
+ * cela, l'écran affiché pendant la saisie du jeton reste sur son « Jeton refusé » : le sondage de
+ * fond rattrape les vues qui s'auto-rafraîchissent, jamais Configuration ni Agent, qui portent un
+ * formulaire et en sont exclues.
+ */
+function reload() {
+  rendered = null;
+  return route();
+}
+
 /* ── Démarrage ─────────────────────────────────────────────────────────── */
 
 supervision.wire();
 supervision.onSnapshot(renderBadges);
 tools.wire();
+llm.wire();
 chat.wire(openCredentials);
 
 $('#run-cycle').addEventListener('click', runCycle);
@@ -244,7 +262,7 @@ $('#credentials-form').addEventListener('submit', () => {
   credentials.set($('#api-key').value.trim());
   toast(credentials.get() ? 'Jeton enregistré.' : 'Jeton effacé.');
   refreshStatus();
-  route();
+  reload();
 });
 
 $('#forget-key').addEventListener('click', () => {

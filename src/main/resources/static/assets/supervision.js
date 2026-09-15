@@ -4,8 +4,9 @@
 // Les vues de supervision : observer → comprendre → décider → agir → vérifier.
 
 import {
-  $, ago, api, clockTime, closeDrawer, confirmAction, drawerOpen, duration, el, empty, errorState,
-  frag, loading, openDrawer, params, percent, render, report, setParams, stamp, stateTag, toast,
+  $, ago, api, clockTime, closeDrawer, confirmAction, definition, drawerOpen, duration, el, empty,
+  errorState, frag, loading, openDrawer, params, percent, render, report, setParams, stamp, stateTag,
+  toast,
 } from './core.js';
 
 const BASE = '/api/agent/supervision';
@@ -835,14 +836,6 @@ async function savePolicy(update) {
 
 /* ── Utilitaires de vue ────────────────────────────────────────────────── */
 
-function definition(label, value) {
-  const row = el('dl', 'definition');
-  row.append(el('dt', null, label));
-  const dd = el('dd');
-  dd.append(value);
-  row.append(dd);
-  return row;
-}
 
 /** Les durées arrivent au format ISO-8601 (PT5M) : l'écran parle en 5m. */
 function isoToShort(iso) {

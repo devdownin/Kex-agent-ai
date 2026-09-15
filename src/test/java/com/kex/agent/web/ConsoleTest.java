@@ -39,7 +39,7 @@ class ConsoleTest {
     void sert_les_ressources_de_la_console_sans_jeton() throws Exception {
         // Les modules sont importés les uns par les autres : un seul 404 casse toute la console.
         for (String asset : List.of("console.js", "core.js", "supervision.js", "tools.js", "chat.js",
-                "kafka.js", "console.css", "favicon.svg")) {
+                "kafka.js", "llm.js", "console.css", "favicon.svg")) {
             assertThat(get("/assets/" + asset).statusCode()).as(asset).isEqualTo(200);
         }
     }
@@ -65,7 +65,7 @@ class ConsoleTest {
         // ni le compilateur ni le test de la spécification ne voient.
         String modules = get("/assets/console.js").body() + get("/assets/chat.js").body()
                 + get("/assets/tools.js").body() + get("/assets/supervision.js").body()
-                + get("/assets/kafka.js").body();
+                + get("/assets/kafka.js").body() + get("/assets/llm.js").body();
         assertThat(modules)
                 .contains("/api/agent/chat/stream")
                 .contains("/api/agent/conversations/")
@@ -81,6 +81,8 @@ class ConsoleTest {
         assertThat(modules).contains("'resume'").contains("'pause'");
         // La vue technique s'adresse à son propre contrôleur.
         assertThat(modules).contains("/api/agent/kafka").contains("/topics");
+        // La configuration du modèle aussi.
+        assertThat(modules).contains("/api/agent/llm");
     }
 
     private String base() {

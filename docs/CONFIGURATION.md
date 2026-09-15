@@ -139,6 +139,19 @@ choses à savoir avant de basculer :
 `OPENROUTER_BASE_URL` pointe ailleurs pour toute autre passerelle compatible OpenAI — un LiteLLM
 ou un vLLM interne, par exemple.
 
+### Lire la configuration appliquée
+
+L'écran **Configuration** de la console affiche ce qui tourne réellement : fournisseur, modèle,
+point d'accès, présence d'une clé, plafonds de l'échange et prompt système. C'est
+l'`Environment` résolu qui est lu — variables d'environnement et profils compris — et non un
+fichier, donc un `docker compose` qui surcharge une valeur s'y voit. `GET /api/agent/llm` rend la
+même chose en JSON.
+
+Aucune clé n'y figure, jamais, et la base d'URL est rendue sans ses éventuels identifiants : seule
+sa présence est affichée. L'écran est en lecture seule — le client du modèle est câblé au
+démarrage du contexte, un champ modifiable y accepterait une valeur que l'échange suivant
+ignorerait.
+
 ### Un autre fournisseur
 
 | Fournisseur | Starter | `spring.ai.model.chat` | Propriétés |

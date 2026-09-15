@@ -149,6 +149,13 @@ une passerelle hébergée voit passer les prompts et les résultats d'outils, l'
 cet agent ne peut pas se passer — dépend du modèle choisi, et la sortie structurée du cycle de
 supervision aussi.
 
+`LlmViewService` lit cette configuration dans l'`Environment` résolu, et sert à la fois
+`GET /api/agent/llm` — l'écran Configuration de la console — et l'avertissement de démarrage. Une
+seule lecture pour les deux : séparées, elles finiraient par diverger, et un écran qui contredit
+les logs fait douter des deux. Rien n'en sort qui ressemble à un secret : la clé n'apparaît que
+par sa présence, et la base d'URL est reconstruite sans ses identifiants ni sa chaîne de requête,
+parce qu'un `https://jeton@passerelle/` recopié tel quel finirait dans une capture d'écran.
+
 Le fournisseur retenu sans clé ne fait pas échouer le démarrage : `LlmProviderCheck` le signale et
 laisse l'application monter. Même posture que `kex.agent.api-key` — `/actuator/health`, la console
 et l'introspection MCP doivent rester joignables, puisque c'est là qu'on ira regarder pourquoi rien
