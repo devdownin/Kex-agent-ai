@@ -230,6 +230,77 @@ Le bouton « Authorize » de Swagger UI attend la valeur de `kex.agent.api-key`.
 Aucun secret, aucun accès réseau : le profil `test` fournit une clé factice et désactive le client
 MCP, et le test d'intégration monte son propre serveur.
 
+<a id="publier-l-image"></a>
+
+## Publier l'image
+
+Le workflow `publish.yml` pousse sur Docker Hub. **Rien n'est saisi au déclenchement** : la version
+est celle de `pom.xml`, lue par Maven. Une version tapée à la main finit par diverger du jar
+qu'elle étiquette, et une image mal étiquetée est pire qu'une image absente — personne ne saura ce
+qui tourne.
+
+### Réglages GitHub
+
+`Settings → Secrets and variables → Actions`
+
+| Nom | Type | Défaut si vide | Rôle |
+|---|---|---|---|
+| `DOCKERHUB_USERNAME` | Variable | *(aucun — échec explicite)* | Identifiant Docker Hub |
+| `DOCKERHUB_TOKEN` | Secret | *(aucun — échec explicite)* | Jeton d'accès, **pas** le mot de passe |
+| `DOCKERHUB_NAMESPACE` | Variable | `compagnonsdudev` | Organisation ou compte |
+| `DOCKERHUB_IMAGE` | Variable | `kex-agent-ai` | Nom du dépôt d'images |
+
+L'identifiant est une variable et non un secret : ce n'en est pas un, et le ranger comme tel le
+masque dans les journaux au moment précis où on cherche pourquoi l'authentification a échoué. Le
+jeton se crée dans Docker Hub sous `Account settings → Personal access tokens`, avec la portée
+`Read & Write` sur le seul dépôt visé.
+
+### Publier une version
+
+```bash
+# 1. La version du projet, une fois — c'est elle qui étiquettera l'image
+sed -i 's|<version>0.1.0-SNAPSHOT</version>|<version>0.2.0</version>|' pom.xml
+git commit -am "chore: version 0.2.0"
+
+# 2. Le tag déclenche la publication
+git tag v0.2.0
+git push origin main --follow-tags
+```
+
+Le workflow **refuse de publier** si le tag et la version du `pom.xml` divergent, ou si la version
+porte `SNAPSHOT` : un tag Git n'est pas récupérable une fois poussé, et une image dont le contenu
+change sous le même nom ne veut rien dire.
+
+### Ce qui est publié
+
+| Déclencheur | Tags |
+|---|---|
+| Tag `v0.2.0` | `0.2.0`, `0.2`, `0`, `latest`, `sha-<court>` |
+| Tag `v0.2.0-rc1` | `0.2.0-rc1`, `sha-<court>` |
+| Lancement manuel | `edge`, `sha-<court>` |
+
+Une préversion ne déplace ni `latest` ni les tags mobiles : un `docker pull` sans tag ne doit pas
+ramener du code qu'on n'a pas fini de juger.
+
+La suite complète (`./mvnw verify`) tourne **avant** la publication, sur la même révision : le
+workflow CI ne se déclenche pas sur un tag, s'y fier publierait le résultat d'une autre révision.
+Après le `push`, l'image est retirée du cache local, retéléchargée depuis le registre et démarrée —
+un `push` réussi dit que les couches sont parties, pas que le manifeste est servable.
+
+`linux/amd64` seulement. Une image arm64 supposerait QEMU et une compilation Maven émulée, soit un
+ordre de grandeur de plus sur la durée.
+
+### Utiliser l'image publiée
+
+```bash
+docker run --rm -p 8081:8081 \
+  -e ANTHROPIC_API_KEY=sk-ant-... -e KEX_AGENT_API_KEY=secret \
+  compagnonsdudev/kex-agent-ai:latest
+```
+
+`docker-compose.yml` construit l'image localement (`build: .`) : c'est une stack de développement,
+et bâtir ce qu'on vient de modifier est ce qu'on y attend.
+
 ## Construire l'image
 
 ```bash

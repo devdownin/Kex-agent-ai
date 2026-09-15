@@ -77,6 +77,10 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 - **Un tri lit `data-sort` quand l'affiché ne se trie pas.** « il y a 4 min » ou « 200 000 » avec
   son espace fine, rangés par ordre alphabétique, donnent un ordre qui a l'air juste.
 
+- **La version publiée vient de `pom.xml`, jamais d'une saisie.** `publish.yml` refuse un tag qui
+  diverge du pom et refuse une version `SNAPSHOT` : un tag Git n'est pas récupérable une fois
+  poussé, et une image mal étiquetée est pire qu'une image absente.
+
 - **Un état illisible vaut `UNKNOWN`, jamais `OK`.** Une donnée manquante et une donnée saine se
   ressemblent dans un tableau de bord, et les confondre fait rater une panne.
 
