@@ -234,10 +234,11 @@ MCP, et le test d'intégration monte son propre serveur.
 
 ## Publier l'image
 
-Le workflow `publish.yml` pousse sur Docker Hub. **Rien n'est saisi au déclenchement** : la version
-est celle de `pom.xml`, lue par Maven. Une version tapée à la main finit par diverger du jar
-qu'elle étiquette, et une image mal étiquetée est pire qu'une image absente — personne ne saura ce
-qui tourne.
+Le workflow `publish.yml` pousse sur Docker Hub **et sur GHCR, en miroir** — le même digest sous
+`ghcr.io/devdownin/kex-agent-ai`, sans secret de plus : GHCR se pousse avec le jeton que GitHub
+fournit déjà à chaque exécution. **Rien n'est saisi au déclenchement** : la version est celle de
+`pom.xml`, lue par Maven. Une version tapée à la main finit par diverger du jar qu'elle étiquette,
+et une image mal étiquetée est pire qu'une image absente — personne ne saura ce qui tourne.
 
 ### Réglages GitHub
 
@@ -252,8 +253,10 @@ qui tourne.
 
 L'identifiant est une variable et non un secret : ce n'en est pas un, et le ranger comme tel le
 masque dans les journaux au moment précis où on cherche pourquoi l'authentification a échoué. Le
-jeton se crée dans Docker Hub sous `Account settings → Personal access tokens`, avec la portée
-`Read & Write` sur le seul dépôt visé.
+jeton se crée dans Docker Hub sous `Account settings → Personal access tokens`. La portée
+`Read & Write` suffit pour `docker push` ; la synchronisation de la description du dépôt (plus bas)
+exige en plus la portée `Delete`, faute de quoi seule cette étape-là échoue — la publication de
+l'image, elle, aboutit.
 
 ### Publier une version
 
@@ -271,6 +274,14 @@ Le workflow **refuse de publier** si le tag et la version du `pom.xml` divergent
 porte `SNAPSHOT` : un tag Git n'est pas récupérable une fois poussé, et une image dont le contenu
 change sous le même nom ne veut rien dire.
 
+Sur un tag, trois étapes de plus s'ajoutent après la publication : une **release GitHub** est créée
+(notes générées depuis les commits, marquée préversion pour un tag `-rc`/`-beta`/…), la **description
+du dépôt Docker Hub** est resynchronisée depuis `README.md`, et un **SBOM** est attesté sur l'image
+elle-même — interrogeable après coup (`docker buildx imagetools inspect --format '{{ json .SBOM }}'
+compagnonsdudev/kex-agent-ai:0.2.0`), à la différence du SBOM que `ci.yml` dépose en artefact de
+build, qui ne voyage pas avec l'image publiée. Aucune des trois ne tourne sur `edge` : une
+exécution manuelle n'a rien à annoncer.
+
 ### Ce qui est publié
 
 | Déclencheur | Tags |
@@ -284,6 +295,12 @@ ramener du code qu'on n'a pas fini de juger.
 
 La suite complète (`./mvnw verify`) tourne **avant** la publication, sur la même révision : le
 workflow CI ne se déclenche pas sur un tag, s'y fier publierait le résultat d'une autre révision.
+L'image est aussi **passée au scanner de vulnérabilités** (Trivy) avant de partir sur un registre
+public : construite en local, scannée, puis reconstruite — depuis le cache, donc quasiment gratuite
+la seconde fois — et poussée seulement si rien de `CRITICAL` ou `HIGH` avec correctif disponible n'y
+traîne. Une CVE sans correctif dans l'image de base ne bloque pas : bloquer dessus serait bloquer
+indéfiniment sur quelque chose qu'aucune version de cette image ne peut corriger seule.
+
 Après le `push`, l'image est retirée du cache local, retéléchargée depuis le registre et démarrée —
 un `push` réussi dit que les couches sont parties, pas que le manifeste est servable.
 
@@ -296,6 +313,11 @@ ordre de grandeur de plus sur la durée.
 docker run --rm -p 8081:8081 \
   -e ANTHROPIC_API_KEY=sk-ant-... -e KEX_AGENT_API_KEY=secret \
   compagnonsdudev/kex-agent-ai:latest
+
+# Ou son miroir GHCR — même digest, pas de compte Docker Hub à créer pour le tirer
+docker run --rm -p 8081:8081 \
+  -e ANTHROPIC_API_KEY=sk-ant-... -e KEX_AGENT_API_KEY=secret \
+  ghcr.io/devdownin/kex-agent-ai:latest
 ```
 
 `docker-compose.yml` construit l'image localement (`build: .`) : c'est une stack de développement,

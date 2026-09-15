@@ -81,6 +81,11 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   diverge du pom et refuse une version `SNAPSHOT` : un tag Git n'est pas récupérable une fois
   poussé, et une image mal étiquetée est pire qu'une image absente.
 
+- **L'image se construit deux fois avant de partir sur un registre public.** La première, chargée
+  en local (`load`), sert au scan de vulnérabilités ; la seconde, poussée (`push`), relit le même
+  cache et ne reconstruit quasiment rien. Pousser d'abord et scanner après publierait une image
+  vulnérable avant de savoir qu'elle l'est.
+
 - **Un état illisible vaut `UNKNOWN`, jamais `OK`.** Une donnée manquante et une donnée saine se
   ressemblent dans un tableau de bord, et les confondre fait rater une panne.
 
