@@ -6,7 +6,8 @@
 // chaînes pour une poignée de fichiers statiques.
 
 import {
-  $, ago, api, confirmAction, credentials, onCredentialChange, onUnauthorized, report, stamp, toast,
+  $, ago, api, confirmAction, credentials, drawerOpen, onCredentialChange, onUnauthorized, report,
+  stamp, toast, viewName,
 } from './core.js';
 import * as chat from './chat.js';
 import * as supervision from './supervision.js';
@@ -56,12 +57,13 @@ function renderStatus(next) {
   }
 }
 
-async function refreshStatus() {
+/** @param background un sondage périodique ne notifie pas : la pastille d'état porte l'échec. */
+async function refreshStatus(background = false) {
   try {
     renderStatus(await api(`${BASE}/status`));
   } catch (error) {
     renderStatus(null);
-    if (error.status !== 401) report(error);
+    if (!background && error.status !== 401) report(error);
   }
 }
 
@@ -159,19 +161,72 @@ themeToggle.addEventListener('click', () => {
   syncThemeButton();
 });
 
+/* ── Rafraîchissement ──────────────────────────────────────────────────── */
+
+// Sans lui, un onglet laissé ouvert affiche des données de dix minutes sous un libellé qui dit
+// « il y a 4 secondes » : l'écran ment précisément sur ce que tout le reste s'attache à dire.
+const REFRESH_MS = 15_000;
+const TICK_MS = 1_000;
+
+// Les écrans qui portent un formulaire ne se rafraîchissent pas : un rendu par-dessus effacerait
+// ce que quelqu'un est en train de saisir. Le chat non plus, pour la même raison.
+const SELF_REFRESHING = new Set(['overview', 'processes', 'decisions', 'alerts', 'audit', 'tools']);
+
+/**
+ * Un sondage est suspendu quand l'onglet est caché — il n'y a personne pour lire et chaque cycle
+ * coûte au budget de l'agent — et quand un panneau ou un dialogue est ouvert : re-rendre sous
+ * quelqu'un qui lit une décision avant de l'approuver est hostile.
+ */
+function paused() {
+  return document.hidden || drawerOpen() || document.querySelector('dialog[open]') !== null;
+}
+
+async function backgroundRefresh() {
+  if (paused()) return;
+  await refreshStatus(true);
+  const view = currentView();
+  if (SELF_REFRESHING.has(view)) await VIEWS[view].load?.();
+}
+
+// Le libellé de fraîcheur vieillit tout seul, sans requête : c'est lui qui doit dire la vérité
+// entre deux sondages.
+function tick() {
+  if (!document.hidden && status) renderStatus(status);
+}
+
+setInterval(backgroundRefresh, REFRESH_MS);
+setInterval(tick, TICK_MS);
+// Un onglet qu'on retrouve doit être à jour tout de suite, pas au prochain sondage.
+addEventListener('visibilitychange', () => {
+  if (!document.hidden) backgroundRefresh();
+});
+
 /* ── Routage ───────────────────────────────────────────────────────────── */
 
-function route() {
-  const name = location.hash.replace('#/', '') || 'overview';
-  const view = VIEWS[name] ? name : 'overview';
-  for (const key of Object.keys(VIEWS)) {
-    $(`#view-${key}`).hidden = key !== view;
-    const link = document.querySelector(`.nav-item[data-view="${key}"]`);
-    if (key === view) link.setAttribute('aria-current', 'page');
-    else link.removeAttribute('aria-current');
+const currentView = () => (VIEWS[viewName()] ? viewName() : 'overview');
+
+let rendered = null;
+
+async function route() {
+  const view = currentView();
+  // Un changement de paramètre — filtre, panneau ouvert — n'est pas un changement de vue : le
+  // recharger referait une requête et écraserait ce que l'utilisateur vient d'ouvrir.
+  if (view !== rendered) {
+    rendered = view;
+    for (const key of Object.keys(VIEWS)) {
+      $(`#view-${key}`).hidden = key !== view;
+      const link = document.querySelector(`.nav-item[data-view="${key}"]`);
+      if (key === view) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    }
+    $('#crumb').textContent = VIEWS[view].title;
+    supervision.syncFilters();
+    await VIEWS[view].load?.();
   }
-  $('#crumb').textContent = VIEWS[view].title;
-  VIEWS[view].load?.();
+  else {
+    supervision.syncFilters();
+  }
+  await supervision.restoreFromUrl();
 }
 
 /* ── Démarrage ─────────────────────────────────────────────────────────── */

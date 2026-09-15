@@ -4,8 +4,8 @@
 // Les vues de supervision : observer → comprendre → décider → agir → vérifier.
 
 import {
-  $, ago, api, clockTime, confirmAction, duration, el, empty, errorState, frag, loading, percent,
-  render, report, stamp, stateTag, toast,
+  $, ago, api, clockTime, closeDrawer, confirmAction, drawerOpen, duration, el, empty, errorState,
+  frag, loading, openDrawer, params, percent, render, report, setParams, stamp, stateTag, toast,
 } from './core.js';
 
 const BASE = '/api/agent/supervision';
@@ -160,18 +160,22 @@ function timeline(cycle) {
 
 /* ── Processus ─────────────────────────────────────────────────────────── */
 
-let processFilter = 'ALL';
-let processQuery = '';
-
 export async function processes() {
   await render($('#processes-table'), refresh, (data) => processTable(filtered(data.processes), openProcess));
 }
 
+// Lus dans l'URL, pas dans une variable de module : un rechargement ou un lien partagé retrouve
+// l'écran tel qu'il était.
+const processFilter = () => params().get('etat') || 'ALL';
+const processQuery = () => (params().get('q') || '').toLowerCase();
+
 function filtered(rows) {
+  const state = processFilter();
+  const query = processQuery();
   return (rows || []).filter((row) => {
-    const matchesState = processFilter === 'ALL'
-      || (processFilter === 'ATTENTION' ? row.state === 'WARNING' || row.state === 'ERROR' : row.state === processFilter);
-    const matchesQuery = !processQuery || row.name.toLowerCase().includes(processQuery);
+    const matchesState = state === 'ALL'
+      || (state === 'ATTENTION' ? row.state === 'WARNING' || row.state === 'ERROR' : row.state === state);
+    const matchesQuery = !query || row.name.toLowerCase().includes(query);
     return matchesState && matchesQuery;
   });
 }
@@ -280,6 +284,7 @@ function openProcess(row) {
   } else {
     extra.append(empty('Aucune alerte sur ce processus.'));
   }
+  setParams({ processus: row.processId, alerte: null, decision: null }, true);
   openDrawer(row.name, frag(body, extra));
 }
 
@@ -348,6 +353,7 @@ function openAnomaly(anomaly) {
   const decision = (current()?.pending || []).find((item) => item.id === anomaly.pendingDecisionId);
   if (decision) body.append(approvalCard(decision));
 
+  if (anomaly.id) setParams({ alerte: anomaly.id, processus: null, decision: null }, true);
   openDrawer(anomaly.title, body);
 }
 
@@ -453,6 +459,7 @@ function decisionRow(decision) {
 }
 
 async function openDecision(id) {
+  setParams({ decision: id, processus: null, alerte: null }, true);
   openDrawer('Décision', loading());
   try {
     const decision = await api(`${BASE}/decisions/${encodeURIComponent(id)}`);
@@ -544,11 +551,10 @@ export async function alerts() {
 
 /* ── Audit ─────────────────────────────────────────────────────────────── */
 
-let auditQuery = '';
-
 export async function audit() {
+  const query = (params().get('q') || '').toLowerCase();
   await render($('#audit-table'), () => api(`${BASE}/audit`), (rows) => {
-    const matching = rows.filter((row) => !auditQuery || JSON.stringify(row).toLowerCase().includes(auditQuery));
+    const matching = rows.filter((row) => !query || JSON.stringify(row).toLowerCase().includes(query));
     if (!matching.length) return empty('Aucune entrée d’audit.', 'Chaque décision et chaque changement y laisse une trace.');
     const table = el('table', 'grid');
     const head = el('thead');
@@ -855,30 +861,59 @@ const shortToIso = (value) => {
   return `PT${match[1]}${match[2].toUpperCase()}`;
 };
 
-/* ── Panneau latéral ───────────────────────────────────────────────────── */
+/**
+ * Rouvre le panneau que l'adresse désigne. Appelée après chaque rendu de vue et à chaque
+ * changement d'adresse : c'est ce qui rend un lien vers une décision précise utilisable.
+ */
+export async function restoreFromUrl() {
+  const query = params();
+  const decision = query.get('decision');
+  const alertId = query.get('alerte');
+  const processId = query.get('processus');
 
-let lastFocused = null;
+  if (!decision && !alertId && !processId) {
+    if (drawerOpen()) closeDrawer();
+    return;
+  }
+  if (drawerOpen()) return;
 
-export function openDrawer(title, body) {
-  lastFocused = document.activeElement;
-  $('#drawer-title').textContent = title;
-  $('#drawer-body').replaceChildren(body);
-  $('#drawer').hidden = false;
-  $('#drawer-close').focus();
-}
-
-export function closeDrawer() {
-  $('#drawer').hidden = true;
-  // Le focus revient d'où il vient : sans ça, la navigation clavier repart du haut de la page.
-  lastFocused?.focus();
+  if (decision) {
+    await openDecision(decision);
+    return;
+  }
+  const data = current() || await refresh().catch(() => null);
+  if (!data) return;
+  if (alertId) {
+    const alert = (data.alerts || []).find((item) => item.id === alertId);
+    if (alert) openAnomaly(alert);
+  }
+  else {
+    const row = (data.processes || []).find((item) => item.processId === processId);
+    if (row) openProcess(row);
+  }
 }
 
 /* ── Câblage ───────────────────────────────────────────────────────────── */
 
+/** Remet les contrôles en accord avec l'adresse : c'est l'URL qui fait foi, pas l'inverse. */
+export function syncFilters() {
+  const state = processFilter();
+  document.querySelectorAll('.chip-toggle').forEach((button) =>
+    button.setAttribute('aria-pressed', String(button.dataset.filter === state)));
+  const query = params().get('q') || '';
+  if ($('#process-search').value !== query) $('#process-search').value = query;
+  if ($('#audit-search').value !== query) $('#audit-search').value = query;
+}
+
 export function wire() {
-  $('#drawer-close').addEventListener('click', closeDrawer);
+  // Fermer efface aussi le paramètre : l'adresse reste le reflet de l'écran.
+  const dismiss = () => {
+    closeDrawer();
+    setParams({ decision: null, alerte: null, processus: null });
+  };
+  $('#drawer-close').addEventListener('click', dismiss);
   addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !$('#drawer').hidden) closeDrawer();
+    if (event.key === 'Escape' && drawerOpen()) dismiss();
   });
 
   $('#refresh-decisions').addEventListener('click', decisions);
@@ -886,20 +921,19 @@ export function wire() {
   $('#refresh-audit').addEventListener('click', audit);
 
   $('#audit-search').addEventListener('input', (event) => {
-    auditQuery = event.target.value.trim().toLowerCase();
+    setParams({ q: event.target.value.trim() });
     audit();
   });
 
   $('#process-search').addEventListener('input', (event) => {
-    processQuery = event.target.value.trim().toLowerCase();
+    setParams({ q: event.target.value.trim() });
     processes();
   });
 
   document.querySelectorAll('.chip-toggle').forEach((button) => {
     button.addEventListener('click', () => {
-      processFilter = button.dataset.filter;
-      document.querySelectorAll('.chip-toggle').forEach((other) =>
-        other.setAttribute('aria-pressed', String(other === button)));
+      setParams({ etat: button.dataset.filter === 'ALL' ? null : button.dataset.filter });
+      syncFilters();
       processes();
     });
   });

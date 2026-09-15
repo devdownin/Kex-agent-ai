@@ -4,7 +4,7 @@
 // Vue technique du cluster : topics, puis les groupes qui les lisent et leur retard. Second
 // niveau délibérément — le tableau de bord métier n'a pas à en être saturé.
 
-import { $, ago, api, el, empty, errorState, render, stateTag } from './core.js';
+import { $, ago, api, el, empty, errorState, openDrawer, render, stateTag } from './core.js';
 
 const BASE = '/api/agent/kafka';
 
@@ -115,7 +115,6 @@ export async function topics() {
 }
 
 async function openLag(topic) {
-  const { openDrawer } = await import('./supervision.js');
   openDrawer(topic, el('p', 'state loading', 'Relevé des groupes…'));
   try {
     const data = await api(`${BASE}/topics/${encodeURIComponent(topic)}/lag`);
