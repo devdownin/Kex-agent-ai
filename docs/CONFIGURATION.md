@@ -24,7 +24,7 @@ hors Docker.
 | `EXPLORER_PORT` | `8080` | Port publié de l'Explorer |
 | `KAFKA_PORT` | `9092` | Port publié du broker |
 | `BIND_ADDR` | `127.0.0.1` | Interface d'écoute. `0.0.0.0` expose hors de la machine |
-| `EXPLORER_IMAGE_TAG` | `latest` | Épingler une version de l'image de l'Explorer |
+| `EXPLORER_IMAGE_TAG` | `2.0.3` | Version de l'image de l'Explorer. `latest` pour suivre les publications, au prix de la reproductibilité |
 | `EXPLORER_IMAGE_NAMESPACE` | `compagnonsdudev` | Ou `ghcr.io/devdownin` |
 | `EXPLORER_MCP_READONLY` | `true` | Laisser à `true` sauf besoin explicite d'écriture |
 | `POSTGRES_PASSWORD` | `kex` | Surcouche `compose/shared-memory.yml` |

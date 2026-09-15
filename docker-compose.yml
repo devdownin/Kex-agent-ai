@@ -56,9 +56,11 @@ services:
         condition: service_completed_successfully
 
   explorer:
-    # `latest` par défaut, comme demandé. Épingler une version (EXPLORER_IMAGE_TAG=2.0.0)
-    # pour un environnement reproductible : `latest` sert ce qui a été publié le jour du pull.
-    image: ${EXPLORER_IMAGE_NAMESPACE:-compagnonsdudev}/kafkaexplorer:${EXPLORER_IMAGE_TAG:-latest}
+    # Version épinglée. `latest` servait ce qui avait été publié le jour du pull, et il a bougé :
+    # deux `docker compose up` à un jour d'écart montaient deux Explorer différents, dont la
+    # surface MCP — les outils exposés, leurs plafonds — n'a aucune raison d'être identique.
+    # EXPLORER_IMAGE_TAG=latest pour suivre la dernière publication en connaissance de cause.
+    image: ${EXPLORER_IMAGE_NAMESPACE:-compagnonsdudev}/kafkaexplorer:${EXPLORER_IMAGE_TAG:-2.0.3}
     ports:
       # Boucle locale : l'Explorer n'authentifie personne et POST /api/config peut repointer
       # le cluster à chaud. BIND_ADDR=0.0.0.0 pour l'exposer délibérément.
