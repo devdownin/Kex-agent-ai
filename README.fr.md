@@ -56,13 +56,44 @@ curl -X POST localhost:8081/api/agent/chat \
 {"conversationId":"3f2b…","content":"Huit topics correspondent à demo.*. Trois sont vides : …"}
 ```
 
-Ou ouvrez **http://localhost:8081** : la **Control Center**, la console que l'agent sert lui-même —
-conversation avec flux de jetons et d'appels d'outils en direct, introspection des serveurs MCP et
-invocation directe d'un outil, base de connaissance, santé. Le bearer se colle une fois ; il vit
-dans `sessionStorage` et ne quitte jamais le navigateur.
+Ou ouvrez **http://localhost:8081** : la **Control Center**, la console que l'agent sert lui-même.
+Le bearer se colle une fois ; il vit dans `sessionStorage` et ne quitte jamais le navigateur.
 
 Pas de Docker ? [Lancez-le depuis les sources](docs/CONFIGURATION.md#lancer-depuis-les-sources) —
 JDK 25 et `./mvnw spring-boot:run`.
+
+## 🧭 La Control Center
+
+L'agent sert sa propre console d'exploitation sur `/`, construite autour d'une seule boucle :
+**observer → comprendre → décider → agir → vérifier.**
+
+| Écran | Ce à quoi il répond |
+|---|---|
+| Vue d'ensemble | Est-ce que tout tourne, qu'est-ce qui demande mon attention, l'agent a-t-il décidé |
+| Agent | Ce que l'agent peut et ne peut pas faire, et sous quel mode |
+| Processus | État, retard et anomalies de chaque processus surveillé |
+| Décisions | Chaque décision, ses observations, sa confiance, et ce qu'elle a réellement fait |
+| Configuration | Seuils de détection et plancher de confiance, versionnés et audités |
+| Alertes | Regroupées, actionnables, liées à un processus et à une recommandation |
+| Audit | Acteur, action, motif, version de politique, résultat, identifiant de corrélation |
+| Technique | Serveurs MCP, invocation directe d'un outil, santé et métriques |
+| Conversation | Le chat, en flux, avec les outils qu'il a exécutés |
+
+Quelques partis pris explicites :
+
+- **Un cycle d'analyse ne part que sur demande.** Pas de planificateur : en multi-instance chaque
+  réplique lancerait le sien et les actions partiraient en double. En ajouter un suppose un verrou
+  partagé, donc une base — une décision d'exploitation que ce projet ne prend pas à votre place.
+- **Rien n'est inventé pour remplir l'écran.** Aucun processus déclaré donne un tableau de bord
+  vide, et une mesure que les outils n'ont pas produite vaut `UNKNOWN`, jamais `OK`. Un état qui
+  paraît sain parce que la donnée manque est exactement ce qui fait rater une panne.
+- **L'autonomie se règle par capacité, et le mode ne peut que la restreindre.** Une capacité absente
+  de la politique est interdite : le droit d'agir ne s'hérite pas d'une installation.
+- **La confiance ne s'affiche jamais seule.** Elle est toujours accompagnée des observations qui la
+  fondent, parce qu'un pourcentage rendu par un modèle n'est pas une probabilité mesurée.
+- **La couleur ne porte jamais un état à elle seule.** Chaque état vient avec un glyphe et un libellé.
+- **Une action sensible se confirme avec ce qu'elle va faire** — *Confirmer : Redémarrer Consumer
+  Integration-02*, pas *Êtes-vous sûr ?*
 
 ## 💬 Ce qu'on peut lui demander
 
@@ -156,6 +187,13 @@ y compris ce qu'est MCP si c'est votre premier — est dans [`docs/MCP.md`](docs
 | `GET` | `/api/agent/mcp/servers/{connection}/resources` | Lister les ressources d'un serveur |
 | `GET` | `/api/agent/mcp/servers/{connection}/resource?uri=…` | En lire une |
 | `POST` `GET` `DELETE` | `/api/agent/knowledge` | Alimenter, chercher et élaguer la base de connaissance (si activée) |
+| `GET` | `/api/agent/supervision/overview` | Tout ce qu'il faut au premier écran, en une requête |
+| `POST` | `/api/agent/supervision/cycles` | Lancer un cycle d'analyse maintenant |
+| `GET` | `/api/agent/supervision/decisions` | Chaque décision, ses observations et son résultat |
+| `POST` | `/api/agent/supervision/decisions/{id}/approve` `…/reject` | Valider ou refuser une action en attente |
+| `GET` `PUT` | `/api/agent/supervision/policy` | Mode, autonomie par capacité, seuils — versionnés |
+| `POST` | `/api/agent/supervision/pause` `…/resume` | Suspendre et reprendre les analyses |
+| `GET` | `/api/agent/supervision/audit` | Qui a fait quoi, pourquoi, sous quelle politique, avec quel résultat |
 
 La description OpenAPI est servie sur `/v3/api-docs`, Swagger UI sur `/swagger-ui.html`, et la
 Control Center sur `/`. Les trois sont ouverts en `GET` : la *forme* de l'API est déjà publique dans

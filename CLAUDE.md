@@ -26,6 +26,8 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 | `mcp/` | Introspection et invocation des serveurs MCP |
 | `config/` | `ChatClient`, propriétés, bearer MCP, seau à jetons |
 | `knowledge/` | Base de connaissance optionnelle : magasin vectoriel, advisor, ingestion |
+| `supervision/` | Cycle d'analyse, politique d'autonomie, décisions, validation humaine, audit |
+| `resources/static/` | La Control Center : console d'exploitation, sans étape de build |
 
 ## Conventions
 
@@ -52,6 +54,15 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   `/api/**` seulement.
 - **Le refus d'authentification appartient à l'`AuthenticationEntryPoint`**, pas au filtre :
   dans le filtre, il bloque aussi les routes en `permitAll` comme `/actuator/health`.
+
+- **Un état illisible vaut `UNKNOWN`, jamais `OK`.** Une donnée manquante et une donnée saine se
+  ressemblent dans un tableau de bord, et les confondre fait rater une panne.
+
+- **Le mode d'exécution ne peut que restreindre l'autonomie d'une capacité.** L'élargir depuis le
+  mode ouvrirait d'un coup des actions délibérément mises sous supervision.
+
+- **Pas de `@Scheduled` sur le cycle de supervision.** En multi-instance, chaque réplique lancerait
+  le sien et les actions partiraient en double.
 
 - **Le `permitAll` de la console reste borné au `GET` et aux chemins énumérés.** Un joker de
   racine ferait hériter l'ouverture à toute route future servie ici.
