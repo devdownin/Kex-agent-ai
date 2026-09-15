@@ -267,8 +267,12 @@ public class SupervisionService {
         if (cycleLock.isLocked()) {
             return Diagnosis.of(AgentState.ANALYSING);
         }
+        // Le détail brut — souvent le corps JSON renvoyé par le fournisseur du modèle, chiffré en
+        // toutes lettres au visiteur d'un écran qui n'a rien demandé de technique — reste dans le
+        // déroulé du cycle et l'audit, tous deux déjà alimentés par ce même message. Le bandeau
+        // d'état n'a besoin que de la phrase qui dit où le trouver.
         if (last != null && last.failure() != null) {
-            return new Diagnosis(AgentState.ERROR, "Dernier cycle en échec : " + last.failure());
+            return new Diagnosis(AgentState.ERROR, "Dernier cycle en échec — détail dans le déroulé du cycle et l'audit");
         }
         // Sans clé, aucun échange n'aboutit : le cycle ne peut rien observer. Dégradé et non en
         // erreur — la console, l'introspection MCP et la vue Kafka répondent toujours —, mais

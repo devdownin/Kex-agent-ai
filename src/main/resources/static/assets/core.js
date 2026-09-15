@@ -199,6 +199,9 @@ export const percent = (ratio) => `${Math.round((ratio ?? 0) * 100)} %`;
 const MARKS = { OK: '●', WARNING: '▲', ERROR: '✕', UNKNOWN: '?', PENDING: '◷', RUNNING: '◌', PAUSED: '⏸' };
 const LABELS = { OK: 'OK', WARNING: 'Warning', ERROR: 'Erreur', UNKNOWN: 'Inconnu' };
 
+/** Le même glyphe que `stateTag`, pour les endroits qui composent leur propre pastille. */
+export const stateMark = (state) => MARKS[state] || '●';
+
 /* ── Tri des tableaux ──────────────────────────────────────────────────── */
 
 /**

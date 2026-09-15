@@ -133,4 +133,16 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   au vocabulaire de la documentation, pas à une variable interne — le test de la spécification a
   attrapé un `{server}` là où tout le reste disait `{connection}`.
 
+- **Le bandeau d'état ne recopie jamais le corps brut d'une exception amont.** `stateReason`
+  concaténait `last.failure()` — souvent le JSON renvoyé par le fournisseur du modèle — dans une
+  phrase censée s'afficher en tête de chaque écran. Le détail technique reste dans le déroulé du
+  cycle et l'audit, qui le portaient déjà ; le bandeau ne dit que où le trouver.
+
+- **Une barre de défilement en survol (macOS, la plupart des Chromium) ne prouve rien à l'écran.**
+  `.scroll-x` défilait bel et bien, mais sans indice tant qu'on n'avait pas touché le pavé
+  tactile — la dernière colonne d'un tableau compact semblait simplement coupée au bord du
+  panneau. `scrollbar-width: thin` aide là où le navigateur l'honore ; l'ombre peinte avec le
+  contenu (`background-attachment: local` par-dessus `scroll`) ne dépend d'aucun chrome de
+  navigateur et tient même là où `::-webkit-scrollbar` est ignoré.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

@@ -7,7 +7,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Kex Agent — Control Center</title>
   <meta name="description" content="Control Center de l'agent Kex : état des processus surveillés, décisions, autonomie, validations et audit.">
-  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/logo.png" type="image/png">
+  <!-- Un second export, pas le même redimensionné à la volée par le système : sur iOS, une icône
+       d'écran d'accueil en 128 px remontée à 180 sort floue à côté des autres. -->
+  <link rel="apple-touch-icon" href="assets/logo-180.png">
   <link rel="stylesheet" href="assets/console.css">
 </head>
 <body>
@@ -16,27 +19,49 @@
 <div class="shell">
   <aside class="rail">
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true">K</span>
+      <img class="brand-mark" src="assets/logo.png" alt="" width="32" height="32">
       <span class="brand-text">
         <strong>Kex Agent</strong>
         <small>Control Center</small>
       </span>
     </div>
 
+    <!-- Un seul jeu de traits (24x24, épaisseur 1.7, coins ronds) : les glyphes Unicode qu'ils
+         remplacent (⌂ ◎ ▤ ◈ ⚙ △ ▦ ◫ ▚) n'ont ni le même poids visuel ni le même style d'une
+         police à l'autre, et détonnaient à côté du logo. Aucune police d'icônes chargée — même
+         contrainte que le reste de la console : pas d'outillage, pas de dépendance externe. -->
     <nav aria-label="Sections">
-      <a class="nav-item" href="#/overview" data-view="overview"><span class="nav-ico" aria-hidden="true">⌂</span>Vue d'ensemble</a>
-      <a class="nav-item" href="#/agent" data-view="agent"><span class="nav-ico" aria-hidden="true">◎</span>Agent</a>
-      <a class="nav-item" href="#/processes" data-view="processes"><span class="nav-ico" aria-hidden="true">▤</span>Processus</a>
-      <a class="nav-item" href="#/decisions" data-view="decisions"><span class="nav-ico" aria-hidden="true">◈</span>Décisions
+      <a class="nav-item" href="#/overview" data-view="overview">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg>
+        Vue d'ensemble</a>
+      <a class="nav-item" href="#/agent" data-view="agent">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="8" width="11" height="10" rx="2.5"/><circle cx="10" cy="13" r=".6" fill="currentColor" stroke="none"/><circle cx="14" cy="13" r=".6" fill="currentColor" stroke="none"/><path d="M12 8V5.5"/><circle cx="12" cy="4.3" r="1.1"/><path d="M4 12.5h2.5M17.5 12.5H20"/></svg>
+        Agent</a>
+      <a class="nav-item" href="#/processes" data-view="processes">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 10.5h16M4 15h16"/></svg>
+        Processus</a>
+      <a class="nav-item" href="#/decisions" data-view="decisions">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 20 12 12 20 4 12Z"/></svg>
+        Décisions
         <span class="badge" id="nav-pending" hidden>0</span></a>
-      <a class="nav-item" href="#/settings" data-view="settings"><span class="nav-ico" aria-hidden="true">⚙</span>Configuration</a>
+      <a class="nav-item" href="#/settings" data-view="settings">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 5v2.2M12 16.8V19M5 12h2.2M16.8 12H19M7.1 7.1l1.55 1.55M15.35 15.35l1.55 1.55M7.1 16.9l1.55-1.55M15.35 8.65l1.55-1.55"/></svg>
+        Configuration</a>
       <hr>
-      <a class="nav-item" href="#/alerts" data-view="alerts"><span class="nav-ico" aria-hidden="true">△</span>Alertes
+      <a class="nav-item" href="#/alerts" data-view="alerts">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 21 19H3Z"/><path d="M12 10.3v3.4"/><circle cx="12" cy="16.4" r=".9" fill="currentColor" stroke="none"/></svg>
+        Alertes
         <span class="badge" id="nav-alerts" hidden>0</span></a>
-      <a class="nav-item" href="#/audit" data-view="audit"><span class="nav-ico" aria-hidden="true">▦</span>Audit</a>
+      <a class="nav-item" href="#/audit" data-view="audit">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="16" rx="1.5"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>
+        Audit</a>
       <hr>
-      <a class="nav-item" href="#/tools" data-view="tools"><span class="nav-ico" aria-hidden="true">◫</span>Technique</a>
-      <a class="nav-item" href="#/chat" data-view="chat"><span class="nav-ico" aria-hidden="true">▚</span>Conversation</a>
+      <a class="nav-item" href="#/tools" data-view="tools">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 12h16M12 4v16"/></svg>
+        Technique</a>
+      <a class="nav-item" href="#/chat" data-view="chat">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 5.5h15v11h-9.2L6 20v-3.5H4.5Z"/></svg>
+        Conversation</a>
     </nav>
 
     <div class="rail-foot">
