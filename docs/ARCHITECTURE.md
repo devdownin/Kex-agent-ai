@@ -310,6 +310,28 @@ sondes de conteneur tombaient. Le test `ApiSecurityUnconfiguredTest` l'a attrap�
 maintenant la forme du code qui l'empêche : le filtre authentifie, l'entry point refuse, et il n'est
 invoqué que pour une route réellement protégée.
 
+### Un échec du fournisseur du modèle ne recopie pas notre propre 401
+
+`AnthropicException` et `OpenAIException` remontaient non attrapées depuis `/chat` et
+`/chat/structured` : un `ANTHROPIC_API_KEY` ou `OPENROUTER_API_KEY` faux ou absent atteignait
+l'appelant en `401`, **le même code** que celui que rend `ApiKeyAuthenticationEntryPoint` pour un
+bearer `kex.agent.api-key` refusé. Un appelant dont le jeton kex était pourtant valide se voyait
+répondre comme si c'était lui le problème, sans corps distinguant les deux — reproduit en pointant
+l'agent vers une vraie clé Anthropic invalide : `401`, `Content-Length: 0`, rien pour dire lequel
+des deux jetons était en cause.
+
+Les deux SDK partagent la même forme : une exception racine par fournisseur
+(`AnthropicException`, `OpenAIException`), une sous-classe par code HTTP amont
+(`UnauthorizedException`, `RateLimitException`, …). `AgentController` capte les deux racines et
+répond `502` — jamais `401`, jamais `429` : ces deux codes sont déjà pris par notre propre couche
+(l'entry point d'authentification, `RateLimitFilter`), et les réutiliser pour un échec amont
+recréerait exactement l'ambiguïté corrigée ici. Même position que `StructuredOutputException` et
+`McpError` juste au-dessus : un fournisseur qui refuse est une panne amont, pas une erreur
+d'appelant.
+
+Le flux (`/chat/stream`) n'a pas ce défaut : `onErrorResume` y transforme déjà toute exception en
+`event: error` sur un flux `200`, avant même que la question ne se pose.
+
 ### Le cycle de supervision ne part que sur demande
 
 Pas de `@Scheduled`. En multi-instance, chaque réplique lancerait son propre cycle : deux analyses

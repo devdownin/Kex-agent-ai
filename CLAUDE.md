@@ -66,6 +66,14 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 - **Le refus d'authentification appartient à l'`AuthenticationEntryPoint`**, pas au filtre :
   dans le filtre, il bloque aussi les routes en `permitAll` comme `/actuator/health`.
 
+- **Une exception de fournisseur non attrapée ne doit jamais recopier notre propre 401.**
+  `AnthropicException` et `OpenAIException` remontaient non gérées depuis `AgentController` ;
+  Anthropic répond 401 à une mauvaise clé, et rien ne distinguait alors « votre bearer kex est
+  refusé » de « la clé du fournisseur est fausse ». Les deux hiérarchies d'exceptions ont une
+  racine commune par fournisseur : `@ExceptionHandler({AnthropicException.class,
+  OpenAIException.class})` vers `BAD_GATEWAY` couvre toute la famille sans connaître chaque
+  sous-classe, et ne recoupe aucun code que la sécurité ou le rate limit utilisent déjà.
+
 - **L'état de l'agent regarde aussi ce qui le rend capable d'agir.** Sans clé de modèle il est
   `DEGRADED`, jamais analysé il est `UNKNOWN` : un vert en tête d'écran affirmerait que tout va
   bien au-dessus d'un bandeau qui dit « Aucune analyse exécutée ».
