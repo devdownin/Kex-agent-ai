@@ -161,6 +161,15 @@ laisse l'application monter. Même posture que `kex.agent.api-key` — `/actuato
 et l'introspection MCP doivent rester joignables, puisque c'est là qu'on ira regarder pourquoi rien
 ne répond.
 
+Le défaut d'`OPENROUTER_MODEL` est `openai/gpt-oss-120b:free`, pas un modèle payant pris comme
+exemple : appel d'outils natif et sortie structurée avec application du schéma, vérifiés avant de
+le retenir plutôt que supposés — un tiers gratuit qui accepte `tools` sans imposer le schéma
+rendrait un cycle en échec silencieux, pas une analyse fausse mais une régression qu'on ne verrait
+pas venir. Le tiers gratuit limite en requêtes (20/min, 200/jour), pas en jetons ; un cycle qui
+creuse plusieurs topics peut à lui seul approcher le plafond par minute, puisque
+`spring.ai.tools.limits.max-total-tool-calls` autorise vingt allers-retours outil dans un seul
+échange.
+
 ### L'état de l'agent n'est pas celui du dernier cycle
 
 La pastille en tête d'écran répondait à « le dernier cycle s'est-il bien passé ? », pas à « cet
@@ -478,6 +487,44 @@ Approuvée trois heures après les faits, une action agirait sur une situation q
 demandes dépassant `approval-timeout` basculent en `FAILED` à la lecture suivante, avec leur trace
 d'audit. L'expiration est évaluée à la lecture et non par une tâche de fond : sans planificateur,
 une tâche de plus serait le seul composant à tourner tout seul.
+
+### L'image est scannée avant de partir, jamais republiée sous un tag déjà pris
+
+`publish.yml` construit l'image deux fois. La première, chargée dans le démon local (`load`) et
+jamais poussée, sert au scan Trivy ; la seconde, poussée (`push`), relit le même cache GHA et ne
+reconstruit quasiment rien. Pousser d'abord et scanner ensuite publierait une image vulnérable
+avant de savoir qu'elle l'est — l'ordre inverse coûte une construction de plus, pas cher au regard
+de ce qu'il évite.
+
+Le scan a fait son travail à la première publication réelle (`v0.2.0`) : bloqué avant que rien
+n'atteigne un registre, sur trois `CRITICAL` et huit `HIGH`, tous avec un correctif disponible.
+Deux natures de correctifs, pas une seule :
+
+- **Dans notre arbre de dépendances** — Tomcat embarqué, géré par Spring Boot via la propriété
+  `tomcat.version`. Documentée par Spring Boot pour avancer un composant géré sans attendre sa
+  version mineure suivante ; `dependency:tree` confirme que la version corrigée se résout partout
+  où Tomcat apparaît.
+- **Hors de notre arbre de dépendances** — `pebble`, le superviseur de service de l'image Ubuntu
+  de base (`eclipse-temurin:25-jre`), jamais invoqué puisque l'`ENTRYPOINT` lance `java`
+  directement en PID 1. Aucune ligne de `pom.xml` ne peut le corriger, et attendre une image amont
+  bloquerait chaque publication jusque-là : retiré dans l'étape finale du `Dockerfile`
+  (`RUN rm -f /usr/bin/pebble`) plutôt que laissé mort et vulnérable dans une image publique.
+
+`ignore-unfixed: true` ne dispense pas de ces deux-là — il ne laisse passer qu'une CVE **sans**
+correctif disponible, celle qu'aucune version de cette image ne peut corriger seule. Une CVE
+corrigible bloque, à raison : c'est ce qui vient de se passer.
+
+Le tag `v0.2.0` n'a pas été retagué vers la version corrigée : un tag Git n'est pas récupérable une
+fois poussé, et le déplacer casserait la règle que ce même workflow fait respecter à tout le
+monde — le pom refuse de publier sous un tag qui ne coïncide pas avec sa propre version. `0.2.1`
+porte le correctif sous un nom neuf.
+
+L'image part aussi vers `ghcr.io`, en miroir, dans le même appel `docker/build-push-action` — donc
+le même digest que Docker Hub, ce qui dispense de vérifier les deux séparément. Aucun secret de
+plus : le jeton d'exécution du workflow (`packages: write`, ajouté au job `publish` seulement)
+suffit. Un SBOM est attesté sur l'image poussée (`sbom: true`), interrogeable après coup par
+quiconque la tire — à la différence du SBOM que `ci.yml` dépose en artefact de build, qui ne
+voyage pas avec l'image publiée.
 
 ### La console est servie ouverte, mais n'ouvre rien
 
