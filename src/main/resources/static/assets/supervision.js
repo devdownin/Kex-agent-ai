@@ -6,7 +6,7 @@
 import {
   $, ago, api, clockTime, confirmAction, definition, dismissDrawer, drawerOpen, duration, el, empty,
   errorState, frag, loading, openDrawer, params, percent, registerDrawer, render, report, setParams,
-  sortable, stamp, stateTag, toast,
+  sortable, stamp, stateMark, stateTag, toast,
 } from './core.js';
 
 const BASE = '/api/agent/supervision';
@@ -92,6 +92,11 @@ export async function overview() {
     host.replaceChildren(kpis(data));
     $('#overview-processes').replaceChildren(processTable(data.processes, openProcess, 8, COMPACT));
     $('#overview-attention').replaceChildren(attention(data));
+    // Un panneau qui attend une décision n'a pas à ressembler à un panneau qui n'a rien à signaler.
+    const pendingCount = (data.pending || []).length;
+    const attentionPanel = $('#overview-attention').closest('.panel');
+    if (pendingCount) attentionPanel.dataset.state = 'PENDING';
+    else delete attentionPanel.dataset.state;
     $('#overview-timeline').replaceChildren(timeline(data.lastCycle));
   } catch (error) {
     host.replaceChildren(errorState(error, overview));
@@ -128,8 +133,15 @@ function kpi(label, value, detail, href, state) {
   // Chaque KPI conduit au détail qu'il annonce : un compteur sans issue oblige à chercher.
   const card = el('a', 'kpi');
   card.href = href;
-  if (state) card.dataset.state = state;
-  card.append(el('span', 'kpi-label', label), el('strong', 'kpi-value', value), el('span', 'kpi-detail', detail));
+  const valueLine = el('span', 'kpi-value-line');
+  // Même règle que les pastilles : la couleur de la bordure ne porte jamais le sens seule,
+  // le glyphe l'accompagne jusque dans le chiffre.
+  if (state) {
+    card.dataset.state = state;
+    valueLine.append(el('span', 'kpi-mark', stateMark(state)));
+  }
+  valueLine.append(el('strong', 'kpi-value', value));
+  card.append(el('span', 'kpi-label', label), valueLine, el('span', 'kpi-detail', detail));
   return card;
 }
 

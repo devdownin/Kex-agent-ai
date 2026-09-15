@@ -158,6 +158,24 @@ await check('le bandeau hors ligne apparaît puis disparaît', async () => {
   await page.waitForFunction(() => document.querySelector('#offline').hidden, null, { timeout: 3000 });
 });
 
+await check('le tableau compact de la vue d’ensemble signale qu’il défile', async () => {
+  // Défaut : la barre de défilement en survol (macOS, la plupart des Chromium) ne laissait aucune
+  // trace tant qu'on n'avait pas touché le pavé tactile — la dernière colonne semblait coupée au
+  // bord du panneau plutôt que défilable. `scrollbar-width: thin` restitue l'indice là où le
+  // navigateur l'honore ; l'ombre peinte avec le contenu (assertée ici par sa seule présence,
+  // indépendante du rendu du chrome) tient partout ailleurs, Safari compris.
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#overview-processes .scroll-x table.grid tbody tr');
+  const scroll = await page.$eval('#overview-processes .scroll-x', (node) => ({
+    overflows: node.scrollWidth > node.clientWidth,
+    scrollbarWidth: getComputedStyle(node).scrollbarWidth,
+    hasEdgeShadow: getComputedStyle(node).backgroundImage.includes('gradient'),
+  }));
+  assert.ok(scroll.overflows, 'le tableau compact déborde bien dans ce panneau étroit');
+  assert.equal(scroll.scrollbarWidth, 'thin');
+  assert.ok(scroll.hasEdgeShadow, 'un halo de bord signale le contenu caché');
+});
+
 await check('aucune erreur de script sur le parcours', () => {
   assert.deepEqual(scriptErrors, []);
 });

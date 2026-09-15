@@ -141,13 +141,10 @@ body {
 .brand { display: flex; align-items: center; gap: 10px; }
 
 .brand-mark {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 32px; height: 32px;
   border-radius: 8px;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font: 700 15px var(--mono);
+  object-fit: cover;
 }
 
 .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
@@ -198,7 +195,7 @@ body {
 }
 
 .topbar-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.crumb { font-weight: 600; }
+.crumb { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
 
 .freshness { font-size: 12px; color: var(--ink-3); }
 .freshness[data-state="stale"] { color: var(--warn); font-weight: 600; }
@@ -255,11 +252,16 @@ main:focus { outline: none; }
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 16px;
   min-width: 0;
 }
+/* Même accent que les KPI et les cartes, posé sur le panneau lui-même quand il porte une
+   attente réelle : sans lui, « Demande une décision » a le même aspect plat qu'un panneau
+   qui n'a rien à signaler, alors que l'un demande une action et l'autre non. */
+.panel[data-state="PENDING"] { border-left-color: var(--pending); }
 
 .panel-head {
   display: flex;
@@ -269,7 +271,11 @@ main:focus { outline: none; }
   flex-wrap: wrap;
   margin-bottom: 14px;
 }
-.panel-head h1, .panel-head h2 { margin: 0; font-size: 15px; }
+.panel-head h1, .panel-head h2 { margin: 0; }
+/* Un seul poids partout mettait la fiche d'un processus et le titre de l'écran qui la contient
+   sur le même plan. `h1` porte l'écran, `h2` un sous-panneau : la hiérarchie se lit avant de lire. */
+.panel-head h1 { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+.panel-head h2 { font-size: 14px; font-weight: 600; }
 .panel-actions { display: flex; align-items: center; gap: 8px; }
 
 .split { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
@@ -415,12 +421,42 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
 .kpi[data-state="ERROR"] { border-left-color: var(--danger); }
 .kpi[data-state="PENDING"] { border-left-color: var(--pending); }
 .kpi-label { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
-.kpi-value { font: 600 26px/1.1 var(--mono); }
+.kpi-value-line { display: flex; align-items: baseline; gap: 6px; }
+.kpi-value { font: 700 28px/1.1 var(--mono); letter-spacing: -.02em; }
+.kpi-mark { font-family: var(--mono); font-size: 15px; }
+.kpi[data-state="WARNING"] .kpi-mark { color: var(--warn); }
+.kpi[data-state="ERROR"] .kpi-mark { color: var(--danger); }
+.kpi[data-state="PENDING"] .kpi-mark { color: var(--pending); }
 .kpi-detail { font-size: 12px; color: var(--ink-3); }
 
 /* ── Tableaux ────────────────────────────────────────────────────────── */
 
-.scroll-x { overflow-x: auto; }
+/* Une barre de défilement en survol (macOS, la plupart des Chromium) ne laisse aucune trace tant
+   qu'on n'a pas touché le pavé tactile : dans un panneau à moitié de largeur, la dernière colonne
+   semblait simplement coupée au bord, sans aucun indice qu'il restait du contenu à droite. Une
+   barre fine mais toujours visible restitue cet indice là où le navigateur la personnalise.
+   L'ombre ci-dessous ne dépend d'aucun des deux : elle se peint avec le contenu, pas avec le
+   chrome du navigateur, donc elle reste là où ni l'un ni l'autre ne s'applique (Safari récent
+   ignore `::-webkit-scrollbar`). Le halo se déplace avec le contenu (`local`) sur le bord droit
+   du tableau, par-dessus une ombre fixée à l'écran (`scroll`) : arrivé en bout de défilement, le
+   halo recouvre l'ombre et celle-ci disparaît d'elle-même — sans JavaScript pour la piloter. */
+.scroll-x {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+  background-color: var(--surface);
+  background-repeat: no-repeat;
+  background-image:
+    linear-gradient(to left, var(--surface), transparent),
+    linear-gradient(to left, rgb(0 0 0 / 18%), transparent);
+  background-position: 100% 0, 100% 0;
+  background-size: 28px 100%, 14px 100%;
+  background-attachment: local, scroll;
+}
+.scroll-x::-webkit-scrollbar { height: 6px; }
+.scroll-x::-webkit-scrollbar-track { background: transparent; }
+.scroll-x::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
+.scroll-x::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
 
 table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.grid th {

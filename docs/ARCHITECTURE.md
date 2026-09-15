@@ -191,6 +191,13 @@ L'absence n'est retenue que lorsqu'elle est **établie** : un fournisseur dont l
 n'est pas lue ici ne dégrade rien. Dégrader sur une ignorance rendrait l'indicateur faux dans
 l'autre sens.
 
+`stateReason` ne porte plus le détail brut d'un cycle en échec. `last.failure()` est le message
+de l'exception qui a interrompu le cycle — pour un fournisseur qui refuse la clé, souvent le corps
+JSON de sa propre réponse d'erreur — et ce texte se retrouvait tel quel dans le bandeau affiché en
+tête de chaque écran, y compris ceux qui n'ont rien de technique. Le déroulé du cycle et l'audit
+portent déjà ce même message (`CycleEvent` et `record(...)` le reçoivent l'un comme l'autre) ; le
+bandeau se contente d'une phrase constante disant où le trouver.
+
 ### La console est vérifiée au navigateur, en CI
 
 La suite Java sert les fichiers de la console et vérifie que les chemins d'API qu'ils citent
@@ -201,7 +208,8 @@ ont tous été trouvés à la main — donc une fois, sans garantie de non-retou
 jeton, pastille qui ne ment pas sur un agent qui n'a rien analysé, tri numérique avec les valeurs
 absentes en bas, support d'outils non annoncé distinct d'absent, panneau qui retient le focus,
 bouton Retour qui le referme, panneau rouvert depuis son adresse, filtre qui survit au
-rechargement, bandeau hors ligne, et aucune erreur de script sur le parcours.
+rechargement, bandeau hors ligne, tableau compact qui signale qu'il défile, et aucune erreur de
+script sur le parcours.
 
 Playwright n'est pas une dépendance du projet : le job de CI l'installe hors de l'arborescence et
 son chemin arrive par `PLAYWRIGHT_MODULE`. Un `package.json` à la racine ferait vivre une seconde
@@ -569,6 +577,29 @@ Le jeton est saisi dans le navigateur et vit en `sessionStorage` : il disparaît
 l'onglet et n'est jamais écrit côté serveur. Les réponses du modèle et les contenus MCP sont
 injectés par `textContent`, jamais par `innerHTML` : ce sont des données non fiables, et un serveur
 MCP hostile pourrait sinon placer un XSS sur la même origine que l'API.
+
+### Un tableau qui défile le dit, sans compter sur le chrome du navigateur
+
+`.scroll-x` défilait déjà horizontalement — `overflow-x: auto` suffit — mais rien à l'écran ne le
+disait. macOS et la plupart des Chromium masquent la barre tant qu'on n'a pas touché le pavé
+tactile ; dans un panneau à moitié de largeur (le tableau compact de la vue d'ensemble, à côté de
+« Demande une décision »), la dernière colonne semblait donc simplement coupée au bord.
+
+Deux indices, indépendants l'un de l'autre : `scrollbar-width: thin` (et `::-webkit-scrollbar` en
+repli) pose une barre fine mais toujours visible là où le navigateur personnalise le chrome de
+défilement ; une ombre peinte avec le contenu tient partout ailleurs, y compris là où ce chrome ne
+se laisse pas personnaliser (Safari récent ignore `::-webkit-scrollbar`). Cette ombre superpose
+deux dégradés : un halo fixé à l'écran (`background-attachment: scroll`) et un « cache » qui se
+déplace avec le contenu (`local`), posé au bord droit du tableau — arrivé en bout de défilement, le
+cache glisse par-dessus le halo et l'efface, sans une ligne de JavaScript pour l'observer.
+
+### Le logo est un portrait recadré, pas l'illustration entière
+
+L'image fournie compose un robot, un pictogramme de graphe et une bulle « AI » dans un seul carré —
+lisible en illustration, plus du tout à 32 px : à cette taille, une icône ne porte qu'un seul sujet.
+`assets/logo.png` est un recadrage serré sur le visage du robot, seul élément qui reste
+reconnaissable une fois réduit, exporté une fois pour toutes en 128 px — aucun outillage d'image
+n'entre dans la chaîne de build, la même contrainte que pour le reste de la console.
 
 ## Ce que les tests couvrent
 

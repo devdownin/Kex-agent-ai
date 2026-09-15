@@ -274,7 +274,10 @@ class SupervisionServiceTest {
         service.runCycle("test");
 
         assertThat(service.status().state()).isEqualTo(AgentState.ERROR);
-        assertThat(service.status().stateReason()).contains("401 Unauthorized");
+        // Le détail brut du fournisseur (ici « 401 Unauthorized ») reste dans le déroulé du cycle
+        // et l'audit — voir CycleReport.failure() — pas dans le bandeau d'état de la console.
+        assertThat(service.status().stateReason()).doesNotContain("401 Unauthorized");
+        assertThat(service.status().stateReason()).contains("Dernier cycle en échec");
     }
 
     @Test
