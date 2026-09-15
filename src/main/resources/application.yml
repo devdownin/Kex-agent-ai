@@ -22,11 +22,44 @@ spring:
       - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
       - org.springframework.ai.model.chat.memory.repository.jdbc.autoconfigure.JdbcChatMemoryRepositoryAutoConfiguration
   ai:
+    model:
+      # Le fournisseur du modèle de conversation. Deux autoconfigurations sont sur le classpath
+      # (Anthropic et OpenAI/OpenRouter) : sans cette propriété elles s'activeraient toutes les
+      # deux — leur condition vaut matchIfMissing — et le contexte ne saurait plus quel ChatModel
+      # injecter. `anthropic` ou `openai`.
+      chat: ${KEX_AGENT_LLM_PROVIDER:anthropic}
+      # Le starter OpenAI apporte aussi des modèles d'embeddings, d'images et d'audio, activés par
+      # défaut dès qu'il est sur le classpath. Éteints ici : ils exigeraient une clé OpenAI au
+      # démarrage, et un EmbeddingModel apparu sans qu'on le demande satisferait en silence la
+      # base de connaissance, qui doit rester un choix explicite. Même piège que le starter JDBC.
+      embedding: ${KEX_AGENT_EMBEDDING_PROVIDER:none}
+      image: none
+      moderation: none
+      audio:
+        transcription: none
+        speech: none
+
     anthropic:
-      api-key: ${ANTHROPIC_API_KEY}
+      # Vide accepté : une installation qui tourne sur OpenRouter n'a pas de clé Anthropic à
+      # fournir. Le fournisseur retenu sans clé est signalé au démarrage par LlmProviderCheck.
+      api-key: ${ANTHROPIC_API_KEY:}
       chat:
         options:
           model: claude-opus-5
+          max-tokens: 4096
+          temperature: 0.2
+
+    openai:
+      # OpenRouter : une passerelle hébergée devant les modèles de la plupart des fournisseurs.
+      # Ce qu'elle coûte est dit plutôt que sous-entendu — les prompts et les résultats d'outils
+      # quittent la machine, et transitent par un tiers de plus qu'avec un appel direct.
+      api-key: ${OPENROUTER_API_KEY:}
+      base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}
+      chat:
+        options:
+          # OpenRouter nomme ses modèles fournisseur/modèle. Celui-ci sait appeler des outils, ce
+          # dont cet agent ne peut pas se passer : sans appel d'outils il ne sert plus à rien.
+          model: ${OPENROUTER_MODEL:anthropic/claude-sonnet-4.5}
           max-tokens: 4096
           temperature: 0.2
     tools:

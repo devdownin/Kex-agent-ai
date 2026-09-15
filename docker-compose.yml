@@ -1,7 +1,7 @@
 # Stack complète : un broker Kafka, Kafka SQL Explorer (image publiée) avec son serveur MCP
 # activé, et l'agent branché dessus.
 #
-#   export ANTHROPIC_API_KEY=sk-ant-...
+#   export ANTHROPIC_API_KEY=sk-ant-...        # ou KEX_AGENT_LLM_PROVIDER=openai + OPENROUTER_API_KEY
 #   export EXPLORER_MCP_AUTH_TOKEN="$(openssl rand -hex 32)"
 #   docker compose up -d
 #
@@ -95,7 +95,15 @@ services:
     depends_on:
       - explorer
     environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?requis, cle Anthropic de l-agent}
+      # Un fournisseur ou l'autre, pas les deux : `anthropic` (défaut) lit ANTHROPIC_API_KEY,
+      # `openai` bascule le client vers OpenRouter et lit OPENROUTER_API_KEY. Aucune des deux
+      # clés n'est exigée ici — compose ne sait pas dire « l'une ou l'autre », et exiger les
+      # deux obligerait à poser une clé qu'on n'utilise pas. Le fournisseur retenu sans clé est
+      # signalé au démarrage dans les logs de l'agent.
+      KEX_AGENT_LLM_PROVIDER: ${KEX_AGENT_LLM_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-anthropic/claude-sonnet-4.5}
       # Bearer exigé sur /api/** : sans lui l'agent répond 503 et ne sert personne.
       KEX_AGENT_API_KEY: ${KEX_AGENT_API_KEY:?requis, generer avec openssl rand -hex 32}
       # Le token doit être identique des deux côtés : c'est le même bearer.

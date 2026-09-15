@@ -49,6 +49,13 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   celui-ci est inconnu avant le handshake.
 - **Ne pas déclarer de bean `VectorStore` hors de `kex.agent.knowledge.enabled`** : sans modèle
   d'embeddings, le contexte ne démarre pas. Même piège que le starter JDBC ci-dessous.
+- **Deux starters de modèle sur le classpath imposent `spring.ai.model.chat`.** Chaque
+  autoconfiguration de modèle s'active en l'absence de propriété (`matchIfMissing`) : sans cette
+  ligne, Anthropic et OpenAI déclarent chacun leur `ChatModel` et le contexte échoue au démarrage.
+  Les modalités que le starter OpenAI apporte en prime — embeddings, images, modération, audio —
+  sont à `none` pour la même raison, et parce qu'un `EmbeddingModel` non demandé satisferait en
+  silence la base de connaissance.
+
 - **Ne pas ajouter le starter JDBC hors du profil `shared-memory`** : sa seule présence sur le
   classpath fait échouer le démarrage quand aucune base n'est configurée.
 - **Ne pas désactiver CSRF globalement** — CodeQL le signale, à juste titre. Il est levé sur

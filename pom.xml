@@ -72,6 +72,14 @@
       <groupId>org.springframework.ai</groupId>
       <artifactId>spring-ai-starter-model-anthropic</artifactId>
     </dependency>
+    <!-- OpenRouter parle l'API d'OpenAI : c'est le même client, une autre base d'URL. Les deux
+         autoconfigurations cohabitent sur le classpath, `spring.ai.model.chat` désigne celle qui
+         s'active — sans cette propriété elles s'activeraient toutes les deux (matchIfMissing) et
+         le contexte ne saurait plus quel ChatModel injecter. -->
+    <dependency>
+      <groupId>org.springframework.ai</groupId>
+      <artifactId>spring-ai-starter-model-openai</artifactId>
+    </dependency>
     <!-- stdio + SSE + streamable-http via JDK HttpClient -->
     <dependency>
       <groupId>org.springframework.ai</groupId>

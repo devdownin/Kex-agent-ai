@@ -9,16 +9,23 @@ hors Docker.
 
 | Variable | Rôle |
 |---|---|
-| `ANTHROPIC_API_KEY` | Clé du modèle. Sans elle l'application ne démarre pas |
+| `ANTHROPIC_API_KEY` *ou* `OPENROUTER_API_KEY` | Clé du fournisseur retenu — voir [Choisir le fournisseur de modèle](#choisir-le-fournisseur-de-modele) |
 | `KEX_AGENT_API_KEY` | Bearer exigé sur `/api/**`. Vide, l'API répond `503` |
 | `EXPLORER_MCP_AUTH_TOKEN` | Bearer du serveur MCP de Kafka SQL Explorer, **identique des deux côtés** |
 
-`docker compose` refuse de démarrer si l'une manque, plutôt que de laisser un conteneur boucler.
+`docker compose` refuse de démarrer si l'un des deux bearers manque, plutôt que de laisser un
+conteneur boucler. La clé du modèle, elle, n'est pas exigée par compose : il ne sait pas dire
+« l'une ou l'autre », et l'exiger obligerait à poser une clé inutilisée. Un fournisseur retenu
+sans clé est signalé au démarrage dans les logs, et chaque échange échoue jusqu'à ce qu'elle
+arrive.
 
 ### Optionnelles
 
 | Variable | Défaut | Rôle |
 |---|---|---|
+| `KEX_AGENT_LLM_PROVIDER` | `anthropic` | Fournisseur du modèle de conversation : `anthropic` ou `openai` (OpenRouter) |
+| `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4.5` | Modèle OpenRouter, au format `fournisseur/modèle` |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | Toute autre passerelle compatible OpenAI se règle ici |
 | `KAFKA_EXPLORER_URL` | `http://localhost:8080` | URL de l'Explorer, côté agent |
 | `KEX_AGENT_PORT` | `8081` | Port publié de l'agent (côté hôte) |
 | `EXPLORER_PORT` | `8080` | Port publié de l'Explorer |
@@ -57,9 +64,12 @@ Le filtrage par préfixe évite qu'un jeton parte vers un serveur MCP autre que 
 
 | Propriété | Valeur ici | Rôle |
 |---|---|---|
-| `spring.ai.anthropic.chat.options.model` | `claude-opus-5` | Modèle |
+| `spring.ai.model.chat` | `anthropic` | Fournisseur activé. Les autres modalités sont à `none` — voir ci-dessous |
+| `spring.ai.anthropic.chat.options.model` | `claude-opus-5` | Modèle, quand le fournisseur est `anthropic` |
 | `spring.ai.anthropic.chat.options.max-tokens` | `4096` | Plafond de sortie |
 | `spring.ai.anthropic.chat.options.temperature` | `0.2` | Basse : on veut des faits, pas du style |
+| `spring.ai.openai.base-url` | `https://openrouter.ai/api/v1` | Passerelle, quand le fournisseur est `openai` |
+| `spring.ai.openai.chat.options.model` | `anthropic/claude-sonnet-4.5` | Modèle OpenRouter |
 | `spring.ai.tools.limits.max-total-tool-calls` | `20` | Plafond d'appels d'outils par échange |
 | `spring.ai.tools.limits.on-limit-exceeded` | `return_error_response` | Le modèle conclut au lieu de lever une 500 |
 | `spring.ai.mcp.client.initialized` | `false` | Initialisation paresseuse — voir ARCHITECTURE.md |
@@ -94,19 +104,56 @@ SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/kex \
 Le profil annule la liste `spring.autoconfigure.exclude` d'`application.yml` : sans cela, le starter
 JDBC sur le classpath fait échouer le démarrage quand aucune base n'est configurée.
 
-## Changer de modèle
+<a id="choisir-le-fournisseur-de-modele"></a>
 
-Remplacer le starter dans `pom.xml` suffit ; aucun code applicatif ne référence Anthropic.
+## Choisir le fournisseur de modèle
 
-| Fournisseur | Starter | Propriétés |
-|---|---|---|
-| Anthropic | `spring-ai-starter-model-anthropic` | `spring.ai.anthropic.*` |
-| OpenAI | `spring-ai-starter-model-openai` | `spring.ai.openai.*` |
-| Ollama (local) | `spring-ai-starter-model-ollama` | `spring.ai.ollama.*` |
-| Bedrock | `spring-ai-starter-model-bedrock-converse` | `spring.ai.bedrock.*` |
+Deux starters sont livrés sur le classpath, Anthropic et OpenAI. `KEX_AGENT_LLM_PROVIDER` désigne
+celui qui s'active ; aucun code applicatif ne référence l'un ou l'autre.
 
-Un seul starter de chat à la fois : deux beans `ChatModel` rendent l'autoconfiguration du
-`ChatClient.Builder` ambiguë.
+### Anthropic en direct — le défaut
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### OpenRouter
+
+```bash
+export KEX_AGENT_LLM_PROVIDER=openai
+export OPENROUTER_API_KEY=sk-or-v1-...
+export OPENROUTER_MODEL=anthropic/claude-sonnet-4.5   # optionnel
+```
+
+OpenRouter parle l'API d'OpenAI : c'est le même client Spring AI, une autre base d'URL. Trois
+choses à savoir avant de basculer :
+
+- **C'est une passerelle hébergée.** Les prompts, l'historique de conversation et les résultats
+  d'outils — donc le contenu des messages Kafka que l'agent lit — quittent la machine et
+  transitent par un tiers de plus qu'avec un appel direct au fournisseur.
+- **L'appel d'outils est obligatoire ici.** Sans lui l'agent ne peut rien interroger, et tous les
+  modèles d'OpenRouter n'en sont pas capables. Le catalogue le signale par modèle.
+- **La sortie structurée varie selon le modèle.** Le cycle de supervision demande du JSON conforme
+  à un schéma ; un modèle qui ne le respecte pas rend un cycle en échec, pas une analyse fausse.
+
+`OPENROUTER_BASE_URL` pointe ailleurs pour toute autre passerelle compatible OpenAI — un LiteLLM
+ou un vLLM interne, par exemple.
+
+### Un autre fournisseur
+
+| Fournisseur | Starter | `spring.ai.model.chat` | Propriétés |
+|---|---|---|---|
+| Anthropic | `spring-ai-starter-model-anthropic` | `anthropic` | `spring.ai.anthropic.*` |
+| OpenAI / OpenRouter | `spring-ai-starter-model-openai` | `openai` | `spring.ai.openai.*` |
+| Ollama (local) | `spring-ai-starter-model-ollama` | `ollama` | `spring.ai.ollama.*` |
+| Bedrock | `spring-ai-starter-model-bedrock-converse` | `bedrock-converse` | `spring.ai.bedrock.*` |
+
+Ajouter un starter ne suffit pas : chaque autoconfiguration de modèle s'active en l'absence de
+propriété (`matchIfMissing`). Sans `spring.ai.model.chat` pour trancher, deux beans `ChatModel`
+coexistent et le contexte échoue au démarrage. C'est aussi pourquoi `application.yml` met à `none`
+les modalités que le starter OpenAI apporte sans qu'on les demande — embeddings, images,
+modération, audio : elles réclameraient une clé, et un `EmbeddingModel` surgi de nulle part
+satisferait en silence la base de connaissance, qui doit rester un choix explicite.
 
 <a id="running-from-source"></a>
 <a id="lancer-depuis-les-sources"></a>
@@ -116,7 +163,7 @@ Un seul starter de chat à la fois : deux beans `ChatModel` rendent l'autoconfig
 JDK 25 requis.
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+export ANTHROPIC_API_KEY=sk-ant-...   # ou KEX_AGENT_LLM_PROVIDER=openai + OPENROUTER_API_KEY
 export KEX_AGENT_API_KEY="$(openssl rand -hex 32)"
 
 # Sans serveur MCP : l'agent démarre, le catalogue est simplement vide

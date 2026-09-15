@@ -129,6 +129,31 @@ Sans plafond, un modèle qui s'entête sur un outil tourne jusqu'au timeout HTTP
 `RETURN_ERROR_RESPONSE` plutôt que `THROW` : le modèle reçoit l'erreur et conclut, là où l'exception
 rendrait une 500 sans réponse à l'appelant.
 
+### Deux fournisseurs de modèle, un seul activé
+
+Le classpath porte les starters Anthropic et OpenAI ; `spring.ai.model.chat` — réglé par
+`KEX_AGENT_LLM_PROVIDER` — désigne celui qui s'active. OpenRouter parle l'API d'OpenAI, c'est donc
+le client OpenAI pointé sur `https://openrouter.ai/api/v1`, sans une ligne de code applicatif :
+`AgentConfig` reçoit un `ChatClient.Builder` et ne sait pas d'où il vient.
+
+Cette propriété n'est pas cosmétique. Chaque autoconfiguration de modèle de Spring AI s'active en
+l'absence de propriété (`matchIfMissing`) : sans elle, les deux déclarent leur `ChatModel` et le
+contexte échoue au démarrage sur un bean ambigu. Même raison pour les modalités que le starter
+OpenAI apporte en prime — embeddings, images, modération, audio — toutes à `none` : elles
+exigeraient une clé, et un `EmbeddingModel` apparu sans qu'on le demande satisferait en silence la
+base de connaissance, qui doit rester un choix explicite. `LlmProviderTest` verrouille les deux
+comportements plutôt que la documentation seule.
+
+Ce que la bascule coûte est dit dans [CONFIGURATION.md](CONFIGURATION.md#choisir-le-fournisseur-de-modele) :
+une passerelle hébergée voit passer les prompts et les résultats d'outils, l'appel d'outils — dont
+cet agent ne peut pas se passer — dépend du modèle choisi, et la sortie structurée du cycle de
+supervision aussi.
+
+Le fournisseur retenu sans clé ne fait pas échouer le démarrage : `LlmProviderCheck` le signale et
+laisse l'application monter. Même posture que `kex.agent.api-key` — `/actuator/health`, la console
+et l'introspection MCP doivent rester joignables, puisque c'est là qu'on ira regarder pourquoi rien
+ne répond.
+
 ### Mémoire : en mémoire par défaut, partagée sur demande
 
 `MessageWindowChatMemory` sur `InMemoryChatMemoryRepository`. Deux instances derrière un load

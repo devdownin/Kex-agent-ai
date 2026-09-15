@@ -40,6 +40,18 @@ export KEX_AGENT_API_KEY="$(openssl rand -hex 32)"
 docker compose up -d
 ```
 
+No Anthropic key? Point it at [OpenRouter](https://openrouter.ai) instead — same command, two
+variables swapped:
+
+```bash
+export KEX_AGENT_LLM_PROVIDER=openai
+export OPENROUTER_API_KEY=sk-or-v1-...
+export OPENROUTER_MODEL=anthropic/claude-sonnet-4.5   # any tool-calling model on the gateway
+```
+
+It is a hosted gateway, so prompts and tool results — including the Kafka records the agent reads —
+travel through a third party. [The trade-offs, in full](docs/CONFIGURATION.md#choisir-le-fournisseur-de-modele).
+
 Three containers: a Kafka 4.3 broker (KRaft), Kafka SQL Explorer with its MCP server switched on,
 and this agent wired to it. Explorer lands on **http://localhost:8080**, the agent on
 **http://localhost:8081**.
@@ -271,7 +283,7 @@ the agent discovers the stub, its tool, and calls it through the network with th
 | Java | 25 |
 | Spring Boot | 4.1.1 |
 | Spring AI | 2.0.1 |
-| Model | Anthropic (swap the starter for OpenAI, Ollama, Bedrock…) |
+| Model | Anthropic, or any OpenRouter model — one variable apart |
 | MCP | `spring-ai-starter-mcp-client` — stdio, SSE, streamable-HTTP |
 
 ## 📖 Give it what your team knows
