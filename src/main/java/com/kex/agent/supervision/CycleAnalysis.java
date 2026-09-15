@@ -36,11 +36,30 @@ final class CycleAnalysis {
                 "properties", Map.of(
                         "processes", array(Map.of(
                                 "type", "object",
-                                "required", List.of("processId", "state"),
+                                "required", List.of("processId", "state", "coverage"),
                                 "properties", ordered(
                                         "processId", field("string", "Identifiant exact fourni dans la demande"),
                                         "state", enumField(List.of("OK", "WARNING", "ERROR", "UNKNOWN"),
                                                 "UNKNOWN si les outils n'ont pas permis de conclure"),
+                                        "coverage", Map.of(
+                                                "type", "object",
+                                                "description", "Ce que les outils ont réellement lu pour ce "
+                                                        + "processus. Recopie leur enveloppe coverage ; ne l'invente pas.",
+                                                "required", List.of("complete"),
+                                                "properties", ordered(
+                                                        "complete", field("boolean",
+                                                                "true seulement si stopReason vaut EXHAUSTED sur "
+                                                                        + "tous les relevés. Dans le doute, false."),
+                                                        "stopReason", enumField(
+                                                                List.of("EXHAUSTED", "TIME_BUDGET", "TOPIC_LIMIT",
+                                                                        "RECORD_LIMIT", "CANCELLED", "PARTIAL_FAILURE",
+                                                                        "NOT_REPORTED"),
+                                                                "Repris tel quel de l'outil ; NOT_REPORTED si aucun "
+                                                                        + "outil n'a rendu d'enveloppe"),
+                                                        "notReached", array(field("string",
+                                                                "Nom exact de ce qui n'a pas été lu, jamais un compte")),
+                                                        "detail", field("string",
+                                                                "Ce qui a manqué, en une phrase"))),
                                         "lastRun", field("string", "Dernière exécution observée, format ISO-8601"),
                                         "durationMillis", field("integer", "Durée de la dernière exécution"),
                                         "delayMillis", field("integer", "Retard observé par rapport au rythme attendu"),
@@ -104,9 +123,10 @@ final class CycleAnalysis {
             if (process == null) {
                 continue;
             }
+            Coverage coverage = coverage(row);
             seen.put(id, new ProcessSnapshot(id, process.name(),
-                    state(string(row, "state")), instant(string(row, "lastRun")),
-                    number(row, "durationMillis"), number(row, "delayMillis"), string(row, "note")));
+                    concluded(state(string(row, "state")), coverage), instant(string(row, "lastRun")),
+                    number(row, "durationMillis"), number(row, "delayMillis"), string(row, "note"), coverage));
         }
 
         // Un processus déclaré mais absent de la réponse reste affiché en UNKNOWN : le faire
@@ -114,7 +134,8 @@ final class CycleAnalysis {
         List<ProcessSnapshot> result = new ArrayList<>(known.size());
         for (MonitoredProcess process : known) {
             result.add(seen.getOrDefault(process.id(), new ProcessSnapshot(process.id(), process.name(),
-                    ProcessState.UNKNOWN, null, null, null, "Aucune donnée rendue par l'analyse")));
+                    ProcessState.UNKNOWN, null, null, null, "Aucune donnée rendue par l'analyse",
+                    Coverage.notReported())));
         }
         return List.copyOf(result);
     }
@@ -178,6 +199,51 @@ final class CycleAnalysis {
         return row.get("confidence") instanceof Number value
                 ? Math.clamp(value.doubleValue(), 0.0, 1.0)
                 : 0.0;
+    }
+
+    /**
+     * Un relevé partiel peut prouver une présence, jamais une absence. Un {@code OK} rendu sur une
+     * passe explicitement incomplète redevient donc {@code UNKNOWN} : l'anomalie était peut-être
+     * précisément dans ce qui n'a pas été lu. Un {@code WARNING} ou un {@code ERROR}, eux, tiennent
+     * — ce qui a été vu a bien été vu.
+     *
+     * <p>Une couverture simplement non remontée ne dégrade rien : la plupart des serveurs MCP ne
+     * portent pas d'enveloppe, et tout basculer en {@code UNKNOWN} rendrait le tableau de bord
+     * inutilisable partout ailleurs que devant Kafka SQL Explorer.
+     */
+    private static ProcessState concluded(ProcessState state, Coverage coverage) {
+        return state == ProcessState.OK && coverage.knownIncomplete() ? ProcessState.UNKNOWN : state;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Coverage coverage(Map<String, Object> row) {
+        if (!(row.get("coverage") instanceof Map<?, ?> raw)) {
+            return Coverage.notReported();
+        }
+        Map<String, Object> envelope = (Map<String, Object>) raw;
+        StopReason stop = stopReason(string(envelope, "stopReason"));
+        // Une complétude affirmée sans EXHAUSTED n'est pas une complétude : le drapeau est une
+        // opinion du modèle, le motif d'arrêt est ce que l'outil a réellement rendu.
+        boolean complete = envelope.get("complete") instanceof Boolean flag && flag
+                && stop != StopReason.NOT_REPORTED
+                && stop == StopReason.EXHAUSTED;
+        return new Coverage(complete, stop, texts(envelope), string(envelope, "detail"));
+    }
+
+    private static List<String> texts(Map<String, Object> envelope) {
+        if (!(envelope.get("notReached") instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream().filter(String.class::isInstance).map(String.class::cast).toList();
+    }
+
+    private static StopReason stopReason(String value) {
+        try {
+            return value == null ? StopReason.NOT_REPORTED : StopReason.valueOf(value);
+        }
+        catch (IllegalArgumentException ex) {
+            return StopReason.NOT_REPORTED;
+        }
     }
 
     private static ProcessState state(String value) {

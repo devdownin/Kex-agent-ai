@@ -93,6 +93,9 @@ A few things it deliberately does:
   setting is there to carry, and nobody could read a policy without checking every line.
 - **Confidence never travels alone.** It is always shown next to the observations it rests on,
   because a percentage produced by a model is not a measured probability.
+- **A partial read proves presence, never absence.** MCP tools that carry a `coverage` envelope
+  say what they did *not* read; an `OK` returned on an explicitly incomplete pass becomes `UNKNOWN`,
+  while a `WARNING` or `ERROR` stands — what was seen was seen.
 - **The same symptom twice is one alert, not two.** Alerts are deduplicated across cycles and carry
   how often they recurred; one the latest cycle no longer sees has stopped being true and leaves.
 - **The agent measures itself, without inventing figures.** Its relevance rate counts only the

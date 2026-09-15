@@ -84,7 +84,7 @@ public class SupervisionService {
                 Map.copyOf(properties.confidenceThresholds()), properties.thresholds()));
         this.snapshots = properties.processes().stream()
                 .map(process -> new ProcessSnapshot(process.id(), process.name(), ProcessState.UNKNOWN,
-                        null, null, null, "Aucune analyse exécutée"))
+                        null, null, null, "Aucune analyse exécutée", Coverage.notReported()))
                 .toList();
     }
 
@@ -397,6 +397,21 @@ public class SupervisionService {
                 Tu supervises des processus d'intégration. Relève leur état en interrogeant les \
                 outils dont tu disposes — n'invente aucune valeur : un relevé impossible se rend \
                 avec l'état UNKNOWN.
+
+                Avant de conclure quoi que ce soit, lis ce que l'outil dit avoir lu :
+
+                - Beaucoup d'outils rendent une enveloppe `coverage`. Un résultat vide dont le \
+                  `stopReason` n'est pas EXHAUSTED signifie « absent de ce que j'ai regardé », pas \
+                  « n'existe pas ». Ne conclus jamais à l'absence d'anomalie sur une passe \
+                  incomplète : rends l'état UNKNOWN et recopie la couverture.
+                - `topicsNotReached` est nommé, pas compté. Si ce qui concerne le processus s'y \
+                  trouve, le relevé est incomplet, quel que soit le reste.
+                - Une valeur marquée non mesurée (`measured: false`) n'est pas zéro. Zéro affirme \
+                  « rattrapé » ou « aucun échec » ; une mesure absente n'affirme rien.
+                - Quand un outil rend un verdict (CAUGHT_UP, BEHIND, STALLED...), suis-le plutôt \
+                  que de réinterpréter les nombres toi-même.
+                - Si un `resumeToken` est fourni et que le budget le permet, poursuis le relevé \
+                  avant de conclure.
 
                 Processus à relever :
                 """);

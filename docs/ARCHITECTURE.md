@@ -278,6 +278,53 @@ Par la même logique, un processus déclaré mais absent de la réponse reste af
 lieu de disparaître : le faire sortir du tableau le ferait passer pour surveillé alors qu'il ne
 l'est pas. `CycleAnalysisTest` fixe chacun de ces cas.
 
+### Un relevé partiel prouve une présence, jamais une absence
+
+Les outils MCP de Kafka SQL Explorer portent une enveloppe `coverage` : ce qui a été lu, ce qui ne
+l'a pas été — **nommé, pas compté** — et pourquoi le relevé s'est arrêté. Elle existe pour une
+raison précise, que sa propre spécification place en tête de ses risques : un agent qui reçoit une
+liste vide conclut « ça n'existe pas » là où la phrase vraie est « ce n'était pas dans ce que j'ai
+regardé ».
+
+Notre cycle l'ignorait. Le prompt interdisait d'inventer une valeur, mais rien ne disait au modèle
+de lire la couverture : un `kex_trace_key` coupé sur `TIME_BUDGET` pouvait donc ressortir en `OK`,
+et un cycle vert masquer une panne restée dans la part non lue.
+
+La règle est maintenant explicite des deux côtés. Le prompt exige de lire `stopReason` avant de
+conclure, de suivre les verdicts des outils plutôt que de réinterpréter les nombres, de ne jamais
+lire une valeur non mesurée comme un zéro, et de poursuivre un `resumeToken` quand le budget le
+permet. Le schéma fait de `coverage` un champ **exigé** de chaque relevé.
+
+Côté lecture, `CycleAnalysis.concluded` applique l'asymétrie qui compte :
+
+- un `OK` rendu sur une passe **explicitement** incomplète redevient `UNKNOWN` — l'anomalie était
+  peut-être précisément dans ce qui n'a pas été lu ;
+- un `WARNING` ou un `ERROR` tiennent : ce qui a été vu a bien été vu ;
+- une couverture simplement **non remontée** (`NOT_REPORTED`) ne dégrade rien. La plupart des
+  serveurs MCP ne portent pas d'enveloppe, et tout basculer en `UNKNOWN` rendrait le tableau de
+  bord inutilisable partout ailleurs que devant Kafka SQL Explorer. Ni complet, ni déclaré
+  incomplet : l'écran le dit au lieu de trancher.
+
+Un `complete: true` sans `stopReason: EXHAUSTED` n'est pas retenu : le drapeau est une opinion du
+modèle, le motif d'arrêt est ce que l'outil a réellement rendu.
+
+Comme un relevé partiel donne `UNKNOWN`, il fait basculer l'agent en `DEGRADED` par le chemin qui
+existait déjà — un processus dont on ne sait rien ne ressemble pas à un processus sain.
+
+### Ce que le serveur MCP de Kafka SQL Explorer expose réellement
+
+Vérifié dans son dépôt, pas dans sa spécification : quinze outils, **tous en lecture seule**
+(`kex_list_topics`, `kex_describe_topic`, `kex_preview_messages`, `kex_infer_schema`,
+`kex_sql_query`, `kex_list_tables`, `kex_trace_key`, `kex_resume_trace`, `kex_compare_traces`,
+`kex_deduce_data_model`, `kex_build_join`, `kex_run_audit`, `kex_get_audit`, `kex_consumer_lag`,
+`kex_suggest_kpis`). `MutatingMcpTools` est une interface sans implémentation, `readonly` vaut
+`true` en dur, et les mutations d'administration sont hors de son périmètre déclaré.
+
+Conséquence pour nos capacités : aucune n'a de contrepartie sur ce serveur. Devant lui, l'agent
+observe et recommande — il n'agit pas. Ce n'est pas un cas dégradé, c'est l'état nominal, et le
+chemin « aucun outil MCP lié à la capacité » le rend déjà explicite plutôt que de laisser croire à
+une exécution.
+
 ### Une alerte est un symptôme dédupliqué, pas un relevé
 
 Deux cycles qui voient le même retard sur le même processus signalent un incident, pas deux. Les
@@ -370,5 +417,5 @@ MCP hostile pourrait sinon placer un XSS sur la même origine que l'API.
 | `ConsoleTest` | La console est servie sans jeton, n'ouvre ni `/api/**` ni le `POST`, et appelle les routes qui existent |
 | `SupervisionCycleIntegrationTest` | Le cycle jusqu'à un appel d'outil MCP réel : contexte Spring complet, transport streamable-HTTP, bearer, audit. Seul le modèle est simulé |
 | `SupervisionServiceTest` | Autonomie, seuil de confiance, expiration, pause, cycle en échec, péremption des données |
-| `CycleAnalysisTest` | Ce qui arrive quand le modèle rend autre chose que le schéma demandé |
+| `CycleAnalysisTest` | Ce qui arrive quand le modèle rend autre chose que le schéma demandé, et l'asymétrie de la couverture : un `OK` partiel devient `UNKNOWN`, une erreur partielle reste une erreur |
 | `SupervisionControllerTest` | Contrat HTTP du Control Center, dont 409 sur conflit d'état et 404 sur décision inconnue |

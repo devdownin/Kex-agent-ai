@@ -24,6 +24,15 @@ const AUTONOMY = {
   FORBIDDEN: 'Interdit',
 };
 
+const STOP_REASONS = {
+  TIME_BUDGET: 'budget de temps épuisé',
+  TOPIC_LIMIT: 'plafond de topics atteint',
+  RECORD_LIMIT: 'plafond d’enregistrements atteint',
+  CANCELLED: 'relevé annulé',
+  PARTIAL_FAILURE: 'une source a échoué',
+  NOT_REPORTED: 'aucune enveloppe de couverture rendue',
+};
+
 const DECISION_LABELS = {
   PENDING_APPROVAL: 'Validation requise',
   EXECUTED: 'Exécutée',
@@ -168,8 +177,8 @@ function filtered(rows) {
 }
 
 /** Colonnes de la vue d'ensemble : l'essentiel d'abord, le relevé technique au second niveau. */
-const COMPACT = ['Processus', 'État', 'Dernière exécution', 'Retard'];
-const FULL = ['Processus', 'État', 'Dernière exécution', 'Durée', 'Retard', 'Relevé'];
+const COMPACT = ['Processus', 'État', 'Dernière exécution', 'Retard', 'Couverture'];
+const FULL = ['Processus', 'État', 'Dernière exécution', 'Durée', 'Retard', 'Couverture', 'Relevé'];
 
 function processTable(rows, onSelect, limit, columns = FULL) {
   if (!rows || !rows.length) {
@@ -193,6 +202,11 @@ function processTable(rows, onSelect, limit, columns = FULL) {
     'Dernière exécution': (row) => el('td', null, clockTime(row.lastRun)),
     Durée: (row) => el('td', null, duration(row.durationMillis)),
     Retard: (row) => el('td', row.delayMillis ? 'warn' : null, duration(row.delayMillis)),
+    Couverture: (row) => {
+      const cell = el('td');
+      cell.append(coverageTag(row.coverage));
+      return cell;
+    },
     Relevé: (row) => el('td', 'muted', row.note || '—'),
   };
 
@@ -217,6 +231,31 @@ function processTable(rows, onSelect, limit, columns = FULL) {
   return scroll;
 }
 
+/**
+ * Un relevé partiel se voit dans le tableau, pas seulement dans le détail : c'est là que naissent
+ * les conclusions fausses, et une case vide ne les signale pas.
+ */
+function coverageTag(coverage) {
+  if (!coverage) return el('span', 'muted', '—');
+  if (coverage.complete) return stateTag('OK', 'Complète');
+  if (coverage.stopReason === 'NOT_REPORTED') {
+    const tag = stateTag('UNKNOWN', 'Non rendue');
+    tag.title = 'Aucun outil n’a rendu d’enveloppe de couverture : ni complète, ni déclarée incomplète.';
+    return tag;
+  }
+  const tag = stateTag('WARNING', 'Partielle');
+  tag.title = coverageReason(coverage);
+  return tag;
+}
+
+function coverageReason(coverage) {
+  const reason = STOP_REASONS[coverage.stopReason] || coverage.stopReason;
+  const missed = coverage.notReached?.length
+    ? ` — non lu : ${coverage.notReached.join(', ')}`
+    : '';
+  return `${reason}${coverage.detail ? ` (${coverage.detail})` : ''}${missed}`;
+}
+
 function openProcess(row) {
   const data = current();
   const alerts = (data?.alerts || []).filter((alert) => alert.processId === row.processId);
@@ -226,8 +265,15 @@ function openProcess(row) {
     definition('Durée', el('span', null, duration(row.durationMillis))),
     definition('Retard', el('span', null, duration(row.delayMillis))),
     definition('Relevé', el('span', null, row.note || '—')),
+    definition('Couverture', coverageTag(row.coverage)),
   );
   const extra = el('div');
+  if (row.coverage && !row.coverage.complete && row.coverage.stopReason !== 'NOT_REPORTED') {
+    const banner = el('p', 'banner',
+      `Relevé partiel : ${coverageReason(row.coverage)}. Une passe incomplète peut prouver une `
+      + 'présence, jamais une absence — l’état est donc inconnu, pas sain.');
+    extra.append(banner);
+  }
   if (alerts.length) {
     extra.append(el('h3', 'drawer-sub', 'Alertes actives'));
     alerts.forEach((alert) => extra.append(alertCard(alert)));

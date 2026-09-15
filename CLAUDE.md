@@ -58,6 +58,13 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 - **Un état illisible vaut `UNKNOWN`, jamais `OK`.** Une donnée manquante et une donnée saine se
   ressemblent dans un tableau de bord, et les confondre fait rater une panne.
 
+- **Un relevé partiel prouve une présence, jamais une absence.** Un `OK` rendu sur une passe
+  incomplète redevient `UNKNOWN` ; un `ERROR` tient. Une couverture non remontée ne dégrade rien —
+  la plupart des serveurs MCP n'en portent pas.
+
+- **Le serveur MCP de Kafka SQL Explorer est en lecture seule.** Quinze outils, aucun mutant :
+  devant lui l'agent observe et recommande, il n'agit pas.
+
 - **Le mode d'exécution ne peut que restreindre l'autonomie d'une capacité.** L'élargir depuis le
   mode ouvrirait d'un coup des actions délibérément mises sous supervision.
 

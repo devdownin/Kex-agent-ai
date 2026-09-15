@@ -95,6 +95,9 @@ Quelques partis pris explicites :
   et plus personne ne pourrait lire une politique sans vérifier chaque ligne.
 - **La confiance ne s'affiche jamais seule.** Elle est toujours accompagnée des observations qui la
   fondent, parce qu'un pourcentage rendu par un modèle n'est pas une probabilité mesurée.
+- **Un relevé partiel prouve une présence, jamais une absence.** Les outils MCP qui portent une
+  enveloppe `coverage` disent ce qu'ils n'ont *pas* lu ; un `OK` rendu sur une passe explicitement
+  incomplète devient `UNKNOWN`, là où un `WARNING` ou un `ERROR` tient — ce qui a été vu a été vu.
 - **Le même symptôme deux fois est une alerte, pas deux.** Les alertes sont dédupliquées d'un cycle
   à l'autre et portent leur récurrence ; celle que le dernier cycle ne revoit plus a cessé d'être
   vraie et sort de la liste.

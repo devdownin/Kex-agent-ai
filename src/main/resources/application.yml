@@ -112,9 +112,12 @@ kex:
       confidence-thresholds: {}
         # RESTART_CONSUMER: 0.95
       # Sans outil lié, une capacité reste recommandable mais inexécutable — et le dit.
+      # Le serveur MCP de Kafka SQL Explorer n'expose que des outils de lecture : aucune capacité
+      # n'y a de contrepartie, et devant lui l'agent observe sans agir. Lier une action suppose un
+      # autre serveur MCP (ordonnanceur, runbook, ITSM).
       actions: {}
         # RESTART_CONSUMER:
-        #   connection: kafka-explorer
+        #   connection: mon-ordonnanceur
         #   tool: restart_consumer_group
       # Historique en mémoire du processus, donc mono-instance. Voir docs/ARCHITECTURE.md.
       history-size: 200

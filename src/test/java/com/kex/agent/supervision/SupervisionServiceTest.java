@@ -15,6 +15,7 @@ import com.kex.agent.mcp.McpToolCatalog;
 import com.kex.agent.mcp.McpToolResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -271,6 +272,62 @@ class SupervisionServiceTest {
 
         assertThat(service.status().state()).isEqualTo(AgentState.DEGRADED);
         assertThat(service.status().staleSince()).isNotNull();
+    }
+
+    @Test
+    void un_releve_partiel_degrade_l_agent_au_lieu_de_le_laisser_vert() {
+        // Bout en bout : un OK rendu sur une passe incomplète ne doit pas produire un cycle vert.
+        // Sans cela, l'anomalie restée dans ce qui n'a pas été lu passe inaperçue.
+        analysisReturns(Map.of("processes", List.of(Map.of(
+                "processId", "order-integration", "state", "OK",
+                "coverage", Map.of("complete", false, "stopReason", "TIME_BUDGET",
+                        "notReached", List.of("demo.orders.3.enriched")))),
+                "anomalies", List.of()));
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        service.runCycle("test");
+
+        assertThat(service.snapshots()).singleElement().satisfies(snapshot -> {
+            assertThat(snapshot.state()).isEqualTo(ProcessState.UNKNOWN);
+            assertThat(snapshot.coverage().notReached()).containsExactly("demo.orders.3.enriched");
+        });
+        assertThat(service.overview().processesOk()).isZero();
+        assertThat(service.overview().processesUnknown()).isEqualTo(1);
+        // L'état de l'agent le dit aussi : on ne sait pas, donc on n'est pas opérationnel.
+        assertThat(service.status().state()).isEqualTo(AgentState.DEGRADED);
+    }
+
+    @Test
+    void une_passe_complete_laisse_l_agent_operationnel() {
+        analysisReturns(Map.of("processes", List.of(Map.of(
+                "processId", "order-integration", "state", "OK",
+                "coverage", Map.of("complete", true, "stopReason", "EXHAUSTED"))),
+                "anomalies", List.of()));
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        service.runCycle("test");
+
+        assertThat(service.status().state()).isEqualTo(AgentState.OPERATIONAL);
+        assertThat(service.overview().processesOk()).isEqualTo(1);
+    }
+
+    @Test
+    void le_prompt_dit_au_modele_de_lire_la_couverture() {
+        // La règle ne tient que si le modèle sait qu'il doit rendre l'enveloppe : sans cette
+        // consigne, il n'y a rien à interpréter en aval et la correction est sans effet.
+        analysisReturns(Map.of("processes", List.of(), "anomalies", List.of()));
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        service.runCycle("test");
+
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        verify(agentService).askStructured(anyString(), prompt.capture(), any());
+        assertThat(prompt.getValue())
+                .contains("coverage")
+                .contains("EXHAUSTED")
+                .contains("topicsNotReached")
+                .contains("measured")
+                .contains("resumeToken");
     }
 
     @Test
