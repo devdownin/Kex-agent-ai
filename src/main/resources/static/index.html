@@ -1,0 +1,161 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 Kex Agent AI Contributors -->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kex Agent — Control Center</title>
+  <meta name="description" content="Console d'exploitation de l'agent Kex : conversation, serveurs MCP, base de connaissance, santé.">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/console.css">
+</head>
+<body>
+<a class="skip" href="#main">Aller au contenu</a>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">K</span>
+      <span class="brand-text">
+        <strong>Kex Agent</strong>
+        <small>Control Center</small>
+      </span>
+    </div>
+
+    <nav aria-label="Sections">
+      <a class="nav-item" href="#/chat" data-view="chat"><span class="nav-ico" aria-hidden="true">▚</span>Conversation</a>
+      <a class="nav-item" href="#/mcp" data-view="mcp"><span class="nav-ico" aria-hidden="true">◫</span>Serveurs MCP</a>
+      <a class="nav-item" href="#/knowledge" data-view="knowledge"><span class="nav-ico" aria-hidden="true">◇</span>Connaissance</a>
+      <a class="nav-item" href="#/health" data-view="health"><span class="nav-ico" aria-hidden="true">◈</span>Santé</a>
+    </nav>
+
+    <div class="rail-foot">
+      <button type="button" class="ghost" id="theme-toggle" aria-pressed="false">Thème</button>
+      <a class="ghost" href="swagger-ui.html" target="_blank" rel="noopener">API</a>
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <div class="crumb" id="crumb">Conversation</div>
+    <div class="topbar-right">
+      <span class="pill" id="health-pill" data-state="unknown">
+        <span class="dot" aria-hidden="true"></span><span id="health-label">état inconnu</span>
+      </span>
+      <button type="button" class="ghost" id="open-credentials">
+        <span id="credential-label">Jeton absent</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+
+    <!-- ══ Conversation ══ -->
+    <section class="view" id="view-chat" hidden>
+      <div class="chat-layout">
+        <div class="chat-main panel">
+          <div class="panel-head">
+            <h1>Conversation</h1>
+            <div class="panel-actions">
+              <code class="conv-id" id="conversation-id" title="Identifiant de conversation">—</code>
+              <button type="button" class="ghost danger" id="clear-conversation" disabled>Purger</button>
+            </div>
+          </div>
+
+          <ol class="transcript" id="transcript" aria-live="polite" aria-label="Transcription"></ol>
+
+          <form class="composer" id="composer">
+            <label class="sr-only" for="prompt">Message</label>
+            <textarea id="prompt" rows="1" placeholder="Interroger l'agent… (Entrée pour envoyer, Maj+Entrée pour un saut de ligne)" required></textarea>
+            <div class="composer-side">
+              <label class="switch">
+                <input type="checkbox" id="stream-mode" checked>
+                <span>Flux</span>
+              </label>
+              <button type="submit" class="primary" id="send">Envoyer</button>
+              <button type="button" class="ghost danger" id="abort" hidden>Arrêter</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="chat-aside panel">
+          <div class="panel-head"><h2>Outils exécutés</h2></div>
+          <ul class="tool-log" id="tool-log"></ul>
+          <p class="empty" id="tool-log-empty">Les appels d'outils MCP du dernier échange apparaissent ici.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ Serveurs MCP ══ -->
+    <section class="view" id="view-mcp" hidden>
+      <div class="panel">
+        <div class="panel-head">
+          <h1>Serveurs MCP</h1>
+          <button type="button" class="ghost" id="refresh-servers">Rafraîchir</button>
+        </div>
+        <div class="servers" id="servers"></div>
+      </div>
+    </section>
+
+    <!-- ══ Connaissance ══ -->
+    <section class="view" id="view-knowledge" hidden>
+      <div class="knowledge-layout">
+        <div class="panel">
+          <div class="panel-head"><h1>Rechercher</h1></div>
+          <form class="stack" id="knowledge-search">
+            <label for="kb-query">Requête</label>
+            <input id="kb-query" type="search" placeholder="ce que le modèle verra avant de répondre" required>
+            <label for="kb-topk">top-k</label>
+            <input id="kb-topk" type="number" min="1" max="50" placeholder="défaut de l'agent">
+            <button type="submit" class="primary">Chercher</button>
+          </form>
+          <ul class="matches" id="kb-matches"></ul>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Ingérer</h2></div>
+          <form class="stack" id="knowledge-add">
+            <label for="kb-text">Texte</label>
+            <textarea id="kb-text" rows="6" placeholder="Contenu du document" required></textarea>
+            <label for="kb-metadata">Métadonnées (JSON)</label>
+            <textarea id="kb-metadata" rows="3" spellcheck="false" placeholder='{"source": "runbook"}'></textarea>
+            <button type="submit" class="primary">Ajouter</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ Santé ══ -->
+    <section class="view" id="view-health" hidden>
+      <div class="panel">
+        <div class="panel-head">
+          <h1>Santé &amp; métriques</h1>
+          <button type="button" class="ghost" id="refresh-health">Rafraîchir</button>
+        </div>
+        <div class="tiles" id="metric-tiles"></div>
+        <h2 class="sub">Détail actuator</h2>
+        <pre class="dump" id="health-dump">—</pre>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Jeton : jamais persisté sur disque, voir console.js -->
+<dialog id="credentials">
+  <form method="dialog" class="stack" id="credentials-form">
+    <h2>Jeton d'API</h2>
+    <p class="hint">Le bearer <code>kex.agent.api-key</code>. Conservé en <code>sessionStorage</code> : il disparaît à la fermeture de l'onglet et n'est jamais envoyé ailleurs qu'à cette instance.</p>
+    <label for="api-key">Bearer</label>
+    <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="…">
+    <div class="row-end">
+      <button type="button" class="ghost danger" id="forget-key">Oublier</button>
+      <button type="submit" class="primary" value="save">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toasts" id="toasts" aria-live="assertive"></div>
+
+<script src="assets/console.js" type="module"></script>
+</body>
+</html>

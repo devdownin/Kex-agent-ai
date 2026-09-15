@@ -53,6 +53,9 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 - **Le refus d'authentification appartient à l'`AuthenticationEntryPoint`**, pas au filtre :
   dans le filtre, il bloque aussi les routes en `permitAll` comme `/actuator/health`.
 
+- **Le `permitAll` de la console reste borné au `GET` et aux chemins énumérés.** Un joker de
+  racine ferait hériter l'ouverture à toute route future servie ici.
+
 - **Le nom d'un `@PathVariable` se retrouve dans la spécification OpenAPI.** Il doit correspondre
   au vocabulaire de la documentation, pas à une variable interne — le test de la spécification a
   attrapé un `{server}` là où tout le reste disait `{connection}`.

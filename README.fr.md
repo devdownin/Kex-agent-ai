@@ -56,6 +56,11 @@ curl -X POST localhost:8081/api/agent/chat \
 {"conversationId":"3f2b…","content":"Huit topics correspondent à demo.*. Trois sont vides : …"}
 ```
 
+Ou ouvrez **http://localhost:8081** : la **Control Center**, la console que l'agent sert lui-même —
+conversation avec flux de jetons et d'appels d'outils en direct, introspection des serveurs MCP et
+invocation directe d'un outil, base de connaissance, santé. Le bearer se colle une fois ; il vit
+dans `sessionStorage` et ne quitte jamais le navigateur.
+
 Pas de Docker ? [Lancez-le depuis les sources](docs/CONFIGURATION.md#lancer-depuis-les-sources) —
 JDK 25 et `./mvnw spring-boot:run`.
 
@@ -152,10 +157,10 @@ y compris ce qu'est MCP si c'est votre premier — est dans [`docs/MCP.md`](docs
 | `GET` | `/api/agent/mcp/servers/{connection}/resource?uri=…` | En lire une |
 | `POST` `GET` `DELETE` | `/api/agent/knowledge` | Alimenter, chercher et élaguer la base de connaissance (si activée) |
 
-La description OpenAPI est servie sur `/v3/api-docs`, Swagger UI sur `/swagger-ui.html`. Les deux
-sont ouverts : la *forme* de l'API est déjà publique dans ce dépôt, et la cacher ne ferait que
-rendre l'interface inutilisable dans un navigateur. Ce qui est protégé, c'est tout ce qui agit ou
-coûte.
+La description OpenAPI est servie sur `/v3/api-docs`, Swagger UI sur `/swagger-ui.html`, et la
+Control Center sur `/`. Les trois sont ouverts en `GET` : la *forme* de l'API est déjà publique dans
+ce dépôt, et la console est du HTML inerte qui ne porte aucun secret — les cacher ne ferait que les
+rendre inutilisables dans un navigateur. Ce qui est protégé, c'est tout ce qui agit ou coûte.
 
 Toute route sous `/api/**` exige `Authorization: Bearer $KEX_AGENT_API_KEY`. `/actuator/health`
 reste ouvert pour les sondes de conteneur.

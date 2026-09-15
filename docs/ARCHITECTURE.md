@@ -41,6 +41,7 @@ flowchart TB
 | `AgentConfig` | Construit le `ChatClient`, la mémoire, le catalogue |
 | `McpBearerTokenCustomizer` | Injecte `Authorization: Bearer` sur les transports MCP HTTP |
 | `SecurityConfig` + `ApiKeyAuthFilter` | Bearer statique sur `/api/**` |
+| `static/` | La Control Center : console d'exploitation servie par l'agent, sans étape de build |
 
 ## Le cycle d'une requête
 
@@ -223,6 +224,28 @@ sondes de conteneur tombaient. Le test `ApiSecurityUnconfiguredTest` l'a attrap�
 maintenant la forme du code qui l'empêche : le filtre authentifie, l'entry point refuse, et il n'est
 invoqué que pour une route réellement protégée.
 
+### La console est servie ouverte, mais n'ouvre rien
+
+`src/main/resources/static/` porte la Control Center : conversation en flux, introspection MCP,
+invocation directe d'un outil, base de connaissance, santé. Trois fichiers statiques, aucun
+outillage JavaScript — le projet est construit par Maven, et ajouter npm ferait vivre deux chaînes
+de build pour trois fichiers.
+
+`GET /`, `/index.html` et `/assets/**` sont en `permitAll`, comme Swagger UI et pour la même raison :
+c'est du HTML inerte qui ne porte aucun secret, et l'authentifier empêcherait le navigateur de
+charger la page qui *demande* le jeton. Trois garde-fous encadrent cette ouverture, tous tenus par
+`ConsoleTest` :
+
+- elle est restreinte au `GET` — un `POST` sur les mêmes chemins reste authentifié ;
+- les chemins sont énumérés plutôt que couverts par un joker de racine, pour qu'une future route
+  servie ici n'hérite pas de l'ouverture ;
+- `/api/**` et `/actuator/prometheus` répondent toujours `401` sans jeton.
+
+Le jeton est saisi dans le navigateur et vit en `sessionStorage` : il disparaît à la fermeture de
+l'onglet et n'est jamais écrit côté serveur. Les réponses du modèle et les contenus MCP sont
+injectés par `textContent`, jamais par `innerHTML` : ce sont des données non fiables, et un serveur
+MCP hostile pourrait sinon placer un XSS sur la même origine que l'API.
+
 ## Ce que les tests couvrent
 
 | Test | Ce qu'il verrouille |
@@ -234,3 +257,4 @@ invoqué que pour une route réellement protégée.
 | `AgentControllerTest` | Contrat HTTP des 7 routes |
 | `SharedMemoryProfileTest` | Le profil `shared-memory` remplace bien le dépôt en mémoire |
 | `KexAgentApplicationTests` | Le contexte démarre sans aucun serveur MCP configuré |
+| `ConsoleTest` | La console est servie sans jeton, n'ouvre ni `/api/**` ni le `POST`, et appelle les routes qui existent |

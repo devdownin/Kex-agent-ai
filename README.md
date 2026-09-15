@@ -55,6 +55,11 @@ curl -X POST localhost:8081/api/agent/chat \
 {"conversationId":"3f2b…","content":"Eight topics match demo.*. Three are empty: demo.returns, …"}
 ```
 
+Or open **http://localhost:8081** and use the **Control Center** — the console the agent serves
+itself: conversation with live token and tool-call streaming, MCP server introspection and direct
+tool invocation, the knowledge base, and health. Paste the same bearer once; it lives in
+`sessionStorage` and never leaves the browser.
+
 No Docker? [Run it from source](docs/CONFIGURATION.md#running-from-source) — JDK 25 and `./mvnw spring-boot:run`.
 
 ## 💬 What you can ask it
@@ -150,9 +155,10 @@ MCP is, if this is your first one — is in [`docs/MCP.md`](docs/MCP.md).
 | `GET` | `/api/agent/mcp/servers/{connection}/resource?uri=…` | Read one |
 | `POST` `GET` `DELETE` | `/api/agent/knowledge` | Feed, search and prune the knowledge base (when enabled) |
 
-The OpenAPI description is served at `/v3/api-docs`, with Swagger UI at `/swagger-ui.html`. Both are
-open: the *shape* of the API is already public in this repository, and hiding it would only make the
-UI unusable in a browser. What is protected is everything that acts or costs money.
+The OpenAPI description is served at `/v3/api-docs`, with Swagger UI at `/swagger-ui.html`, and the
+Control Center at `/`. All three are open on `GET`: the *shape* of the API is already public in this
+repository, and the console is inert HTML that holds no secret — hiding either would only make them
+unusable in a browser. What is protected is everything that acts or costs money.
 
 Every route under `/api/**` requires `Authorization: Bearer $KEX_AGENT_API_KEY`. `/actuator/health`
 stays open for container probes.
