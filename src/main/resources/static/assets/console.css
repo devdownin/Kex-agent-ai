@@ -391,7 +391,18 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
    neutre du lot. */
 .state.error { border-style: solid; border-color: var(--danger); color: var(--danger); }
 .state.error p:first-child::before { content: "✕ "; font-family: var(--mono); }
-.state.loading::before { content: "◌ "; font-family: var(--mono); }
+/* Un texte statique se lit aussi bien comme « en cours » que comme « figé, ça n'a pas marché » —
+   la seule différence avec `.state.error` était alors la couleur. La rotation dit sans ambiguïté
+   qu'il se passe quelque chose, là où le glyphe seul ne le disait pas. */
+.state.loading::before {
+  content: "◌";
+  display: inline-block;
+  margin-right: 6px;
+  font-family: var(--mono);
+  animation: state-spin 1.1s linear infinite;
+}
+@keyframes state-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .state.loading::before { animation: none; } }
 
 /* La couleur ne porte jamais l'état seule : le glyphe et le libellé sont toujours là. */
 .state-tag {
@@ -714,6 +725,7 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 }
 .turn.user .bubble { background: var(--accent-soft); border-color: transparent; }
 .turn.error .bubble { border-color: var(--danger); color: var(--danger); }
+.turn.error .bubble::before { content: "✕ "; font-family: var(--mono); }
 .turn .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .chip {
@@ -726,7 +738,10 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
   border: 1px solid var(--line);
   color: var(--ink-2);
 }
+/* Sans lui, un appel d'outil en échec ne se distinguait d'un appel réussi que par la couleur de
+   sa puce — rien dans le journal ni dans les chips du fil n'écrit « échec » en toutes lettres. */
 .chip.failed { color: var(--danger); border-color: var(--danger); }
+.chip.failed::before { content: "✕"; }
 
 .caret::after { content: "▍"; animation: blink 1s steps(2, start) infinite; color: var(--accent); }
 @keyframes blink { to { visibility: hidden; } }
@@ -749,6 +764,10 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 .tool-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .tool-log li { display: flex; justify-content: space-between; gap: 8px; font: 12px var(--mono); }
 .tool-log .dur { color: var(--ink-3); }
+.tool-log .ko::before { content: "✕ "; }
+/* Le rappel qu'un panneau ne montre encore rien : même traitement discret que les indices de
+   contexte ailleurs dans la console (`.hint`), plutôt que le texte par défaut. */
+.empty { color: var(--ink-3); font-size: 12px; }
 .tool-log .ko { color: var(--danger); }
 
 /* ── Dialogues et notifications ──────────────────────────────────────── */

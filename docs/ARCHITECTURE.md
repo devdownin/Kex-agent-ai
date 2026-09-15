@@ -578,6 +578,37 @@ l'onglet et n'est jamais écrit côté serveur. Les réponses du modèle et les 
 injectés par `textContent`, jamais par `innerHTML` : ce sont des données non fiables, et un serveur
 MCP hostile pourrait sinon placer un XSS sur la même origine que l'API.
 
+### Le système de design tient en quatre règles
+
+`console.css` ne documente ces règles nulle part ailleurs que dans ses propres commentaires,
+dispersés au fil des sélecteurs ; les réunir ici évite de les redécouvrir une à une à la prochaine
+refonte.
+
+**Des jetons, jamais une couleur en dur.** Tout vit dans des propriétés personnalisées posées sur
+`:root` — `--bg`, `--surface`, `--ink`/`--ink-2`/`--ink-3`, `--accent`, et une paire `--ok`/`--warn`/
+`--danger`/`--pending` avec leur variante `-soft` pour les fonds teintés. Le thème sombre redéfinit
+le même jeu sous `@media (prefers-color-scheme: dark)`, gardé par `:root:not([data-theme="light"])`
+pour que le bouton de thème (qui pose `data-theme` sur `<html>`) l'emporte dans les deux sens ; un
+bloc `:root[data-theme="dark"]` identique couvre le bascule manuel hors media query. Aucune couleur
+n'est écrite ailleurs qu'ici : changer d'accent ou retoucher le sombre se fait à un seul endroit.
+
+**La couleur ne porte jamais l'état seule.** Un glyphe (`●`/`▲`/`✕`/`?`/`◷`) et un libellé
+l'accompagnent toujours — `state-tag` et `stateMark` dans `core.js` sont le seul point qui les
+associe, et tout ce qui compose sa propre pastille (les marques de KPI dans `supervision.js`, les
+chips d'outils de `chat.js`, `.state.error`) réutilise le même glyphe plutôt que d'en inventer un.
+Daltonisme et impression noir et blanc sont les deux cas qui font respecter cette règle à la lettre.
+
+**Un accent gauche signale ce qui demande un geste.** `.kpi[data-state]`, `.card[data-state]` et
+`.panel[data-state="PENDING"]` partagent le même motif — une bordure gauche de 3 px, neutre par
+défaut, teintée quand il y a une raison réelle de la teinter (une alerte active, une décision qui
+attend). Un panneau ne porte cet accent que lorsque les données qu'il affiche le justifient ; il ne
+décore jamais un état neutre.
+
+**Les icônes sont un jeu de traits SVG en ligne, pas une police.** `index.html` inline chaque icône
+de la barre latérale (`viewBox="0 0 24 24"`, épaisseur de trait 1.7, coins ronds) plutôt que de
+charger une police d'icônes ou un CDN — même contrainte que le reste de la console : aucun
+outillage, aucune dépendance externe à un tiers pour une poignée de glyphes.
+
 ### Un tableau qui défile le dit, sans compter sur le chrome du navigateur
 
 `.scroll-x` défilait déjà horizontalement — `overflow-x: auto` suffit — mais rien à l'écran ne le
