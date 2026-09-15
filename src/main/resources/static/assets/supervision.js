@@ -4,9 +4,9 @@
 // Les vues de supervision : observer → comprendre → décider → agir → vérifier.
 
 import {
-  $, ago, api, clockTime, closeDrawer, confirmAction, definition, drawerOpen, duration, el, empty,
-  errorState, frag, loading, openDrawer, params, percent, render, report, setParams, stamp, stateTag,
-  toast,
+  $, ago, api, clockTime, confirmAction, definition, dismissDrawer, drawerOpen, duration, el, empty,
+  errorState, frag, loading, openDrawer, params, percent, registerDrawer, render, report, setParams,
+  sortable, stamp, stateTag, toast,
 } from './core.js';
 
 const BASE = '/api/agent/supervision';
@@ -54,6 +54,9 @@ const DECISION_STATES = {
 
 const AGENT_STATES = {
   OPERATIONAL: { tag: 'OK', label: 'OPÉRATIONNEL', mark: '●' },
+  // Distinct d'OPÉRATIONNEL et distinct de DÉGRADÉ : rien n'a été mesuré, ce qui n'affirme ni
+  // que tout va bien, ni que quelque chose va mal.
+  UNKNOWN: { tag: 'UNKNOWN', label: 'ÉTAT INCONNU', mark: '?' },
   DEGRADED: { tag: 'WARNING', label: 'DÉGRADÉ', mark: '▲' },
   ERROR: { tag: 'ERROR', label: 'EN ERREUR', mark: '✕' },
   PAUSED: { tag: 'PAUSED', label: 'EN PAUSE', mark: '⏸' },
@@ -204,9 +207,10 @@ function processTable(rows, onSelect, limit, columns = FULL) {
       cell.append(stateTag(row.state));
       return cell;
     },
-    'Dernière exécution': (row) => el('td', null, clockTime(row.lastRun)),
-    Durée: (row) => el('td', null, duration(row.durationMillis)),
-    Retard: (row) => el('td', row.delayMillis ? 'warn' : null, duration(row.delayMillis)),
+    'Dernière exécution': (row) => sortKey(el('td', null, clockTime(row.lastRun)), row.lastRun),
+    Durée: (row) => sortKey(el('td', null, duration(row.durationMillis)), row.durationMillis),
+    Retard: (row) => sortKey(el('td', row.delayMillis ? 'warn' : null, duration(row.delayMillis)),
+      row.delayMillis),
     Couverture: (row) => {
       const cell = el('td');
       cell.append(coverageTag(row.coverage));
@@ -232,8 +236,17 @@ function processTable(rows, onSelect, limit, columns = FULL) {
   table.append(body);
 
   const scroll = el('div', 'scroll-x');
-  scroll.append(table);
+  scroll.append(sortable(table));
   return scroll;
+}
+
+/**
+ * Une clé de tri brute quand l'affiché ne se trie pas : « il y a 4 min » ou « 14:32 » rangés par
+ * ordre alphabétique donneraient un ordre qui a l'air juste, ce qui est pire que pas de tri.
+ */
+function sortKey(cell, value) {
+  if (value !== null && value !== undefined) cell.dataset.sort = String(value);
+  return cell;
 }
 
 /**
@@ -426,7 +439,8 @@ async function resolveDecision(decision, approve) {
       { method: 'POST', body });
     toast(`${decision.action} — ${DECISION_LABELS[result.status] || result.status}`,
       result.status === 'FAILED' ? 'error' : undefined);
-    closeDrawer();
+    // Le paramètre part avec le panneau : sinon un rechargement rouvrirait une décision tranchée.
+    dismissDrawer();
     await overview();
     if (!$('#view-decisions').hidden) await decisions();
   } catch (error) {
@@ -567,7 +581,7 @@ export async function audit() {
     const body = el('tbody');
     matching.forEach((row) => {
       const line = el('tr');
-      line.append(el('td', null, stamp(row.at)));
+      line.append(sortKey(el('td', null, stamp(row.at)), row.at));
       line.append(el('td', null, row.actor));
       line.append(el('td', 'strong', row.action));
       line.append(el('td', null, row.processId || '—'));
@@ -579,7 +593,7 @@ export async function audit() {
     });
     table.append(body);
     const scroll = el('div', 'scroll-x');
-    scroll.append(table);
+    scroll.append(sortable(table));
     return scroll;
   });
 }
@@ -858,33 +872,21 @@ const shortToIso = (value) => {
  * Rouvre le panneau que l'adresse désigne. Appelée après chaque rendu de vue et à chaque
  * changement d'adresse : c'est ce qui rend un lien vers une décision précise utilisable.
  */
-export async function restoreFromUrl() {
-  const query = params();
-  const decision = query.get('decision');
-  const alertId = query.get('alerte');
-  const processId = query.get('processus');
-
-  if (!decision && !alertId && !processId) {
-    if (drawerOpen()) closeDrawer();
-    return;
-  }
-  if (drawerOpen()) return;
-
-  if (decision) {
-    await openDecision(decision);
-    return;
-  }
-  const data = current() || await refresh().catch(() => null);
-  if (!data) return;
-  if (alertId) {
-    const alert = (data.alerts || []).find((item) => item.id === alertId);
+/** Les panneaux de la supervision, retrouvés depuis l'adresse. L'ordre fixe leur priorité. */
+function registerDrawers() {
+  registerDrawer('decision', openDecision);
+  registerDrawer('alerte', async (id) => {
+    const alert = (await snapshotFor())?.alerts?.find((item) => item.id === id);
     if (alert) openAnomaly(alert);
-  }
-  else {
-    const row = (data.processes || []).find((item) => item.processId === processId);
+  });
+  registerDrawer('processus', async (id) => {
+    const row = (await snapshotFor())?.processes?.find((item) => item.processId === id);
     if (row) openProcess(row);
-  }
+  });
 }
+
+/** Le cache d'abord : rouvrir un panneau depuis un lien ne doit pas relancer une requête pour rien. */
+const snapshotFor = () => Promise.resolve(current() || refresh().catch(() => null));
 
 /* ── Câblage ───────────────────────────────────────────────────────────── */
 
@@ -899,14 +901,10 @@ export function syncFilters() {
 }
 
 export function wire() {
-  // Fermer efface aussi le paramètre : l'adresse reste le reflet de l'écran.
-  const dismiss = () => {
-    closeDrawer();
-    setParams({ decision: null, alerte: null, processus: null });
-  };
-  $('#drawer-close').addEventListener('click', dismiss);
+  registerDrawers();
+  $('#drawer-close').addEventListener('click', dismissDrawer);
   addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && drawerOpen()) dismiss();
+    if (event.key === 'Escape' && drawerOpen()) dismissDrawer();
   });
 
   $('#refresh-decisions').addEventListener('click', decisions);

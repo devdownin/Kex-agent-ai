@@ -13,6 +13,9 @@ serveur MCP de [Kafka SQL Explorer](https://github.com/devdownin/Kafkaexplorer).
 ./mvnw test -Dtest=NomDuTest               # un test
 ./mvnw spring-boot:run                     # agent sur 8081
 docker compose -f compose/smoke.yml up -d --wait   # agent + serveur MCP factice
+
+# La console au navigateur : l'agent doit tourner, Playwright est hors du projet
+PLAYWRIGHT_MODULE=/chemin/playwright/index.mjs node src/test/browser/console.mjs
 ```
 
 JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
@@ -62,6 +65,17 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   `/api/**` seulement.
 - **Le refus d'authentification appartient à l'`AuthenticationEntryPoint`**, pas au filtre :
   dans le filtre, il bloque aussi les routes en `permitAll` comme `/actuator/health`.
+
+- **L'état de l'agent regarde aussi ce qui le rend capable d'agir.** Sans clé de modèle il est
+  `DEGRADED`, jamais analysé il est `UNKNOWN` : un vert en tête d'écran affirmerait que tout va
+  bien au-dessus d'un bandeau qui dit « Aucune analyse exécutée ».
+
+- **Un panneau s'enregistre dans le registre de `core.js`**, avec la clef d'URL qui le rouvre. Un
+  panneau ouvert hors registre est fermé au premier routage par les autres, qui ne le connaissent
+  pas — et le bouton Retour ne le referme pas.
+
+- **Un tri lit `data-sort` quand l'affiché ne se trie pas.** « il y a 4 min » ou « 200 000 » avec
+  son espace fine, rangés par ordre alphabétique, donnent un ordre qui a l'air juste.
 
 - **Un état illisible vaut `UNKNOWN`, jamais `OK`.** Une donnée manquante et une donnée saine se
   ressemblent dans un tableau de bord, et les confondre fait rater une panne.

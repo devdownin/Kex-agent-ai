@@ -199,6 +199,63 @@ export const percent = (ratio) => `${Math.round((ratio ?? 0) * 100)} %`;
 const MARKS = { OK: '●', WARNING: '▲', ERROR: '✕', UNKNOWN: '?', PENDING: '◷', RUNNING: '◌', PAUSED: '⏸' };
 const LABELS = { OK: 'OK', WARNING: 'Warning', ERROR: 'Erreur', UNKNOWN: 'Inconnu' };
 
+/* ── Tri des tableaux ──────────────────────────────────────────────────── */
+
+/**
+ * Rend triable un tableau déjà construit. Après coup plutôt qu'à la construction : chaque vue bâtit
+ * le sien à sa façon, et un tri qui lit le DOM les couvre toutes sans les réécrire.
+ *
+ * <p>La clé est `data-sort` quand la cellule en porte une — un horodatage ISO, un nombre brut — et
+ * son texte sinon. Sans cela, « il y a 4 min » se trierait par ordre alphabétique, ce qui est pire
+ * que de ne pas trier : l'ordre aurait l'air juste.
+ */
+export function sortable(table) {
+  const headers = [...table.querySelectorAll('thead th')];
+  const body = table.querySelector('tbody');
+  if (!body) return table;
+
+  headers.forEach((header, column) => {
+    if (!header.textContent.trim()) return;
+    const button = el('button', 'sort', header.textContent);
+    button.type = 'button';
+    header.replaceChildren(button);
+    button.addEventListener('click', () => {
+      const ascending = header.getAttribute('aria-sort') !== 'ascending';
+      headers.forEach((other) => other.removeAttribute('aria-sort'));
+      header.setAttribute('aria-sort', ascending ? 'ascending' : 'descending');
+      const rows = [...body.rows];
+      const keys = rows.map((row) => key(row.cells[column]));
+      // Une seule valeur non numérique suffit à retomber sur l'alphabétique : mélanger les deux
+      // rendrait l'ordre dépendant des lignes présentes, donc imprévisible d'un écran à l'autre.
+      const numeric = keys.every((value) => value === '' || !Number.isNaN(Number(value)));
+      rows.sort((left, right) =>
+        compare(key(left.cells[column]), key(right.cells[column]), numeric, ascending));
+      body.append(...rows);
+    });
+  });
+  return table;
+}
+
+/** Le tiret cadratin est le « rien à afficher » de toute la console : ce n'est pas une valeur. */
+const ABSENT = '—';
+
+function key(cell) {
+  if (!cell) return '';
+  // L'espace fine insérée par toLocaleString casserait Number() : la clé brute existe pour ça.
+  const raw = (cell.dataset.sort ?? cell.textContent).trim();
+  return raw === ABSENT ? '' : raw;
+}
+
+/**
+ * Les cases sans valeur restent en bas dans les deux sens. Les faire remonter au tri décroissant
+ * les présenterait comme les plus grandes, alors qu'elles n'affirment rien du tout.
+ */
+function compare(left, right, numeric, ascending) {
+  if (left === '' || right === '') return left === right ? 0 : (left === '' ? 1 : -1);
+  const order = numeric ? Number(left) - Number(right) : left.localeCompare(right, 'fr');
+  return ascending ? order : -order;
+}
+
 /** Une ligne « intitulé / valeur ». Partagée : la supervision et la vue du modèle la rendent toutes deux. */
 export function definition(label, value) {
   const row = el('dl', 'definition');
@@ -279,6 +336,39 @@ export function closeDrawer() {
   // Le focus revient d'où il vient : sans ça, la navigation clavier repart du haut de la page.
   lastFocused?.focus();
   lastFocused = null;
+}
+
+/* ── Panneaux adressables ──────────────────────────────────────────────── */
+
+// Un panneau s'ouvre par l'adresse et pas seulement par un clic : c'est ce qui rend le bouton
+// Retour capable de le refermer et un lien capable de le rouvrir. Le registre est ici pour
+// qu'aucun module n'ait à connaître les panneaux des autres — la supervision ne sait rien du
+// catalogue de modèles, et n'a pas à le fermer par ignorance.
+
+const DRAWERS = new Map();
+
+/** @param open reçoit la valeur du paramètre ; un panneau sans identifiant l'ignore. */
+export function registerDrawer(param, open) {
+  DRAWERS.set(param, open);
+}
+
+/** L'adresse fait foi : aucun paramètre de panneau, aucun panneau. */
+export async function restoreDrawerFromUrl() {
+  const query = params();
+  const entry = [...DRAWERS].find(([param]) => query.get(param));
+  if (!entry) {
+    if (drawerOpen()) closeDrawer();
+    return;
+  }
+  // Déjà ouvert : le rouvrir rejouerait la requête et écraserait ce qu'on est en train de lire.
+  if (drawerOpen()) return;
+  await entry[1](query.get(entry[0]));
+}
+
+/** Fermer efface aussi le paramètre, sans quoi l'adresse rouvrirait le panneau au rechargement. */
+export function dismissDrawer() {
+  closeDrawer();
+  setParams(Object.fromEntries([...DRAWERS.keys()].map((param) => [param, null])));
 }
 
 /* ── Confirmation ──────────────────────────────────────────────────────── */

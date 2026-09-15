@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.kex.agent.knowledge.KnowledgeProperties;
+import com.kex.agent.supervision.ModelAvailability;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -19,7 +20,7 @@ import org.springframework.util.StringUtils;
  * séparées finiraient par diverger, et un écran qui contredit les logs fait douter des deux.
  */
 @Service
-public class LlmViewService {
+public class LlmViewService implements ModelAvailability {
 
     static final String ANTHROPIC = "anthropic";
     static final String OPENAI = "openai";
@@ -74,6 +75,17 @@ public class LlmViewService {
                 agent.requestTimeout().toString(), agent.maxHistoryMessages(), agent.logInteractions(),
                 environment.getProperty("spring.ai.model.embedding", "none"), knowledge.enabled(),
                 agent.systemPrompt(), List.copyOf(warnings));
+    }
+
+    /**
+     * Lecture étroite pour la supervision, qui ne doit pas se déclarer opérationnelle quand aucun
+     * échange ne peut aboutir. Recalculée à chaque appel : une clé posée par variable
+     * d'environnement ne change pas à chaud, mais figer la réponse ferait mentir l'indicateur si
+     * jamais elle le pouvait.
+     */
+    @Override
+    public boolean keyKnownMissing() {
+        return Boolean.FALSE.equals(keyPresent(provider()));
     }
 
     String provider() {

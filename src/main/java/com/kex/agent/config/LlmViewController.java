@@ -16,13 +16,24 @@ import org.springframework.web.bind.annotation.RestController;
 class LlmViewController {
 
     private final LlmViewService llm;
+    private final LlmCatalogService catalog;
 
-    LlmViewController(LlmViewService llm) {
+    LlmViewController(LlmViewService llm, LlmCatalogService catalog) {
         this.llm = llm;
+        this.catalog = catalog;
     }
 
     @GetMapping
     LlmView llm() {
         return llm.describe();
+    }
+
+    /**
+     * Le catalogue de la passerelle. Rendu sur demande et non avec la configuration : il sort sur
+     * le réseau, et l'écran Configuration doit s'afficher même quand la passerelle ne répond pas.
+     */
+    @GetMapping("/models")
+    LlmModels models() {
+        return catalog.models();
     }
 }

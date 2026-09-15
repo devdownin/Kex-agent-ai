@@ -56,6 +56,78 @@ jobs:
           path: target/surefire-reports/
           retention-days: 7
 
+  # La suite Java sert les fichiers de la console et vérifie que les chemins d'API qu'ils citent
+  # existent ; elle n'exécute pas une ligne de JavaScript. Les défauts d'interface corrigés
+  # jusqu'ici ont tous été trouvés à la main, donc une fois, donc sans garantie qu'ils ne
+  # reviennent pas. Ce job les rejoue.
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      # Pas de setup-node : les exécuteurs GitHub embarquent Node et npm, et le script n'utilise
+      # que des API stables depuis Node 18. Une action de plus, c'est une empreinte de plus à
+      # épingler et à suivre pour une version dont on n'a pas besoin.
+      # Le jar seulement : la suite a déjà tourné dans le job `build`, la relancer ici ne
+      # vérifierait rien de plus et doublerait le temps de restitution.
+      - name: Package the agent
+        run: ./mvnw -B --no-transfer-progress -DskipTests package
+
+      # Hors de l'arborescence et sans package.json : Playwright n'est pas une dépendance du
+      # projet, et un manifeste npm à la racine ferait vivre une seconde chaîne de construction
+      # pour un seul fichier de vérification.
+      - name: Install Chromium
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/pw" --no-save --no-package-lock playwright@1.56.1
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+
+      # Fournisseur `openai` pointé sur la passerelle factice que le script démarre lui-même :
+      # la CI ne sort jamais vers un tiers. Aucun échange n'est demandé au modèle, la clé n'a donc
+      # qu'à exister. Les processus sont déclarés pour que les vues aient des lignes à montrer.
+      - name: Start the agent
+        run: |
+          set -euo pipefail
+          java -jar target/kex-agent-ai-*.jar \
+            --server.port=8081 \
+            --kex.agent.api-key=ci-secret \
+            --kex.agent.supervision.processes[0].id=order-integration \
+            --kex.agent.supervision.processes[0].name='Order Integration' \
+            --kex.agent.supervision.processes[1].id=customer-import \
+            --kex.agent.supervision.processes[1].name='Customer Import' \
+            --spring.ai.mcp.client.enabled=false \
+            --spring.ai.model.chat=openai \
+            --spring.ai.model.embedding=none \
+            --spring.ai.openai.api-key=ci-dummy \
+            --spring.ai.openai.base-url=http://127.0.0.1:8098 \
+            --spring.ai.openai.chat.options.model=c/moyen \
+            > "$RUNNER_TEMP/agent.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8081/actuator/health > /dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8081/actuator/health
+
+      - name: Drive the console
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/pw/node_modules/playwright/index.mjs
+          KEX_AGENT_URL: http://localhost:8081
+          KEX_AGENT_API_KEY: ci-secret
+        run: node src/test/browser/console.mjs
+
+      - name: Agent logs on failure
+        if: failure()
+        run: cat "$RUNNER_TEMP/agent.log" || true
+
   # Le Dockerfile et le compose sont livrés avec l'application : sans ce job ils ne sont
   # vérifiés par personne avant un `docker compose up` en production.
   docker:

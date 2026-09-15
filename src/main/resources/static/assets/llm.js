@@ -5,7 +5,10 @@
 // plafonds. En lecture seule — le client du modèle est câblé au démarrage du contexte, un champ
 // modifiable ici accepterait une valeur que l'échange suivant ignorerait.
 
-import { $, api, definition, el, render, stateTag } from './core.js';
+import {
+  $, api, definition, el, empty, errorState, openDrawer, registerDrawer, render, setParams,
+  sortable, stateTag,
+} from './core.js';
 
 const KEY_STATES = {
   true: { state: 'OK', label: 'Configurée' },
@@ -80,6 +83,101 @@ function toolLimit(data) {
   return wrap;
 }
 
+/* ── Catalogue de la passerelle ────────────────────────────────────────── */
+
+const TOOL_STATES = {
+  true: { state: 'OK', label: 'Outils' },
+  false: { state: 'ERROR', label: 'Sans outils' },
+};
+
+/**
+ * Trois valeurs et non deux. Un modèle dont la passerelle n'annonce pas les paramètres n'est pas
+ * un modèle sans outils : le marquer « Sans outils » écarterait de l'écran un modèle utilisable.
+ */
+function toolTag(supported) {
+  const mark = TOOL_STATES[supported] ?? { state: 'UNKNOWN', label: 'Non annoncé' };
+  return stateTag(mark.state, mark.label);
+}
+
+function catalogue(data, filter) {
+  if (data.unavailable) {
+    return empty('Catalogue indisponible.', data.unavailable);
+  }
+  const wrap = el('div');
+  wrap.append(el('p', 'hint', 'Cet agent ne peut rien faire sans appel d’outils : un modèle qui '
+    + 'n’en est pas capable le rendra muet. Le catalogue est celui que la passerelle publie, il '
+    + 'n’est pas vérifié ici.'));
+
+  const needle = filter.trim().toLowerCase();
+  const shown = needle ? data.models.filter((model) =>
+    `${model.id} ${model.name || ''}`.toLowerCase().includes(needle)) : data.models;
+
+  if (!shown.length) {
+    wrap.append(empty('Aucun modèle ne correspond.', `${data.models.length} modèle(s) publiés.`));
+    return wrap;
+  }
+
+  const table = el('table', 'grid');
+  const head = el('thead');
+  const headRow = el('tr');
+  ['Modèle', 'Contexte', 'Outils'].forEach((label) => headRow.append(el('th', null, label)));
+  head.append(headRow);
+  table.append(head);
+
+  const body = el('tbody');
+  for (const model of shown) {
+    const line = el('tr');
+    const name = el('td');
+    // La cellule mêle identifiant, pastille et nom : sans clé, le tri porterait sur tout ça.
+    name.dataset.sort = model.id;
+    name.append(el('span', 'mono', model.id));
+    if (model.selected) name.append(stateTag('OK', 'Retenu'));
+    if (model.name && model.name !== model.id) name.append(el('div', 'muted', model.name));
+    line.append(name);
+    const context = el('td', 'mono', model.contextLength
+      ? `${Number(model.contextLength).toLocaleString('fr-FR')} jetons`
+      : '—');
+    // L'espace fine du format français casserait le tri numérique : la clé brute est à côté.
+    if (model.contextLength) context.dataset.sort = String(model.contextLength);
+    line.append(context);
+    const tools = el('td');
+    tools.append(toolTag(model.toolCalling));
+    line.append(tools);
+    body.append(line);
+  }
+  table.append(body);
+
+  const scroll = el('div', 'scroll-x');
+  scroll.append(sortable(table));
+  wrap.append(scroll);
+  wrap.append(el('p', 'hint', `${shown.length} modèle(s) sur ${data.models.length}.`));
+  return wrap;
+}
+
+async function openCatalogue() {
+  openDrawer('Modèles de la passerelle', el('p', 'state loading', 'Lecture du catalogue…'));
+  try {
+    const data = await api('/api/agent/llm/models');
+    const panel = el('div');
+    const search = el('input');
+    search.type = 'search';
+    search.placeholder = 'Filtrer par identifiant ou par nom';
+    search.setAttribute('aria-label', 'Filtrer les modèles');
+    const list = el('div');
+    // Filtrage local : le catalogue est déjà là, et une requête par caractère saisi ferait payer
+    // la passerelle pour ce que le navigateur sait faire.
+    search.addEventListener('input', () => list.replaceChildren(catalogue(data, search.value)));
+    list.append(catalogue(data, ''));
+    if (!data.unavailable) panel.append(search);
+    panel.append(list);
+    openDrawer('Modèles de la passerelle', panel);
+  } catch (error) {
+    openDrawer('Modèles de la passerelle', errorState(error, openCatalogue));
+  }
+}
+
+/* ── Vue ───────────────────────────────────────────────────────────────── */
+
 export async function view() {
   await render($('#llm-config'), () => api('/api/agent/llm'), (data) => {
     const wrap = el('div');
@@ -108,6 +206,20 @@ export async function view() {
     wrap.append(definition('Base de connaissance',
       el('span', null, data.knowledgeEnabled ? 'Activée' : 'Désactivée')));
 
+    // Le catalogue n'est proposé que là où il existe : sur un appel direct à Anthropic, le
+    // bouton n'ouvrirait qu'un panneau expliquant qu'il n'y a rien à lire.
+    if (data.gateway) {
+      const open = el('button', 'ghost', 'Modèles disponibles sur la passerelle');
+      open.type = 'button';
+      open.id = 'open-llm-models';
+      // Par l'adresse et non par un appel direct : c'est ce qui rend le bouton Retour capable de
+      // refermer le panneau, comme pour ceux de la supervision.
+      open.addEventListener('click', () => setParams({ modeles: '1' }, true));
+      const actions = el('p');
+      actions.append(open);
+      wrap.append(actions);
+    }
+
     if (data.systemPrompt) {
       const details = el('details', 'advanced');
       details.append(el('summary', null, 'Prompt système'));
@@ -118,4 +230,7 @@ export async function view() {
   });
 }
 
-export const wire = () => $('#refresh-llm').addEventListener('click', view);
+export function wire() {
+  registerDrawer('modeles', openCatalogue);
+  $('#refresh-llm').addEventListener('click', view);
+}

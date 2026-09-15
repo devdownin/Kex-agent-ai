@@ -66,7 +66,20 @@
     </div>
   </header>
 
+  <!-- Le changement de vue ne déplace pas le focus : sans région vive, un lecteur d'écran ne
+       signale rien et la personne croit être restée au même endroit. -->
+  <p class="sr-only" id="announcer" role="status" aria-live="polite"></p>
+
   <main id="main" tabindex="-1">
+
+    <!-- Hors ligne, tout se lit comme d'habitude alors que plus rien n'est à jour : c'est la même
+         règle que la fraîcheur, un cran plus haut. Dans le flux plutôt qu'en surimpression, pour
+         ne rien recouvrir ; `role="status"` pour que le lecteur d'écran l'annonce sans voler le
+         focus. -->
+    <p class="offline" id="offline" role="status" hidden>
+      Navigateur hors ligne — ce qui est affiché date de la dernière connexion.
+    </p>
+
 
     <!-- ══ Vue d'ensemble ══ -->
     <section class="view" id="view-overview" hidden>

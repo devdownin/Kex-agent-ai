@@ -4,7 +4,7 @@
 // Vue technique du cluster : topics, puis les groupes qui les lisent et leur retard. Second
 // niveau délibérément — le tableau de bord métier n'a pas à en être saturé.
 
-import { $, ago, api, el, empty, errorState, openDrawer, render, stateTag } from './core.js';
+import { $, ago, api, el, empty, errorState, openDrawer, render, sortable, stateTag } from './core.js';
 
 const BASE = '/api/agent/kafka';
 
@@ -30,6 +30,18 @@ function measured(value, format = (raw) => String(raw)) {
     return node;
   }
   return el('span', 'mono', format(value.value));
+}
+
+/**
+ * La cellule porte la valeur brute quand l'affiché ne se trie pas — « il y a 4 min », un nombre à
+ * espaces fines. Une mesure absente n'en porte aucune : triée comme un zéro, elle se rangerait
+ * parmi les topics vides, ce que cette vue existe précisément pour éviter.
+ */
+function measuredCell(value, format) {
+  const cell = el('td');
+  cell.append(measured(value, format));
+  if (value?.measured) cell.dataset.sort = String(value.value);
+  return cell;
 }
 
 const counted = (raw) => Number(raw).toLocaleString('fr-FR');
@@ -89,13 +101,9 @@ export async function topics() {
       line.append(name);
       line.append(el('td', 'mono', topic.partitions));
 
-      const records = el('td');
-      records.append(measured(topic.records, counted));
-      line.append(records);
-
-      const activity = el('td');
-      activity.append(measured(topic.lastActivityMs, (raw) => ago(new Date(Number(raw)).toISOString())));
-      line.append(activity);
+      line.append(measuredCell(topic.records, counted));
+      line.append(measuredCell(topic.lastActivityMs,
+        (raw) => ago(new Date(Number(raw)).toISOString())));
 
       const actions = el('td');
       const inspect = el('button', 'ghost', 'Groupes');
@@ -108,7 +116,7 @@ export async function topics() {
     table.append(body);
 
     const scroll = el('div', 'scroll-x');
-    scroll.append(table);
+    scroll.append(sortable(table));
     wrap.append(scroll);
     return wrap;
   });

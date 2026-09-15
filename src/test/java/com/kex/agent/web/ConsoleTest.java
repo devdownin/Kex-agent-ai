@@ -81,8 +81,8 @@ class ConsoleTest {
         assertThat(modules).contains("'resume'").contains("'pause'");
         // La vue technique s'adresse à son propre contrôleur.
         assertThat(modules).contains("/api/agent/kafka").contains("/topics");
-        // La configuration du modèle aussi.
-        assertThat(modules).contains("/api/agent/llm");
+        // La configuration du modèle aussi, catalogue de la passerelle compris.
+        assertThat(modules).contains("/api/agent/llm").contains("/api/agent/llm/models");
     }
 
     private String base() {

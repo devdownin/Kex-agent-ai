@@ -25,6 +25,9 @@ class LlmViewControllerTest {
     @MockitoBean
     LlmViewService llm;
 
+    @MockitoBean
+    LlmCatalogService catalog;
+
     @Test
     void la_vue_rend_le_fournisseur_effectif_et_ses_avertissements() {
         given(llm.describe()).willReturn(new LlmView("openai", "OpenRouter",
@@ -36,6 +39,28 @@ class LlmViewControllerTest {
         body.extractingPath("$.label").isEqualTo("OpenRouter");
         body.extractingPath("$.gateway").isEqualTo(true);
         body.extractingPath("$.warnings").asArray().hasSize(1);
+    }
+
+    @Test
+    void un_catalogue_indisponible_reste_un_200_qui_dit_pourquoi() {
+        // Une passerelle injoignable est une information d'exploitation : rendre un code d'erreur
+        // ferait tomber le panneau au lieu de l'informer.
+        given(catalog.models()).willReturn(
+                LlmModels.unavailable("anthropic/claude-sonnet-4.5", "Passerelle injoignable"));
+
+        var body = assertThat(mvc.get().uri("/api/agent/llm/models")).hasStatusOk().bodyJson();
+        body.extractingPath("$.unavailable").isEqualTo("Passerelle injoignable");
+        body.extractingPath("$.selected").isEqualTo("anthropic/claude-sonnet-4.5");
+        body.extractingPath("$.models").asArray().isEmpty();
+    }
+
+    @Test
+    void un_support_d_outils_non_annonce_se_serialise_nul_et_non_faux() {
+        given(catalog.models()).willReturn(new LlmModels(
+                List.of(new LlmModel("interne/muet", null, null, null, false)), "interne/muet", null));
+
+        assertThat(mvc.get().uri("/api/agent/llm/models")).hasStatusOk().bodyJson()
+                .extractingPath("$.models[0].toolCalling").isNull();
     }
 
     @Test

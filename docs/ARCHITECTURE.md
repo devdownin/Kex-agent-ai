@@ -161,6 +161,47 @@ laisse l'application monter. Même posture que `kex.agent.api-key` — `/actuato
 et l'introspection MCP doivent rester joignables, puisque c'est là qu'on ira regarder pourquoi rien
 ne répond.
 
+### L'état de l'agent n'est pas celui du dernier cycle
+
+La pastille en tête d'écran répondait à « le dernier cycle s'est-il bien passé ? », pas à « cet
+agent peut-il faire son travail ? ». Une instance sans clé de modèle affichait donc `OPERATIONAL`,
+au-dessus d'un bandeau disant « Aucune analyse exécutée » : les deux moitiés de l'écran se
+contredisaient, et c'est la verte qu'on croit.
+
+`SupervisionService` consulte maintenant `ModelAvailability`, une interface d'une méthode que
+`LlmViewService` implémente — la supervision n'a que faire du modèle retenu ni de sa température.
+L'ordre des règles dit ce qui prime : pause, analyse en cours, échec constaté, clé manquante,
+jamais analysé, données périmées, processus inconnus. L'échec passe avant l'absence de clé parce
+que c'est un fait, là où la clé n'est qu'une cause probable — et l'écran Configuration la nomme.
+
+`AgentState.UNKNOWN` est distinct de `DEGRADED` : rien n'a été mesuré, ce qui n'affirme ni que tout
+va bien, ni que quelque chose va mal. `AgentStatus.stateReason` porte le motif, faute de quoi un
+« DÉGRADÉ » envoie chercher la cause dans les journaux alors qu'elle est connue au moment du calcul.
+
+L'absence n'est retenue que lorsqu'elle est **établie** : un fournisseur dont la configuration
+n'est pas lue ici ne dégrade rien. Dégrader sur une ignorance rendrait l'indicateur faux dans
+l'autre sens.
+
+### La console est vérifiée au navigateur, en CI
+
+La suite Java sert les fichiers de la console et vérifie que les chemins d'API qu'ils citent
+existent ; elle n'exécute pas une ligne de JavaScript. Les défauts d'interface corrigés jusqu'ici
+ont tous été trouvés à la main — donc une fois, sans garantie de non-retour.
+
+`src/test/browser/console.mjs` les rejoue dans Chromium : rechargement de l'écran après saisie du
+jeton, pastille qui ne ment pas sur un agent qui n'a rien analysé, tri numérique avec les valeurs
+absentes en bas, support d'outils non annoncé distinct d'absent, panneau qui retient le focus,
+bouton Retour qui le referme, panneau rouvert depuis son adresse, filtre qui survit au
+rechargement, bandeau hors ligne, et aucune erreur de script sur le parcours.
+
+Playwright n'est pas une dépendance du projet : le job de CI l'installe hors de l'arborescence et
+son chemin arrive par `PLAYWRIGHT_MODULE`. Un `package.json` à la racine ferait vivre une seconde
+chaîne de construction pour un seul fichier. Le script démarre lui-même une passerelle factice
+réduite à `/models` : la CI ne sort jamais vers un tiers.
+
+Ce script a payé le jour où il a été écrit : il a attrapé un panneau — celui du catalogue — ouvert
+hors du registre d'adresses, que le bouton Retour ne refermait donc pas.
+
 ### Mémoire : en mémoire par défaut, partagée sur demande
 
 `MessageWindowChatMemory` sur `InMemoryChatMemoryRepository`. Deux instances derrière un load

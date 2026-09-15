@@ -7,7 +7,7 @@
 
 import {
   $, ago, api, confirmAction, credentials, drawerOpen, onCredentialChange, onUnauthorized, report,
-  stamp, toast, viewName,
+  restoreDrawerFromUrl, stamp, toast, viewName,
 } from './core.js';
 import * as chat from './chat.js';
 import * as llm from './llm.js';
@@ -49,9 +49,17 @@ function renderStatus(next) {
   $('#run-cycle').disabled = Boolean(next?.paused || next?.analysing);
 
   const freshness = $('#freshness');
-  if (!next?.lastCycleAt) {
+  // Le motif prime sur la fraîcheur : « DÉGRADÉ » sans explication envoie chercher la cause dans
+  // les journaux, alors qu'elle est connue au moment où l'état est calculé.
+  if (next?.stateReason && !next.lastCycleAt) {
+    freshness.textContent = next.stateReason;
+    freshness.dataset.state = 'unknown';
+  } else if (!next?.lastCycleAt) {
     freshness.textContent = 'Aucune analyse exécutée';
     freshness.dataset.state = 'unknown';
+  } else if (next.stateReason && !next.staleSince) {
+    freshness.textContent = `${next.stateReason} — dernière analyse ${ago(next.lastCycleAt)}`;
+    freshness.dataset.state = 'stale';
   } else if (next.staleSince) {
     // La fraîcheur est une règle P0 : des données vieilles de vingt minutes ressemblent à des
     // données fraîches, et c'est exactement ce qui fait rater une panne.
@@ -207,6 +215,21 @@ addEventListener('visibilitychange', () => {
   if (!document.hidden) backgroundRefresh();
 });
 
+/* ── Connectivité ──────────────────────────────────────────────────────── */
+
+// `navigator.onLine` ne prouve pas qu'on atteint l'agent — un réseau sans route vers lui se dit
+// « en ligne ». Il prouve en revanche l'inverse : hors ligne, plus rien n'est à jour, et l'écran
+// continuerait de se lire comme d'habitude. L'échec de sondage reste porté par la pastille d'état.
+function syncConnectivity() {
+  $('#offline').hidden = navigator.onLine;
+}
+
+addEventListener('online', () => {
+  syncConnectivity();
+  backgroundRefresh();
+});
+addEventListener('offline', syncConnectivity);
+
 /* ── Routage ───────────────────────────────────────────────────────────── */
 
 const currentView = () => (VIEWS[viewName()] ? viewName() : 'overview');
@@ -226,13 +249,17 @@ async function route() {
       else link.removeAttribute('aria-current');
     }
     $('#crumb').textContent = VIEWS[view].title;
+    // Le titre suit la vue : un onglet parmi dix ne se retrouve pas, et un signet pris sur un
+    // écran précis reviendrait avec le nom de l'application pour seul repère.
+    document.title = `${VIEWS[view].title} — Kex Agent Control Center`;
+    $('#announcer').textContent = VIEWS[view].title;
     supervision.syncFilters();
     await VIEWS[view].load?.();
   }
   else {
     supervision.syncFilters();
   }
-  await supervision.restoreFromUrl();
+  await restoreDrawerFromUrl();
 }
 
 /**
@@ -273,6 +300,7 @@ $('#forget-key').addEventListener('click', () => {
 addEventListener('hashchange', route);
 
 syncThemeButton();
+syncConnectivity();
 $('#credential-label').textContent = credentials.get() ? 'Jeton actif' : 'Jeton absent';
 route();
 refreshStatus();

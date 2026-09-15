@@ -152,6 +152,16 @@ sa présence est affichée. L'écran est en lecture seule — le client du modè
 démarrage du contexte, un champ modifiable y accepterait une valeur que l'échange suivant
 ignorerait.
 
+### Savoir quel modèle mettre dans `OPENROUTER_MODEL`
+
+Sur une passerelle, le panneau **Modèles disponibles** de l'écran Configuration lit le catalogue
+qu'elle publie (`GET /api/agent/llm/models`) et dit, pour chacun, s'il sait **appeler des outils**.
+C'est la capacité dont cet agent ne peut pas se passer : un modèle qui ne l'a pas le rend muet.
+
+Trois réponses et non deux — « Outils », « Sans outils », « Non annoncé ». Une passerelle qui ne
+publie pas ses paramètres ne refuse rien, et afficher « non » écarterait des modèles utilisables.
+Le catalogue est celui que la passerelle déclare : il n'est pas vérifié par un appel réel.
+
 ### Un autre fournisseur
 
 | Fournisseur | Starter | `spring.ai.model.chat` | Propriétés |
