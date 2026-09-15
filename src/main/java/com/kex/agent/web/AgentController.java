@@ -5,6 +5,7 @@ package com.kex.agent.web;
 import java.util.List;
 import java.util.Map;
 
+import com.anthropic.errors.AnthropicException;
 import com.kex.agent.agent.AgentAnswer;
 import com.kex.agent.agent.AgentEvent;
 import com.kex.agent.agent.AgentService;
@@ -21,6 +22,7 @@ import com.kex.agent.mcp.McpToolCatalog;
 import com.kex.agent.mcp.McpToolResult;
 import com.kex.agent.mcp.UnknownMcpServerException;
 import com.kex.agent.mcp.UnsupportedMcpCapabilityException;
+import com.openai.errors.OpenAIException;
 import io.modelcontextprotocol.spec.McpError;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -166,6 +168,21 @@ class AgentController {
 
     @ExceptionHandler(McpError.class)
     ProblemDetail mcpError(McpError ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
+    }
+
+    /**
+     * Sans ce handler, une clé de fournisseur absente ou refusée remontait sans être attrapée —
+     * et pour Anthropic, systématiquement en 401, le même code que notre propre bearer rejeté.
+     * Un appelant dont le jeton kex.agent.api-key était pourtant valide se voyait répondre comme
+     * si ce jeton-là avait été refusé, sans aucun moyen de distinguer les deux. Les deux SDK
+     * partagent la même forme : une exception racine par fournisseur, une sous-classe par code
+     * HTTP amont — capter la racine couvre l'authentification aussi bien que le rate limit ou une
+     * panne du fournisseur, sans avoir à connaître chaque sous-classe.
+     */
+    @ExceptionHandler({AnthropicException.class, OpenAIException.class})
+    ProblemDetail modelProviderFailure(RuntimeException ex) {
+        log.warn("Le fournisseur du modèle a refusé ou n'a pas pu traiter l'appel", ex);
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
     }
 }

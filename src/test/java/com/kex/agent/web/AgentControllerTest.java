@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
+import com.anthropic.errors.AnthropicException;
 import com.kex.agent.agent.AgentAnswer;
 import com.kex.agent.agent.AgentEvent;
 import com.kex.agent.agent.AgentService;
@@ -22,6 +23,7 @@ import com.kex.agent.mcp.McpToolInfo;
 import com.kex.agent.mcp.McpToolResult;
 import com.kex.agent.mcp.UnknownMcpServerException;
 import com.kex.agent.mcp.UnsupportedMcpCapabilityException;
+import com.openai.errors.OpenAIException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -246,6 +248,37 @@ class AgentControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"message":"bonjour","schema":{"type":"object"}}"""))
+                .hasStatus(502);
+    }
+
+    /**
+     * Sans ce handler, une clé Anthropic absente ou refusée remontait non attrapée et se
+     * traduisait en 401 — le même code que notre propre bearer rejeté. Un appelant au jeton
+     * kex.agent.api-key parfaitement valide se voyait répondre comme si ce jeton-là était en
+     * cause, sans aucun moyen de distinguer les deux.
+     */
+    @Test
+    void retourne_502_et_non_401_quand_le_fournisseur_anthropic_refuse_la_cle() {
+        willThrow(new AnthropicException("invalid x-api-key"))
+                .given(agentService).ask("conv-1", "bonjour");
+
+        assertThat(mvc.post().uri("/api/agent/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"conversationId":"conv-1","message":"bonjour"}"""))
+                .hasStatus(502).bodyJson().extractingPath("$.detail").isEqualTo("invalid x-api-key");
+    }
+
+    /** Même défaut, même correctif, côté OpenRouter — l'autre fournisseur que l'agent sait appeler. */
+    @Test
+    void retourne_502_et_non_401_quand_la_passerelle_openai_refuse_la_cle() {
+        willThrow(new OpenAIException("invalid api key"))
+                .given(agentService).askStructured("conv-1", "bonjour", Map.of("type", "object"));
+
+        assertThat(mvc.post().uri("/api/agent/chat/structured")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"conversationId":"conv-1","message":"bonjour","schema":{"type":"object"}}"""))
                 .hasStatus(502);
     }
 
