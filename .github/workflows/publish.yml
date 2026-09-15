@@ -1,0 +1,301 @@
+name: Publish
+
+# Publication de l'image sur Docker Hub et sur GHCR, en miroir.
+#
+# Rien à saisir au déclenchement : la version est celle de `pom.xml`, lue par Maven. Une version
+# tapée à la main finit par diverger du jar qu'elle étiquette, et une image mal étiquetée est pire
+# qu'une image absente — personne ne saura ce qui tourne.
+#
+# Deux déclencheurs, deux politiques :
+#   - un tag `vX.Y.Z` publie une version, avec ses tags mobiles, un SBOM attesté et une release ;
+#   - un lancement manuel publie `edge` et l'empreinte du commit, jamais `latest`.
+on:
+  push:
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # L'image n'est pas publiée sans que la suite soit passée sur la même révision. Le workflow CI
+  # ne se déclenche pas sur un tag — il ne couvre que `main` et les pull requests — donc s'y fier
+  # publierait au mieux le résultat d'une autre révision.
+  verify:
+    if: github.repository == 'devdownin/Kex-agent-ai'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build and test
+        run: ./mvnw -B --no-transfer-progress verify
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Au-delà du défaut en lecture seule : GHCR se pousse avec le jeton d'exécution du workflow
+    # (packages), une release se crée avec le même jeton (contents). Ni l'un ni l'autre n'exige
+    # un secret de plus — c'est le jeton que GitHub Actions fournit déjà à chaque exécution.
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      # Le nom du dépôt d'images et l'identifiant sont des variables, le jeton un secret : un nom
+      # d'utilisateur n'est pas un secret, et le ranger comme tel le rend invisible dans les
+      # journaux au moment où on cherche pourquoi l'authentification a échoué. GHCR n'a pas cette
+      # question à poser : son espace de noms est celui du dépôt GitHub, en minuscules — une
+      # organisation au nom mixte casserait sinon la référence d'image, GHCR l'exige en minuscules.
+      - name: Resolve the destinations
+        id: destination
+        env:
+          NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+          IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+        run: |
+          set -euo pipefail
+          namespace="${NAMESPACE:-compagnonsdudev}"
+          image="${IMAGE:-kex-agent-ai}"
+          if [ -z "${USERNAME}" ]; then
+            echo "::error::La variable DOCKERHUB_USERNAME est vide. Settings → Secrets and variables → Actions → Variables."
+            exit 1
+          fi
+          # GHCR exige des composants de chemin en minuscules ; Docker Hub les tolère mixtes
+          # mais les traite comme équivalents, donc les deux gagnent à être cohérents ici.
+          owner_lower="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          image_lower="$(printf '%s' "$image" | tr '[:upper:]' '[:lower:]')"
+          echo "dockerhub_repository=${namespace}/${image_lower}" >> "$GITHUB_OUTPUT"
+          echo "ghcr_repository=ghcr.io/${owner_lower}/${image_lower}" >> "$GITHUB_OUTPUT"
+          echo "Docker Hub : ${namespace}/${image_lower}"
+          echo "GHCR       : ghcr.io/${owner_lower}/${image_lower}"
+
+      # La version vient du projet, jamais d'une saisie. Sur un tag, les deux doivent coïncider :
+      # un `v0.3.0` posé sur un pom resté en 0.2.0 publierait une image qui ment sur son contenu,
+      # et le tag Git n'est pas récupérable une fois poussé.
+      - name: Resolve the version and the tags
+        id: version
+        run: |
+          set -euo pipefail
+          # La dernière ligne non vide : un avertissement de Maven en tête de sortie deviendrait
+          # sinon une partie de la version, et le tag publié serait illisible.
+          version="$(./mvnw -B -q --no-transfer-progress help:evaluate \
+            -Dexpression=project.version -DforceStdout | tr -d '\r' | grep -v '^$' | tail -1)"
+          echo "Version du projet : ${version}"
+
+          dockerhub="${{ steps.destination.outputs.dockerhub_repository }}"
+          ghcr="${{ steps.destination.outputs.ghcr_repository }}"
+          short="$(git rev-parse --short HEAD)"
+          tags=""
+          prerelease="false"
+
+          # Un seul suffixe, les deux registres : Docker Hub et GHCR portent la même image sous le
+          # même nom, et dupliquer la liste à la main serait le genre d'endroit où l'un des deux
+          # finit par diverger de l'autre sans que personne ne le remarque.
+          add_tag() {
+            tags="${tags:+${tags},}${dockerhub}:${1},${ghcr}:${1}"
+          }
+
+          add_tag "sha-${short}"
+
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            if [ "$tag" != "$version" ]; then
+              echo "::error::Le tag ${GITHUB_REF_NAME} ne correspond pas à la version du pom (${version}). Aligner l'un sur l'autre avant de republier."
+              exit 1
+            fi
+            case "$version" in
+              *SNAPSHOT*)
+                echo "::error::Une version SNAPSHOT ne se publie pas : son contenu change sous le même nom."
+                exit 1
+                ;;
+            esac
+            add_tag "${version}"
+            # Les tags mobiles n'accompagnent qu'une version finale. Faire pointer `latest` sur une
+            # préversion enverrait un `docker pull` sans tag sur du code qu'on n'a pas fini de juger.
+            case "$version" in
+              *-*)
+                echo "Préversion : ni latest ni tags mobiles."
+                prerelease="true"
+                ;;
+              [0-9]*.[0-9]*.[0-9]*)
+                major="${version%%.*}"
+                minor="${version%.*}"
+                add_tag "${minor}"
+                add_tag "${major}"
+                add_tag "latest"
+                ;;
+              # Une version qui n'est pas en trois nombres n'a pas de tags mobiles évidents :
+              # publier `:1` depuis « 1.2 » ou « 2026.03 » inventerait une hiérarchie.
+              *)
+                echo "Version hors du format X.Y.Z : version exacte seulement."
+                ;;
+            esac
+          else
+            # Hors tag, `edge` désigne « la dernière construite », ce qu'elle est vraiment.
+            add_tag "edge"
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${short}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${prerelease}" >> "$GITHUB_OUTPUT"
+          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+          echo "Tags publiés : ${tags}"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      # `docker login` plutôt que docker/login-action : une action de moins à épingler et à suivre
+      # pour deux lignes de shell, et le jeton ne transite que par l'entrée standard.
+      - name: Log in to Docker Hub
+        env:
+          USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::Le secret DOCKERHUB_TOKEN est vide. Settings → Secrets and variables → Actions → Secrets."
+            exit 1
+          fi
+          printf '%s' "${TOKEN}" | docker login --username "${USERNAME}" --password-stdin
+
+      # Le jeton d'exécution du workflow suffit : aucun secret à poser pour ce miroir.
+      - name: Log in to GHCR
+        run: |
+          set -euo pipefail
+          printf '%s' "${{ secrets.GITHUB_TOKEN }}" | \
+            docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      # Chargée dans le démon local, pas encore poussée : l'image passe par le scanner avant
+      # d'atteindre un registre public. `cache-to` alimente le cache que la construction poussée
+      # ci-dessous relit — la reconstruire n'y coûte quasiment rien, les couches sont déjà bâties.
+      - name: Build (for scanning)
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: ${{ steps.version.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # `ignore-unfixed` : une CVE de l'image de base sans correctif publié bloquerait indéfiniment
+      # sans qu'on puisse rien y faire — ce n'est pas un défaut de cette image, c'est un défaut
+      # qu'aucune version de cette image ne peut corriger seule. `CRITICAL,HIGH` : le reste
+      # remonterait trop de bruit pour rester lu.
+      - name: Scan the image before it is public
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.destination.outputs.dockerhub_repository }}:sha-${{ steps.version.outputs.short_sha }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+      # Le scan a passé : la même construction repart, cette fois vers les deux registres, avec un
+      # SBOM attesté — sans lui, personne ne peut interroger l'image publiée pour savoir ce qu'elle
+      # contient, seulement le SBOM que `ci.yml` dépose en artefact de build, qui ne voyage pas
+      # avec elle. `linux/amd64` seulement : une image arm64 supposerait QEMU et une compilation
+      # Maven émulée, soit un ordre de grandeur de plus sur la durée — omission délibérée.
+      - name: Build and push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          sbom: true
+          tags: ${{ steps.version.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=Kex Agent AI
+            org.opencontainers.image.description=Agent IA outillé par MCP, branché sur Kafka SQL Explorer
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=GPL-3.0-or-later
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # L'image est retirée du registre et relue : un `push` réussi dit que les couches sont
+      # parties, pas que le manifeste est servable sous le tag attendu. Un seul registre suffit à
+      # le prouver : les deux reçoivent la même construction dans le même appel, donc le même
+      # digest — la doubler contre GHCR ne vérifierait rien de plus.
+      - name: The published image must start
+        run: |
+          set -euo pipefail
+          published="${{ steps.destination.outputs.dockerhub_repository }}:sha-$(git rev-parse --short HEAD)"
+          docker rmi "$published" > /dev/null 2>&1 || true
+          docker pull "$published"
+          docker run -d --name kex-agent-published -p 8081:8081 \
+            -e ANTHROPIC_API_KEY=publish-dummy -e KEX_AGENT_API_KEY=publish-secret \
+            "$published"
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8081/actuator/health > /dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8081/actuator/health
+          docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$published"
+
+      - name: Published image logs on failure
+        if: failure()
+        run: docker logs kex-agent-published || true
+
+      - name: Stop the published image
+        if: always()
+        run: docker rm -f kex-agent-published || true
+
+      # Seulement sur un tag : une exécution manuelle publie `edge`, pas une version, et n'a rien
+      # à annoncer. Les notes se génèrent depuis les commits — cette PR n'organise pas encore ses
+      # changements en unités que GitHub sait résumer autrement.
+      - name: Create the GitHub release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          name: ${{ github.ref_name }}
+          prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          body: |
+            ```
+            docker pull ${{ steps.destination.outputs.dockerhub_repository }}:${{ steps.version.outputs.version }}
+            docker pull ${{ steps.destination.outputs.ghcr_repository }}:${{ steps.version.outputs.version }}
+            ```
+
+      # Seulement sur un tag, pour la même raison : la page Docker Hub n'a rien à apprendre d'une
+      # image `edge`. Le jeton exige un accès en écriture sur le dépôt — le même que `docker push`,
+      # rien à ajouter pour ce miroir de description.
+      - name: Sync the Docker Hub description
+        if: github.ref_type == 'tag'
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ steps.destination.outputs.dockerhub_repository }}
+          short-description: ${{ github.event.repository.description }}
+          enable-url-completion: true
+
+      - name: Log out
+        if: always()
+        run: |
+          docker logout || true
+          docker logout ghcr.io || true

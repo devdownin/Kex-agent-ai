@@ -52,6 +52,15 @@ export OPENROUTER_MODEL=anthropic/claude-sonnet-4.5   # any tool-calling model o
 It is a hosted gateway, so prompts and tool results — including the Kafka records the agent reads —
 travel through a third party. [The trade-offs, in full](docs/CONFIGURATION.md#choisir-le-fournisseur-de-modele).
 
+Just the agent, against an Explorer you already run:
+
+```bash
+docker run --rm -p 8081:8081 \
+  -e ANTHROPIC_API_KEY=sk-ant-... -e KEX_AGENT_API_KEY=secret \
+  -e KAFKA_EXPLORER_URL=http://host.docker.internal:8080 \
+  compagnonsdudev/kex-agent-ai:latest
+```
+
 Three containers: a Kafka 4.3 broker (KRaft), Kafka SQL Explorer with its MCP server switched on,
 and this agent wired to it. Explorer lands on **http://localhost:8080**, the agent on
 **http://localhost:8081**.

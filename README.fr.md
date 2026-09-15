@@ -54,6 +54,15 @@ C'est une passerelle hébergée : les prompts et les résultats d'outils — don
 l'agent lit — transitent par un tiers.
 [Ce que ça implique, en détail](docs/CONFIGURATION.md#choisir-le-fournisseur-de-modele).
 
+L'agent seul, devant un Explorer que vous faites déjà tourner :
+
+```bash
+docker run --rm -p 8081:8081 \
+  -e ANTHROPIC_API_KEY=sk-ant-... -e KEX_AGENT_API_KEY=secret \
+  -e KAFKA_EXPLORER_URL=http://host.docker.internal:8080 \
+  compagnonsdudev/kex-agent-ai:latest
+```
+
 Trois conteneurs : un broker Kafka 4.3 (KRaft), Kafka SQL Explorer avec son serveur MCP allumé, et
 cet agent branché dessus. L'Explorer sur **http://localhost:8080**, l'agent sur
 **http://localhost:8081**.
