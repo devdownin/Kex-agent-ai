@@ -66,7 +66,20 @@
     </div>
   </header>
 
+  <!-- Le changement de vue ne déplace pas le focus : sans région vive, un lecteur d'écran ne
+       signale rien et la personne croit être restée au même endroit. -->
+  <p class="sr-only" id="announcer" role="status" aria-live="polite"></p>
+
   <main id="main" tabindex="-1">
+
+    <!-- Hors ligne, tout se lit comme d'habitude alors que plus rien n'est à jour : c'est la même
+         règle que la fraîcheur, un cran plus haut. Dans le flux plutôt qu'en surimpression, pour
+         ne rien recouvrir ; `role="status"` pour que le lecteur d'écran l'annonce sans voler le
+         focus. -->
+    <p class="offline" id="offline" role="status" hidden>
+      Navigateur hors ligne — ce qui est affiché date de la dernière connexion.
+    </p>
+
 
     <!-- ══ Vue d'ensemble ══ -->
     <section class="view" id="view-overview" hidden>
@@ -180,6 +193,19 @@
 
     <!-- ══ Configuration ══ -->
     <section class="view" id="view-settings" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <h1>Modèle de langage</h1>
+          <button type="button" class="ghost" id="refresh-llm">Rafraîchir</button>
+        </div>
+        <p class="hint">Lue dans la configuration résolue de l'instance — variables d'environnement
+          comprises — et non dans un fichier : ce qui est affiché est ce qui tourne. En lecture
+          seule, le client du modèle étant câblé au démarrage ; un champ modifiable ici accepterait
+          une valeur que l'échange suivant ignorerait. Ces réglages se posent en variables
+          d'environnement, et prennent effet au redémarrage de l'agent.</p>
+        <div id="llm-config"></div>
+      </section>
+
       <div class="split">
         <section class="panel">
           <div class="panel-head"><h1>Détection</h1></div>
@@ -245,6 +271,16 @@
         <div class="servers" id="servers"></div>
       </section>
       <section class="panel">
+        <div class="panel-head">
+          <h1>Cluster Kafka</h1>
+          <button type="button" class="ghost" id="refresh-kafka">Rafraîchir</button>
+        </div>
+        <p class="hint">Relevé par les outils du serveur MCP, jamais recalculé ici : les verdicts de
+          retard sont ceux que l'outil rend, et une mesure absente s'affiche « non mesurée », pas zéro.</p>
+        <div id="kafka-topics"></div>
+      </section>
+
+      <section class="panel">
         <div class="panel-head"><h2>Santé de l'instance</h2></div>
         <div class="tiles" id="metric-tiles"></div>
         <pre class="dump" id="health-dump">—</pre>
@@ -284,7 +320,7 @@
   </main>
 
   <!-- Panneau latéral : le détail sans perdre le contexte de la liste. -->
-  <aside class="drawer" id="drawer" hidden aria-labelledby="drawer-title">
+  <aside class="drawer" id="drawer" hidden role="dialog" aria-modal="true" aria-labelledby="drawer-title">
     <div class="drawer-head">
       <h2 id="drawer-title">Détail</h2>
       <button type="button" class="ghost" id="drawer-close" aria-label="Fermer le panneau">✕</button>

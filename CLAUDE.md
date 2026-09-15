@@ -13,6 +13,9 @@ serveur MCP de [Kafka SQL Explorer](https://github.com/devdownin/Kafkaexplorer).
 ./mvnw test -Dtest=NomDuTest               # un test
 ./mvnw spring-boot:run                     # agent sur 8081
 docker compose -f compose/smoke.yml up -d --wait   # agent + serveur MCP factice
+
+# La console au navigateur : l'agent doit tourner, Playwright est hors du projet
+PLAYWRIGHT_MODULE=/chemin/playwright/index.mjs node src/test/browser/console.mjs
 ```
 
 JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
@@ -24,9 +27,10 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 | `web/` | Contrôleur REST, sécurité, filtre de débit |
 | `agent/` | Conversation : mémoire, appel bloquant, flux SSE |
 | `mcp/` | Introspection et invocation des serveurs MCP |
-| `config/` | `ChatClient`, propriétés, bearer MCP, seau à jetons |
+| `config/` | `ChatClient`, propriétés, bearer MCP, seau à jetons, lecture de la configuration du modèle |
 | `knowledge/` | Base de connaissance optionnelle : magasin vectoriel, advisor, ingestion |
 | `supervision/` | Cycle d'analyse, politique d'autonomie, décisions, validation humaine, audit |
+| `kafka/` | Vue technique du cluster : traduit les outils MCP d'Explorer, ne recalcule rien |
 | `resources/static/` | La Control Center : console d'exploitation, sans étape de build |
 
 ## Conventions
@@ -48,6 +52,13 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   celui-ci est inconnu avant le handshake.
 - **Ne pas déclarer de bean `VectorStore` hors de `kex.agent.knowledge.enabled`** : sans modèle
   d'embeddings, le contexte ne démarre pas. Même piège que le starter JDBC ci-dessous.
+- **Deux starters de modèle sur le classpath imposent `spring.ai.model.chat`.** Chaque
+  autoconfiguration de modèle s'active en l'absence de propriété (`matchIfMissing`) : sans cette
+  ligne, Anthropic et OpenAI déclarent chacun leur `ChatModel` et le contexte échoue au démarrage.
+  Les modalités que le starter OpenAI apporte en prime — embeddings, images, modération, audio —
+  sont à `none` pour la même raison, et parce qu'un `EmbeddingModel` non demandé satisferait en
+  silence la base de connaissance.
+
 - **Ne pas ajouter le starter JDBC hors du profil `shared-memory`** : sa seule présence sur le
   classpath fait échouer le démarrage quand aucune base n'est configurée.
 - **Ne pas désactiver CSRF globalement** — CodeQL le signale, à juste titre. Il est levé sur
@@ -55,8 +66,29 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 - **Le refus d'authentification appartient à l'`AuthenticationEntryPoint`**, pas au filtre :
   dans le filtre, il bloque aussi les routes en `permitAll` comme `/actuator/health`.
 
+- **L'état de l'agent regarde aussi ce qui le rend capable d'agir.** Sans clé de modèle il est
+  `DEGRADED`, jamais analysé il est `UNKNOWN` : un vert en tête d'écran affirmerait que tout va
+  bien au-dessus d'un bandeau qui dit « Aucune analyse exécutée ».
+
+- **Un panneau s'enregistre dans le registre de `core.js`**, avec la clef d'URL qui le rouvre. Un
+  panneau ouvert hors registre est fermé au premier routage par les autres, qui ne le connaissent
+  pas — et le bouton Retour ne le referme pas.
+
+- **Un tri lit `data-sort` quand l'affiché ne se trie pas.** « il y a 4 min » ou « 200 000 » avec
+  son espace fine, rangés par ordre alphabétique, donnent un ordre qui a l'air juste.
+
 - **Un état illisible vaut `UNKNOWN`, jamais `OK`.** Une donnée manquante et une donnée saine se
   ressemblent dans un tableau de bord, et les confondre fait rater une panne.
+
+- **Un relevé partiel prouve une présence, jamais une absence.** Un `OK` rendu sur une passe
+  incomplète redevient `UNKNOWN` ; un `ERROR` tient. Une couverture non remontée ne dégrade rien —
+  la plupart des serveurs MCP n'en portent pas.
+
+- **Une mesure absente n'est jamais zéro.** Un lag à `0` affirme « rattrapé » ; une mesure absente
+  n'affirme rien. Les confondre fait lire un consumer à l'arrêt comme un consumer à jour.
+
+- **Le serveur MCP de Kafka SQL Explorer est en lecture seule.** Quinze outils, aucun mutant :
+  devant lui l'agent observe et recommande, il n'agit pas.
 
 - **Le mode d'exécution ne peut que restreindre l'autonomie d'une capacité.** L'élargir depuis le
   mode ouvrirait d'un coup des actions délibérément mises sous supervision.

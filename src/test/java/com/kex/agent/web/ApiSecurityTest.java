@@ -53,6 +53,14 @@ class ApiSecurityTest {
     }
 
     @Test
+    void la_configuration_du_modele_reste_fermee() throws Exception {
+        // Elle rend le point d'accès, le prompt système et la présence d'une clé : la forme de
+        // l'API est publique, la configuration de l'instance ne l'est pas.
+        assertThat(status("/api/agent/llm", null)).isEqualTo(401);
+        assertThat(status("/api/agent/llm", "Bearer secret")).isEqualTo(200);
+    }
+
+    @Test
     void laisse_passer_la_sonde_de_sante() throws Exception {
         assertThat(status("/actuator/health", null)).isEqualTo(200);
     }

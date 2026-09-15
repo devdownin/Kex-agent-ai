@@ -203,6 +203,16 @@ body {
 .freshness { font-size: 12px; color: var(--ink-3); }
 .freshness[data-state="stale"] { color: var(--warn); font-weight: 600; }
 
+.offline {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-weight: 600;
+  font-size: 13px;
+}
+
 .topbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 .status {
@@ -222,6 +232,9 @@ body {
 .status[data-state="WARNING"] { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
 .status[data-state="ERROR"] { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
 .status[data-state="PAUSED"] { color: var(--ink-2); }
+/* Ni vert ni ambre, délibérément : rien n'a été mesuré, ce qui n'affirme ni le sain ni
+   le défaillant. Le glyphe « ? » porte le sens, la teinte ne le porte jamais seule. */
+.status[data-state="UNKNOWN"], .state-tag[data-state="UNKNOWN"] { color: var(--ink-2); }
 .status[data-state="RUNNING"] { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
 
 main {
@@ -310,6 +323,9 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
 .hint { color: var(--ink-3); font-size: 12px; margin: 0 0 8px; }
 .muted { color: var(--ink-3); }
 .strong { font-weight: 600; }
+/* Une valeur composée — pastille, nom lisible, valeur brute — qui passe à la ligne au lieu
+   de pousser la colonne hors de l'écran. */
+.inline { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .warn { color: var(--warn); }
 .mono, code, pre { font-family: var(--mono); }
 
@@ -336,6 +352,8 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
   max-height: 380px;
   overflow: auto;
 }
+/* Du texte suivi, pas du JSON : il se replie plutôt que de défiler latéralement. */
+.dump.prose { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* ── États UX ────────────────────────────────────────────────────────── */
 
@@ -416,6 +434,23 @@ table.grid th {
   white-space: nowrap;
 }
 table.grid td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+/* Les chiffres s'alignent en colonne : à chasse variable, 111 paraît plus court que 999. */
+table.grid td.mono, table.grid td .mono, .definition dd .mono { font-variant-numeric: tabular-nums; }
+/* Un bouton, pas un `th` cliquable : le tri doit s'atteindre au clavier comme à la souris. */
+table.grid th button.sort {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+table.grid th button.sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+table.grid th[aria-sort] button.sort { color: var(--ink); }
+table.grid th[aria-sort="ascending"] button.sort::after { content: "\2191"; }
+table.grid th[aria-sort="descending"] button.sort::after { content: "\2193"; }
+/* Sans réserve, la flèche décale la colonne au premier tri. */
+table.grid th button.sort::after { content: "\2195"; opacity: .35; }
+table.grid th[aria-sort] button.sort::after { opacity: 1; }
 table.grid tr.clickable { cursor: pointer; }
 table.grid tr.clickable:hover td { background: var(--surface-2); }
 
@@ -485,6 +520,24 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 .observations .value { font-family: var(--mono); font-weight: 600; }
 
 .stack-panels { display: flex; flex-direction: column; gap: 16px; }
+
+.unmeasured {
+  font-style: italic;
+  color: var(--ink-3);
+  border-bottom: 1px dotted var(--ink-3);
+  cursor: help;
+}
+
+.definition-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 13px;
+}
+.definition-row .label { color: var(--ink-3); font-size: 12px; }
 
 .perf { display: flex; flex-direction: column; gap: 14px; }
 .perf-group h3 { margin: 0 0 6px; }

@@ -4,8 +4,9 @@
 // Les vues de supervision : observer → comprendre → décider → agir → vérifier.
 
 import {
-  $, ago, api, clockTime, confirmAction, duration, el, empty, errorState, frag, loading, percent,
-  render, report, stamp, stateTag, toast,
+  $, ago, api, clockTime, confirmAction, definition, dismissDrawer, drawerOpen, duration, el, empty,
+  errorState, frag, loading, openDrawer, params, percent, registerDrawer, render, report, setParams,
+  sortable, stamp, stateTag, toast,
 } from './core.js';
 
 const BASE = '/api/agent/supervision';
@@ -22,6 +23,15 @@ const AUTONOMY = {
   AUTOMATIC: 'Automatique',
   SUPERVISED: 'Validation humaine',
   FORBIDDEN: 'Interdit',
+};
+
+const STOP_REASONS = {
+  TIME_BUDGET: 'budget de temps épuisé',
+  TOPIC_LIMIT: 'plafond de topics atteint',
+  RECORD_LIMIT: 'plafond d’enregistrements atteint',
+  CANCELLED: 'relevé annulé',
+  PARTIAL_FAILURE: 'une source a échoué',
+  NOT_REPORTED: 'aucune enveloppe de couverture rendue',
 };
 
 const DECISION_LABELS = {
@@ -44,6 +54,9 @@ const DECISION_STATES = {
 
 const AGENT_STATES = {
   OPERATIONAL: { tag: 'OK', label: 'OPÉRATIONNEL', mark: '●' },
+  // Distinct d'OPÉRATIONNEL et distinct de DÉGRADÉ : rien n'a été mesuré, ce qui n'affirme ni
+  // que tout va bien, ni que quelque chose va mal.
+  UNKNOWN: { tag: 'UNKNOWN', label: 'ÉTAT INCONNU', mark: '?' },
   DEGRADED: { tag: 'WARNING', label: 'DÉGRADÉ', mark: '▲' },
   ERROR: { tag: 'ERROR', label: 'EN ERREUR', mark: '✕' },
   PAUSED: { tag: 'PAUSED', label: 'EN PAUSE', mark: '⏸' },
@@ -151,25 +164,29 @@ function timeline(cycle) {
 
 /* ── Processus ─────────────────────────────────────────────────────────── */
 
-let processFilter = 'ALL';
-let processQuery = '';
-
 export async function processes() {
   await render($('#processes-table'), refresh, (data) => processTable(filtered(data.processes), openProcess));
 }
 
+// Lus dans l'URL, pas dans une variable de module : un rechargement ou un lien partagé retrouve
+// l'écran tel qu'il était.
+const processFilter = () => params().get('etat') || 'ALL';
+const processQuery = () => (params().get('q') || '').toLowerCase();
+
 function filtered(rows) {
+  const state = processFilter();
+  const query = processQuery();
   return (rows || []).filter((row) => {
-    const matchesState = processFilter === 'ALL'
-      || (processFilter === 'ATTENTION' ? row.state === 'WARNING' || row.state === 'ERROR' : row.state === processFilter);
-    const matchesQuery = !processQuery || row.name.toLowerCase().includes(processQuery);
+    const matchesState = state === 'ALL'
+      || (state === 'ATTENTION' ? row.state === 'WARNING' || row.state === 'ERROR' : row.state === state);
+    const matchesQuery = !query || row.name.toLowerCase().includes(query);
     return matchesState && matchesQuery;
   });
 }
 
 /** Colonnes de la vue d'ensemble : l'essentiel d'abord, le relevé technique au second niveau. */
-const COMPACT = ['Processus', 'État', 'Dernière exécution', 'Retard'];
-const FULL = ['Processus', 'État', 'Dernière exécution', 'Durée', 'Retard', 'Relevé'];
+const COMPACT = ['Processus', 'État', 'Dernière exécution', 'Retard', 'Couverture'];
+const FULL = ['Processus', 'État', 'Dernière exécution', 'Durée', 'Retard', 'Couverture', 'Relevé'];
 
 function processTable(rows, onSelect, limit, columns = FULL) {
   if (!rows || !rows.length) {
@@ -190,9 +207,15 @@ function processTable(rows, onSelect, limit, columns = FULL) {
       cell.append(stateTag(row.state));
       return cell;
     },
-    'Dernière exécution': (row) => el('td', null, clockTime(row.lastRun)),
-    Durée: (row) => el('td', null, duration(row.durationMillis)),
-    Retard: (row) => el('td', row.delayMillis ? 'warn' : null, duration(row.delayMillis)),
+    'Dernière exécution': (row) => sortKey(el('td', null, clockTime(row.lastRun)), row.lastRun),
+    Durée: (row) => sortKey(el('td', null, duration(row.durationMillis)), row.durationMillis),
+    Retard: (row) => sortKey(el('td', row.delayMillis ? 'warn' : null, duration(row.delayMillis)),
+      row.delayMillis),
+    Couverture: (row) => {
+      const cell = el('td');
+      cell.append(coverageTag(row.coverage));
+      return cell;
+    },
     Relevé: (row) => el('td', 'muted', row.note || '—'),
   };
 
@@ -213,8 +236,42 @@ function processTable(rows, onSelect, limit, columns = FULL) {
   table.append(body);
 
   const scroll = el('div', 'scroll-x');
-  scroll.append(table);
+  scroll.append(sortable(table));
   return scroll;
+}
+
+/**
+ * Une clé de tri brute quand l'affiché ne se trie pas : « il y a 4 min » ou « 14:32 » rangés par
+ * ordre alphabétique donneraient un ordre qui a l'air juste, ce qui est pire que pas de tri.
+ */
+function sortKey(cell, value) {
+  if (value !== null && value !== undefined) cell.dataset.sort = String(value);
+  return cell;
+}
+
+/**
+ * Un relevé partiel se voit dans le tableau, pas seulement dans le détail : c'est là que naissent
+ * les conclusions fausses, et une case vide ne les signale pas.
+ */
+function coverageTag(coverage) {
+  if (!coverage) return el('span', 'muted', '—');
+  if (coverage.complete) return stateTag('OK', 'Complète');
+  if (coverage.stopReason === 'NOT_REPORTED') {
+    const tag = stateTag('UNKNOWN', 'Non rendue');
+    tag.title = 'Aucun outil n’a rendu d’enveloppe de couverture : ni complète, ni déclarée incomplète.';
+    return tag;
+  }
+  const tag = stateTag('WARNING', 'Partielle');
+  tag.title = coverageReason(coverage);
+  return tag;
+}
+
+function coverageReason(coverage) {
+  const reason = STOP_REASONS[coverage.stopReason] || coverage.stopReason;
+  const missed = coverage.notReached?.length
+    ? ` — non lu : ${coverage.notReached.join(', ')}`
+    : '';
+  return `${reason}${coverage.detail ? ` (${coverage.detail})` : ''}${missed}`;
 }
 
 function openProcess(row) {
@@ -226,14 +283,22 @@ function openProcess(row) {
     definition('Durée', el('span', null, duration(row.durationMillis))),
     definition('Retard', el('span', null, duration(row.delayMillis))),
     definition('Relevé', el('span', null, row.note || '—')),
+    definition('Couverture', coverageTag(row.coverage)),
   );
   const extra = el('div');
+  if (row.coverage && !row.coverage.complete && row.coverage.stopReason !== 'NOT_REPORTED') {
+    const banner = el('p', 'banner',
+      `Relevé partiel : ${coverageReason(row.coverage)}. Une passe incomplète peut prouver une `
+      + 'présence, jamais une absence — l’état est donc inconnu, pas sain.');
+    extra.append(banner);
+  }
   if (alerts.length) {
     extra.append(el('h3', 'drawer-sub', 'Alertes actives'));
     alerts.forEach((alert) => extra.append(alertCard(alert)));
   } else {
     extra.append(empty('Aucune alerte sur ce processus.'));
   }
+  setParams({ processus: row.processId, alerte: null, decision: null }, true);
   openDrawer(row.name, frag(body, extra));
 }
 
@@ -302,6 +367,7 @@ function openAnomaly(anomaly) {
   const decision = (current()?.pending || []).find((item) => item.id === anomaly.pendingDecisionId);
   if (decision) body.append(approvalCard(decision));
 
+  if (anomaly.id) setParams({ alerte: anomaly.id, processus: null, decision: null }, true);
   openDrawer(anomaly.title, body);
 }
 
@@ -373,7 +439,8 @@ async function resolveDecision(decision, approve) {
       { method: 'POST', body });
     toast(`${decision.action} — ${DECISION_LABELS[result.status] || result.status}`,
       result.status === 'FAILED' ? 'error' : undefined);
-    closeDrawer();
+    // Le paramètre part avec le panneau : sinon un rechargement rouvrirait une décision tranchée.
+    dismissDrawer();
     await overview();
     if (!$('#view-decisions').hidden) await decisions();
   } catch (error) {
@@ -407,6 +474,7 @@ function decisionRow(decision) {
 }
 
 async function openDecision(id) {
+  setParams({ decision: id, processus: null, alerte: null }, true);
   openDrawer('Décision', loading());
   try {
     const decision = await api(`${BASE}/decisions/${encodeURIComponent(id)}`);
@@ -498,11 +566,10 @@ export async function alerts() {
 
 /* ── Audit ─────────────────────────────────────────────────────────────── */
 
-let auditQuery = '';
-
 export async function audit() {
+  const query = (params().get('q') || '').toLowerCase();
   await render($('#audit-table'), () => api(`${BASE}/audit`), (rows) => {
-    const matching = rows.filter((row) => !auditQuery || JSON.stringify(row).toLowerCase().includes(auditQuery));
+    const matching = rows.filter((row) => !query || JSON.stringify(row).toLowerCase().includes(query));
     if (!matching.length) return empty('Aucune entrée d’audit.', 'Chaque décision et chaque changement y laisse une trace.');
     const table = el('table', 'grid');
     const head = el('thead');
@@ -514,7 +581,7 @@ export async function audit() {
     const body = el('tbody');
     matching.forEach((row) => {
       const line = el('tr');
-      line.append(el('td', null, stamp(row.at)));
+      line.append(sortKey(el('td', null, stamp(row.at)), row.at));
       line.append(el('td', null, row.actor));
       line.append(el('td', 'strong', row.action));
       line.append(el('td', null, row.processId || '—'));
@@ -526,7 +593,7 @@ export async function audit() {
     });
     table.append(body);
     const scroll = el('div', 'scroll-x');
-    scroll.append(table);
+    scroll.append(sortable(table));
     return scroll;
   });
 }
@@ -783,14 +850,6 @@ async function savePolicy(update) {
 
 /* ── Utilitaires de vue ────────────────────────────────────────────────── */
 
-function definition(label, value) {
-  const row = el('dl', 'definition');
-  row.append(el('dt', null, label));
-  const dd = el('dd');
-  dd.append(value);
-  row.append(dd);
-  return row;
-}
 
 /** Les durées arrivent au format ISO-8601 (PT5M) : l'écran parle en 5m. */
 function isoToShort(iso) {
@@ -809,30 +868,43 @@ const shortToIso = (value) => {
   return `PT${match[1]}${match[2].toUpperCase()}`;
 };
 
-/* ── Panneau latéral ───────────────────────────────────────────────────── */
-
-let lastFocused = null;
-
-export function openDrawer(title, body) {
-  lastFocused = document.activeElement;
-  $('#drawer-title').textContent = title;
-  $('#drawer-body').replaceChildren(body);
-  $('#drawer').hidden = false;
-  $('#drawer-close').focus();
+/**
+ * Rouvre le panneau que l'adresse désigne. Appelée après chaque rendu de vue et à chaque
+ * changement d'adresse : c'est ce qui rend un lien vers une décision précise utilisable.
+ */
+/** Les panneaux de la supervision, retrouvés depuis l'adresse. L'ordre fixe leur priorité. */
+function registerDrawers() {
+  registerDrawer('decision', openDecision);
+  registerDrawer('alerte', async (id) => {
+    const alert = (await snapshotFor())?.alerts?.find((item) => item.id === id);
+    if (alert) openAnomaly(alert);
+  });
+  registerDrawer('processus', async (id) => {
+    const row = (await snapshotFor())?.processes?.find((item) => item.processId === id);
+    if (row) openProcess(row);
+  });
 }
 
-export function closeDrawer() {
-  $('#drawer').hidden = true;
-  // Le focus revient d'où il vient : sans ça, la navigation clavier repart du haut de la page.
-  lastFocused?.focus();
-}
+/** Le cache d'abord : rouvrir un panneau depuis un lien ne doit pas relancer une requête pour rien. */
+const snapshotFor = () => Promise.resolve(current() || refresh().catch(() => null));
 
 /* ── Câblage ───────────────────────────────────────────────────────────── */
 
+/** Remet les contrôles en accord avec l'adresse : c'est l'URL qui fait foi, pas l'inverse. */
+export function syncFilters() {
+  const state = processFilter();
+  document.querySelectorAll('.chip-toggle').forEach((button) =>
+    button.setAttribute('aria-pressed', String(button.dataset.filter === state)));
+  const query = params().get('q') || '';
+  if ($('#process-search').value !== query) $('#process-search').value = query;
+  if ($('#audit-search').value !== query) $('#audit-search').value = query;
+}
+
 export function wire() {
-  $('#drawer-close').addEventListener('click', closeDrawer);
+  registerDrawers();
+  $('#drawer-close').addEventListener('click', dismissDrawer);
   addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !$('#drawer').hidden) closeDrawer();
+    if (event.key === 'Escape' && drawerOpen()) dismissDrawer();
   });
 
   $('#refresh-decisions').addEventListener('click', decisions);
@@ -840,20 +912,19 @@ export function wire() {
   $('#refresh-audit').addEventListener('click', audit);
 
   $('#audit-search').addEventListener('input', (event) => {
-    auditQuery = event.target.value.trim().toLowerCase();
+    setParams({ q: event.target.value.trim() });
     audit();
   });
 
   $('#process-search').addEventListener('input', (event) => {
-    processQuery = event.target.value.trim().toLowerCase();
+    setParams({ q: event.target.value.trim() });
     processes();
   });
 
   document.querySelectorAll('.chip-toggle').forEach((button) => {
     button.addEventListener('click', () => {
-      processFilter = button.dataset.filter;
-      document.querySelectorAll('.chip-toggle').forEach((other) =>
-        other.setAttribute('aria-pressed', String(other === button)));
+      setParams({ etat: button.dataset.filter === 'ALL' ? null : button.dataset.filter });
+      syncFilters();
       processes();
     });
   });

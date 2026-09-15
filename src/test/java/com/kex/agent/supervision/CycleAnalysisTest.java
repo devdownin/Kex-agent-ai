@@ -31,6 +31,127 @@ class CycleAnalysisTest {
                 org.assertj.core.api.InstanceOfAssertFactories.MAP).containsKeys("processes", "anomalies");
     }
 
+    /* ── Couverture : un relevé partiel prouve une présence, jamais une absence ───────────── */
+
+    @Test
+    void un_ok_rendu_sur_une_passe_incomplete_redevient_inconnu() {
+        // Le piège que cette correction ferme : l'anomalie était peut-être précisément dans ce qui
+        // n'a pas été lu, et un cycle vert masquerait alors une panne.
+        Map<String, Object> answer = Map.of("processes", List.of(Map.of(
+                "processId", "orders", "state", "OK",
+                "coverage", Map.of("complete", false, "stopReason", "TIME_BUDGET",
+                        "notReached", List.of("demo.orders.3.enriched"),
+                        "detail", "budget de 20 s épuisé"))));
+
+        assertThat(CycleAnalysis.snapshots(answer, KNOWN)).singleElement().satisfies(snapshot -> {
+            assertThat(snapshot.state()).isEqualTo(ProcessState.UNKNOWN);
+            assertThat(snapshot.coverage().knownIncomplete()).isTrue();
+            assertThat(snapshot.coverage().stopReason()).isEqualTo(StopReason.TIME_BUDGET);
+            // Nommé, pas compté : on doit pouvoir voir que le topic concerné y figure.
+            assertThat(snapshot.coverage().notReached()).containsExactly("demo.orders.3.enriched");
+        });
+    }
+
+    @Test
+    void une_erreur_trouvee_sur_une_passe_incomplete_reste_une_erreur() {
+        // Ce qui a été vu a bien été vu : l'incomplétude n'invalide qu'une conclusion négative.
+        Map<String, Object> answer = Map.of("processes", List.of(Map.of(
+                "processId", "orders", "state", "ERROR",
+                "coverage", Map.of("complete", false, "stopReason", "PARTIAL_FAILURE"))));
+
+        assertThat(CycleAnalysis.snapshots(answer, KNOWN)).singleElement()
+                .extracting(ProcessSnapshot::state).isEqualTo(ProcessState.ERROR);
+    }
+
+    @Test
+    void une_couverture_absente_ne_degrade_rien_mais_n_affirme_rien() {
+        // La plupart des serveurs MCP ne portent pas d'enveloppe : tout basculer en UNKNOWN
+        // rendrait le tableau de bord inutilisable partout ailleurs que devant Kafka Explorer.
+        Map<String, Object> answer = Map.of("processes",
+                List.of(Map.of("processId", "orders", "state", "OK")));
+
+        assertThat(CycleAnalysis.snapshots(answer, KNOWN)).singleElement().satisfies(snapshot -> {
+            assertThat(snapshot.state()).isEqualTo(ProcessState.OK);
+            assertThat(snapshot.coverage().stopReason()).isEqualTo(StopReason.NOT_REPORTED);
+            assertThat(snapshot.coverage().complete()).isFalse();
+            // Ni complet, ni déclaré incomplet : on ne conclut ni dans un sens ni dans l'autre.
+            assertThat(snapshot.coverage().knownIncomplete()).isFalse();
+        });
+    }
+
+    @Test
+    void une_completude_affirmee_sans_exhausted_n_est_pas_une_completude() {
+        // Le drapeau est une opinion du modèle ; le motif d'arrêt est ce que l'outil a rendu.
+        Map<String, Object> answer = Map.of("processes", List.of(Map.of(
+                "processId", "orders", "state", "OK",
+                "coverage", Map.of("complete", true, "stopReason", "RECORD_LIMIT"))));
+
+        assertThat(CycleAnalysis.snapshots(answer, KNOWN)).singleElement().satisfies(snapshot -> {
+            assertThat(snapshot.coverage().complete()).isFalse();
+            assertThat(snapshot.state()).isEqualTo(ProcessState.UNKNOWN);
+        });
+    }
+
+    @Test
+    void une_passe_complete_laisse_l_etat_tel_quel() {
+        Map<String, Object> answer = Map.of("processes", List.of(Map.of(
+                "processId", "orders", "state", "OK",
+                "coverage", Map.of("complete", true, "stopReason", "EXHAUSTED"))));
+
+        assertThat(CycleAnalysis.snapshots(answer, KNOWN)).singleElement().satisfies(snapshot -> {
+            assertThat(snapshot.state()).isEqualTo(ProcessState.OK);
+            assertThat(snapshot.coverage().complete()).isTrue();
+        });
+    }
+
+    @Test
+    void un_motif_d_arret_inconnu_ne_passe_pas_pour_une_passe_complete() {
+        Map<String, Object> answer = Map.of("processes", List.of(Map.of(
+                "processId", "orders", "state", "OK",
+                "coverage", Map.of("complete", true, "stopReason", "TOUT_VA_BIEN",
+                        "notReached", List.of("valide", 42)))));
+
+        assertThat(CycleAnalysis.snapshots(answer, KNOWN)).singleElement().satisfies(snapshot -> {
+            assertThat(snapshot.coverage().stopReason()).isEqualTo(StopReason.NOT_REPORTED);
+            assertThat(snapshot.coverage().complete()).isFalse();
+            // Une entrée mal typée dans notReached est écartée, pas convertie.
+            assertThat(snapshot.coverage().notReached()).containsExactly("valide");
+        });
+    }
+
+    @Test
+    void une_enveloppe_mal_typee_vaut_une_enveloppe_absente() {
+        Map<String, Object> answer = Map.of("processes",
+                List.of(Map.of("processId", "orders", "state", "WARNING", "coverage", "complète")));
+
+        assertThat(CycleAnalysis.snapshots(answer, KNOWN)).singleElement().satisfies(snapshot -> {
+            assertThat(snapshot.coverage().stopReason()).isEqualTo(StopReason.NOT_REPORTED);
+            assertThat(snapshot.state()).isEqualTo(ProcessState.WARNING);
+        });
+    }
+
+    @Test
+    void le_schema_exige_la_couverture_de_chaque_releve() {
+        Map<String, Object> processes = nested(CycleAnalysis.schema(), "properties", "processes");
+        Map<String, Object> item = cast(processes.get("items"));
+
+        assertThat(item.get("required").toString()).contains("coverage");
+        assertThat(cast(item.get("properties"))).containsKey("coverage");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> cast(Object value) {
+        return (Map<String, Object>) value;
+    }
+
+    private static Map<String, Object> nested(Map<String, Object> source, String... keys) {
+        Map<String, Object> current = source;
+        for (String key : keys) {
+            current = cast(current.get(key));
+        }
+        return current;
+    }
+
     @Test
     void une_reponse_vide_laisse_les_processus_en_inconnu() {
         List<ProcessSnapshot> snapshots = CycleAnalysis.snapshots(Map.of(), KNOWN);

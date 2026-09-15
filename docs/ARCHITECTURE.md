@@ -44,6 +44,7 @@ flowchart TB
 | `SupervisionService` | Le cycle : observer, analyser, décider, agir ; la politique et l'audit |
 | `SupervisionController` | Le Control Center côté API : vue d'ensemble, décisions, politique, audit |
 | `CycleAnalysis` | Le schéma imposé au modèle et la lecture défensive de ce qu'il rend |
+| `KafkaViewService` | Vue technique du cluster : traduit les outils MCP, ne recalcule aucune sémantique Kafka |
 | `static/` | La Control Center : console d'exploitation servie par l'agent, sans étape de build |
 
 ## Le cycle d'une requête
@@ -127,6 +128,79 @@ spring.ai.tools.limits.on-limit-exceeded: return_error_response
 Sans plafond, un modèle qui s'entête sur un outil tourne jusqu'au timeout HTTP, à vos frais.
 `RETURN_ERROR_RESPONSE` plutôt que `THROW` : le modèle reçoit l'erreur et conclut, là où l'exception
 rendrait une 500 sans réponse à l'appelant.
+
+### Deux fournisseurs de modèle, un seul activé
+
+Le classpath porte les starters Anthropic et OpenAI ; `spring.ai.model.chat` — réglé par
+`KEX_AGENT_LLM_PROVIDER` — désigne celui qui s'active. OpenRouter parle l'API d'OpenAI, c'est donc
+le client OpenAI pointé sur `https://openrouter.ai/api/v1`, sans une ligne de code applicatif :
+`AgentConfig` reçoit un `ChatClient.Builder` et ne sait pas d'où il vient.
+
+Cette propriété n'est pas cosmétique. Chaque autoconfiguration de modèle de Spring AI s'active en
+l'absence de propriété (`matchIfMissing`) : sans elle, les deux déclarent leur `ChatModel` et le
+contexte échoue au démarrage sur un bean ambigu. Même raison pour les modalités que le starter
+OpenAI apporte en prime — embeddings, images, modération, audio — toutes à `none` : elles
+exigeraient une clé, et un `EmbeddingModel` apparu sans qu'on le demande satisferait en silence la
+base de connaissance, qui doit rester un choix explicite. `LlmProviderTest` verrouille les deux
+comportements plutôt que la documentation seule.
+
+Ce que la bascule coûte est dit dans [CONFIGURATION.md](CONFIGURATION.md#choisir-le-fournisseur-de-modele) :
+une passerelle hébergée voit passer les prompts et les résultats d'outils, l'appel d'outils — dont
+cet agent ne peut pas se passer — dépend du modèle choisi, et la sortie structurée du cycle de
+supervision aussi.
+
+`LlmViewService` lit cette configuration dans l'`Environment` résolu, et sert à la fois
+`GET /api/agent/llm` — l'écran Configuration de la console — et l'avertissement de démarrage. Une
+seule lecture pour les deux : séparées, elles finiraient par diverger, et un écran qui contredit
+les logs fait douter des deux. Rien n'en sort qui ressemble à un secret : la clé n'apparaît que
+par sa présence, et la base d'URL est reconstruite sans ses identifiants ni sa chaîne de requête,
+parce qu'un `https://jeton@passerelle/` recopié tel quel finirait dans une capture d'écran.
+
+Le fournisseur retenu sans clé ne fait pas échouer le démarrage : `LlmProviderCheck` le signale et
+laisse l'application monter. Même posture que `kex.agent.api-key` — `/actuator/health`, la console
+et l'introspection MCP doivent rester joignables, puisque c'est là qu'on ira regarder pourquoi rien
+ne répond.
+
+### L'état de l'agent n'est pas celui du dernier cycle
+
+La pastille en tête d'écran répondait à « le dernier cycle s'est-il bien passé ? », pas à « cet
+agent peut-il faire son travail ? ». Une instance sans clé de modèle affichait donc `OPERATIONAL`,
+au-dessus d'un bandeau disant « Aucune analyse exécutée » : les deux moitiés de l'écran se
+contredisaient, et c'est la verte qu'on croit.
+
+`SupervisionService` consulte maintenant `ModelAvailability`, une interface d'une méthode que
+`LlmViewService` implémente — la supervision n'a que faire du modèle retenu ni de sa température.
+L'ordre des règles dit ce qui prime : pause, analyse en cours, échec constaté, clé manquante,
+jamais analysé, données périmées, processus inconnus. L'échec passe avant l'absence de clé parce
+que c'est un fait, là où la clé n'est qu'une cause probable — et l'écran Configuration la nomme.
+
+`AgentState.UNKNOWN` est distinct de `DEGRADED` : rien n'a été mesuré, ce qui n'affirme ni que tout
+va bien, ni que quelque chose va mal. `AgentStatus.stateReason` porte le motif, faute de quoi un
+« DÉGRADÉ » envoie chercher la cause dans les journaux alors qu'elle est connue au moment du calcul.
+
+L'absence n'est retenue que lorsqu'elle est **établie** : un fournisseur dont la configuration
+n'est pas lue ici ne dégrade rien. Dégrader sur une ignorance rendrait l'indicateur faux dans
+l'autre sens.
+
+### La console est vérifiée au navigateur, en CI
+
+La suite Java sert les fichiers de la console et vérifie que les chemins d'API qu'ils citent
+existent ; elle n'exécute pas une ligne de JavaScript. Les défauts d'interface corrigés jusqu'ici
+ont tous été trouvés à la main — donc une fois, sans garantie de non-retour.
+
+`src/test/browser/console.mjs` les rejoue dans Chromium : rechargement de l'écran après saisie du
+jeton, pastille qui ne ment pas sur un agent qui n'a rien analysé, tri numérique avec les valeurs
+absentes en bas, support d'outils non annoncé distinct d'absent, panneau qui retient le focus,
+bouton Retour qui le referme, panneau rouvert depuis son adresse, filtre qui survit au
+rechargement, bandeau hors ligne, et aucune erreur de script sur le parcours.
+
+Playwright n'est pas une dépendance du projet : le job de CI l'installe hors de l'arborescence et
+son chemin arrive par `PLAYWRIGHT_MODULE`. Un `package.json` à la racine ferait vivre une seconde
+chaîne de construction pour un seul fichier. Le script démarre lui-même une passerelle factice
+réduite à `/models` : la CI ne sort jamais vers un tiers.
+
+Ce script a payé le jour où il a été écrit : il a attrapé un panneau — celui du catalogue — ouvert
+hors du registre d'adresses, que le bouton Retour ne refermait donc pas.
 
 ### Mémoire : en mémoire par défaut, partagée sur demande
 
@@ -278,6 +352,77 @@ Par la même logique, un processus déclaré mais absent de la réponse reste af
 lieu de disparaître : le faire sortir du tableau le ferait passer pour surveillé alors qu'il ne
 l'est pas. `CycleAnalysisTest` fixe chacun de ces cas.
 
+### Un relevé partiel prouve une présence, jamais une absence
+
+Les outils MCP de Kafka SQL Explorer portent une enveloppe `coverage` : ce qui a été lu, ce qui ne
+l'a pas été — **nommé, pas compté** — et pourquoi le relevé s'est arrêté. Elle existe pour une
+raison précise, que sa propre spécification place en tête de ses risques : un agent qui reçoit une
+liste vide conclut « ça n'existe pas » là où la phrase vraie est « ce n'était pas dans ce que j'ai
+regardé ».
+
+Notre cycle l'ignorait. Le prompt interdisait d'inventer une valeur, mais rien ne disait au modèle
+de lire la couverture : un `kex_trace_key` coupé sur `TIME_BUDGET` pouvait donc ressortir en `OK`,
+et un cycle vert masquer une panne restée dans la part non lue.
+
+La règle est maintenant explicite des deux côtés. Le prompt exige de lire `stopReason` avant de
+conclure, de suivre les verdicts des outils plutôt que de réinterpréter les nombres, de ne jamais
+lire une valeur non mesurée comme un zéro, et de poursuivre un `resumeToken` quand le budget le
+permet. Le schéma fait de `coverage` un champ **exigé** de chaque relevé.
+
+Côté lecture, `CycleAnalysis.concluded` applique l'asymétrie qui compte :
+
+- un `OK` rendu sur une passe **explicitement** incomplète redevient `UNKNOWN` — l'anomalie était
+  peut-être précisément dans ce qui n'a pas été lu ;
+- un `WARNING` ou un `ERROR` tiennent : ce qui a été vu a bien été vu ;
+- une couverture simplement **non remontée** (`NOT_REPORTED`) ne dégrade rien. La plupart des
+  serveurs MCP ne portent pas d'enveloppe, et tout basculer en `UNKNOWN` rendrait le tableau de
+  bord inutilisable partout ailleurs que devant Kafka SQL Explorer. Ni complet, ni déclaré
+  incomplet : l'écran le dit au lieu de trancher.
+
+Un `complete: true` sans `stopReason: EXHAUSTED` n'est pas retenu : le drapeau est une opinion du
+modèle, le motif d'arrêt est ce que l'outil a réellement rendu.
+
+Comme un relevé partiel donne `UNKNOWN`, il fait basculer l'agent en `DEGRADED` par le chemin qui
+existait déjà — un processus dont on ne sait rien ne ressemble pas à un processus sain.
+
+### La vue technique traduit, elle ne recalcule pas
+
+`kafka/` appelle `kex_list_topics` et `kex_consumer_lag` et traduit leur réponse. Toute la
+sémantique Kafka reste chez Kafka SQL Explorer : les verdicts de retard (`CAUGHT_UP`, `BEHIND`,
+`STALLED`) sont repris **tels quels** plutôt que relus depuis les nombres — c'est l'outil qui sait
+qu'un retard sans membre assigné ne se résorbera pas de lui-même, et le recalculer ici reviendrait
+à réimplémenter sa sémantique moins bien.
+
+`MeasuredValue` prolonge la même règle que `Coverage` d'un cran : une mesure absente n'est pas
+zéro. Un lag à `0` affirme « rattrapé » ; les confondre fait lire un consumer à l'arrêt comme un
+consumer à jour. L'écran affiche « non mesuré » avec le motif en infobulle, jamais un tiret
+ambigu ni un chiffre.
+
+L'écart entre `groupsExamined` et `groupsInCluster` est affiché pour la même raison : le taire
+ferait lire une liste courte comme une liste complète.
+
+Rien n'y lève d'exception vers l'appelant. Un outil absent, un serveur injoignable ou une réponse
+illisible produisent une vue vide **qui dit pourquoi**, en `200`. Un serveur MCP absent est une
+information d'exploitation, pas une panne de l'agent : rendre une erreur HTTP ferait tomber l'écran
+au lieu de l'informer.
+
+Les noms d'outils sont configurables. L'agent peut être branché sur un autre serveur MCP, et une
+vue qui échoue en nommant l'outil attendu se règle — une vue qui échoue en silence se contourne.
+
+### Ce que le serveur MCP de Kafka SQL Explorer expose réellement
+
+Vérifié dans son dépôt, pas dans sa spécification : quinze outils, **tous en lecture seule**
+(`kex_list_topics`, `kex_describe_topic`, `kex_preview_messages`, `kex_infer_schema`,
+`kex_sql_query`, `kex_list_tables`, `kex_trace_key`, `kex_resume_trace`, `kex_compare_traces`,
+`kex_deduce_data_model`, `kex_build_join`, `kex_run_audit`, `kex_get_audit`, `kex_consumer_lag`,
+`kex_suggest_kpis`). `MutatingMcpTools` est une interface sans implémentation, `readonly` vaut
+`true` en dur, et les mutations d'administration sont hors de son périmètre déclaré.
+
+Conséquence pour nos capacités : aucune n'a de contrepartie sur ce serveur. Devant lui, l'agent
+observe et recommande — il n'agit pas. Ce n'est pas un cas dégradé, c'est l'état nominal, et le
+chemin « aucun outil MCP lié à la capacité » le rend déjà explicite plutôt que de laisser croire à
+une exécution.
+
 ### Une alerte est un symptôme dédupliqué, pas un relevé
 
 Deux cycles qui voient le même retard sur le même processus signalent un incident, pas deux. Les
@@ -368,7 +513,8 @@ MCP hostile pourrait sinon placer un XSS sur la même origine que l'API.
 | `SharedMemoryProfileTest` | Le profil `shared-memory` remplace bien le dépôt en mémoire |
 | `KexAgentApplicationTests` | Le contexte démarre sans aucun serveur MCP configuré |
 | `ConsoleTest` | La console est servie sans jeton, n'ouvre ni `/api/**` ni le `POST`, et appelle les routes qui existent |
+| `KafkaViewServiceTest` | La traduction des outils sur des charges utiles conformes à la forme réelle d'Explorer : mesure absente jamais lue comme zéro, verdict repris tel quel, serveur injoignable rendu en vue vide motivée |
 | `SupervisionCycleIntegrationTest` | Le cycle jusqu'à un appel d'outil MCP réel : contexte Spring complet, transport streamable-HTTP, bearer, audit. Seul le modèle est simulé |
 | `SupervisionServiceTest` | Autonomie, seuil de confiance, expiration, pause, cycle en échec, péremption des données |
-| `CycleAnalysisTest` | Ce qui arrive quand le modèle rend autre chose que le schéma demandé |
+| `CycleAnalysisTest` | Ce qui arrive quand le modèle rend autre chose que le schéma demandé, et l'asymétrie de la couverture : un `OK` partiel devient `UNKNOWN`, une erreur partielle reste une erreur |
 | `SupervisionControllerTest` | Contrat HTTP du Control Center, dont 409 sur conflit d'état et 404 sur décision inconnue |

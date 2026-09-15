@@ -1,0 +1,173 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
+
+// La console au navigateur, en CI. La suite Java sert des fichiers et vérifie que les chemins
+// d'API qu'ils citent existent ; elle n'exécute pas une ligne de JavaScript. Chaque cas ci-dessous
+// verrouille un défaut réellement rencontré, trouvé à la main faute de ce script.
+//
+//   PLAYWRIGHT_MODULE=… node src/test/browser/console.mjs
+//
+// Playwright n'est pas une dépendance du projet : il est installé par le job de CI, hors de
+// l'arborescence, et son chemin arrive par PLAYWRIGHT_MODULE. Ajouter un package.json ferait
+// vivre une seconde chaîne de construction pour un seul fichier.
+
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
+
+const BASE = process.env.KEX_AGENT_URL ?? 'http://localhost:8081';
+const TOKEN = process.env.KEX_AGENT_API_KEY ?? 'ci-secret';
+const GATEWAY_PORT = Number(process.env.KEX_GATEWAY_PORT ?? 8098);
+
+// Une passerelle réduite à /models : le tri numérique et l'état « non annoncé » ont besoin d'un
+// catalogue, et la CI n'appelle aucun tiers.
+const gateway = createServer((request, response) => {
+  response.writeHead(200, { 'Content-Type': 'application/json' });
+  response.end(JSON.stringify({ data: [
+    { id: 'a/petit', context_length: 8192, supported_parameters: ['tools'] },
+    { id: 'b/grand', context_length: 400000, supported_parameters: ['temperature'] },
+    { id: 'c/moyen', context_length: 200000, supported_parameters: ['tools'] },
+    { id: 'd/muet' },
+  ] }));
+}).listen(GATEWAY_PORT, '127.0.0.1');
+
+const problems = [];
+const checks = [];
+
+async function check(name, body) {
+  try {
+    await body();
+    checks.push(`  ✓ ${name}`);
+  } catch (error) {
+    problems.push(`  ✗ ${name}\n      ${error.message.split('\n')[0]}`);
+  }
+}
+
+const browser = await chromium.launch();
+const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
+const page = await context.newPage();
+
+// Une exception non rattrapée ne casse rien de visible : l'écran reste affiché, figé sur des
+// données périmées. C'est exactement le mensonge que le reste de la console s'attache à éviter.
+const scriptErrors = [];
+page.on('pageerror', (error) => scriptErrors.push(String(error)));
+page.on('console', (message) => {
+  if (message.type() === 'error' && !message.text().includes('401')) scriptErrors.push(message.text());
+});
+
+await page.goto(`${BASE}/#/settings`, { waitUntil: 'networkidle' });
+await page.waitForSelector('dialog[open]');
+await page.fill('#api-key', TOKEN);
+await page.click('#credentials-form button[type=submit]');
+
+await check('l’écran courant se recharge après la saisie du jeton', async () => {
+  // Défaut : route() ne rechargeait pas la vue inchangée, et Configuration — exclue du sondage de
+  // fond parce qu'elle porte un formulaire — restait sur « Jeton refusé » jusqu'à ce qu'on navigue.
+  await page.waitForSelector('#llm-config dl.definition', { timeout: 10000 });
+});
+
+await check('un agent qui n’a rien analysé n’est pas OPÉRATIONNEL', async () => {
+  // Défaut : l'état ne regardait que les cycles, donc une instance qui n'avait jamais rien mesuré
+  // affichait un vert au-dessus d'un bandeau disant « Aucune analyse exécutée ».
+  assert.equal(await page.$eval('#agent-status', (node) => node.dataset.state), 'UNKNOWN');
+  assert.match(await page.$eval('#freshness', (node) => node.innerText), /Aucune analyse/);
+});
+
+await check('le titre de la page suit la vue', async () => {
+  assert.match(await page.title(), /^Configuration — /);
+  assert.equal(await page.$eval('#announcer', (node) => node.textContent), 'Configuration');
+});
+
+await check('le catalogue de la passerelle se trie, les valeurs absentes restant en bas',
+  async () => {
+    await page.click('#open-llm-models');
+    await page.waitForSelector('#drawer table.grid tbody tr');
+    const contexts = () => page.$$eval('#drawer table.grid tbody tr',
+      (rows) => rows.map((row) => row.cells[1].dataset.sort ?? ''));
+
+    await page.click('#drawer table.grid thead th:nth-child(2) button.sort');
+    assert.deepEqual(await contexts(), ['8192', '200000', '400000', ''], 'ordre croissant');
+    assert.equal(
+      await page.$eval('#drawer table.grid thead th:nth-child(2)', (n) => n.getAttribute('aria-sort')),
+      'ascending');
+
+    await page.click('#drawer table.grid thead th:nth-child(2) button.sort');
+    // La case vide reste en bas : la remonter la présenterait comme la plus grande valeur.
+    assert.deepEqual(await contexts(), ['400000', '200000', '8192', ''], 'ordre décroissant');
+  });
+
+await check('un support d’outils non annoncé n’est pas affiché comme absent', async () => {
+  const tags = await page.$$eval('#drawer table.grid tbody tr',
+    (rows) => rows.map((row) => row.cells[2].innerText.replace(/\s+/g, ' ').trim()));
+  assert.ok(tags.some((tag) => tag.includes('Non annoncé')), `attendu « Non annoncé » parmi ${tags}`);
+});
+
+await check('le panneau retient le focus et la coque devient inerte', async () => {
+  // Défaut : Tab sortait par-derrière, sur un panneau qui porte « Approuver » et « Refuser ».
+  assert.ok(await page.$eval('main', (node) => node.hasAttribute('inert')), 'main inerte');
+  assert.ok(await page.$eval('.rail', (node) => node.hasAttribute('inert')), 'rail inerte');
+  for (let i = 0; i < 6; i += 1) await page.keyboard.press('Tab');
+  assert.ok(await page.evaluate(() => document.querySelector('#drawer').contains(document.activeElement)),
+    'le focus est resté dans le panneau');
+});
+
+await check('le bouton Retour referme le panneau', async () => {
+  await page.goBack();
+  await page.waitForTimeout(300);
+  assert.ok(await page.$eval('#drawer', (node) => node.hidden), 'panneau fermé');
+  assert.ok(!(await page.$eval('main', (node) => node.hasAttribute('inert'))), 'coque rendue au clavier');
+});
+
+await check('l’état d’écran voyage dans l’URL et survit au rechargement', async () => {
+  await page.goto(`${BASE}/#/processes?etat=UNKNOWN&q=order`);
+  await page.waitForSelector('#processes-table table.grid tbody tr');
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('#processes-table table.grid tbody tr');
+  assert.match(page.url(), /#\/processes\?etat=UNKNOWN&q=order/);
+  const rows = await page.$$eval('#processes-table table.grid tbody tr', (list) => list.length);
+  assert.equal(rows, 1, 'le filtre est réappliqué après rechargement');
+});
+
+await check('un panneau de supervision se rouvre depuis son adresse', async () => {
+  // Les panneaux sont enregistrés dans un registre partagé : sans ce cas, un module qui ajoute le
+  // sien peut fermer ceux des autres par ignorance, ce qui est arrivé.
+  await page.click('#processes-table table.grid tbody tr');
+  await page.waitForSelector('#drawer:not([hidden])');
+  assert.match(page.url(), /processus=order-integration/);
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('#drawer:not([hidden])', { timeout: 10000 });
+  assert.match(await page.$eval('#drawer-title', (node) => node.textContent), /Order Integration/);
+
+  await page.keyboard.press('Escape');
+  // `state: 'attached'` : un élément porteur de `hidden` n'est jamais « visible », et l'attente
+  // par défaut de Playwright expirerait sur un panneau pourtant bien refermé.
+  await page.waitForSelector('#drawer[hidden]', { state: 'attached' });
+  // Fermer efface le paramètre, sinon le rechargement suivant rouvrirait le panneau.
+  assert.doesNotMatch(page.url(), /processus=/);
+});
+
+await check('le bandeau hors ligne apparaît puis disparaît', async () => {
+  assert.ok(await page.$eval('#offline', (node) => node.hidden), 'caché tant qu’on est en ligne');
+  await context.setOffline(true);
+  await page.evaluate(() => dispatchEvent(new Event('offline')));
+  await page.waitForFunction(() => !document.querySelector('#offline').hidden, null, { timeout: 3000 });
+  await context.setOffline(false);
+  await page.evaluate(() => dispatchEvent(new Event('online')));
+  await page.waitForFunction(() => document.querySelector('#offline').hidden, null, { timeout: 3000 });
+});
+
+await check('aucune erreur de script sur le parcours', () => {
+  assert.deepEqual(scriptErrors, []);
+});
+
+await browser.close();
+gateway.close();
+
+console.log(checks.join('\n'));
+if (problems.length) {
+  console.error(`\n${problems.length} vérification(s) en échec :\n${problems.join('\n')}`);
+  process.exit(1);
+}
+console.log(`\n${checks.length} vérifications passées.`);

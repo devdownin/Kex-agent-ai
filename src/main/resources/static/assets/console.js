@@ -6,9 +6,11 @@
 // chaînes pour une poignée de fichiers statiques.
 
 import {
-  $, ago, api, confirmAction, credentials, onCredentialChange, onUnauthorized, report, stamp, toast,
+  $, ago, api, confirmAction, credentials, drawerOpen, onCredentialChange, onUnauthorized, report,
+  restoreDrawerFromUrl, stamp, toast, viewName,
 } from './core.js';
 import * as chat from './chat.js';
+import * as llm from './llm.js';
 import * as supervision from './supervision.js';
 import * as tools from './tools.js';
 
@@ -19,7 +21,12 @@ const VIEWS = {
   agent: { title: 'Agent', load: supervision.agent },
   processes: { title: 'Processus', load: supervision.processes },
   decisions: { title: 'Décisions', load: supervision.decisions },
-  settings: { title: 'Configuration', load: supervision.settings },
+  // La configuration réunit deux lectures indépendantes : les seuils, modifiables, et le modèle,
+  // qui ne l'est pas. Un seul écran, deux requêtes — celle du modèle ne doit pas retarder les seuils.
+  settings: {
+    title: 'Configuration',
+    load: () => Promise.all([supervision.settings(), llm.view()]),
+  },
   alerts: { title: 'Alertes', load: supervision.alerts },
   audit: { title: 'Audit', load: supervision.audit },
   tools: { title: 'Technique', load: tools.view },
@@ -42,9 +49,17 @@ function renderStatus(next) {
   $('#run-cycle').disabled = Boolean(next?.paused || next?.analysing);
 
   const freshness = $('#freshness');
-  if (!next?.lastCycleAt) {
+  // Le motif prime sur la fraîcheur : « DÉGRADÉ » sans explication envoie chercher la cause dans
+  // les journaux, alors qu'elle est connue au moment où l'état est calculé.
+  if (next?.stateReason && !next.lastCycleAt) {
+    freshness.textContent = next.stateReason;
+    freshness.dataset.state = 'unknown';
+  } else if (!next?.lastCycleAt) {
     freshness.textContent = 'Aucune analyse exécutée';
     freshness.dataset.state = 'unknown';
+  } else if (next.stateReason && !next.staleSince) {
+    freshness.textContent = `${next.stateReason} — dernière analyse ${ago(next.lastCycleAt)}`;
+    freshness.dataset.state = 'stale';
   } else if (next.staleSince) {
     // La fraîcheur est une règle P0 : des données vieilles de vingt minutes ressemblent à des
     // données fraîches, et c'est exactement ce qui fait rater une panne.
@@ -56,12 +71,13 @@ function renderStatus(next) {
   }
 }
 
-async function refreshStatus() {
+/** @param background un sondage périodique ne notifie pas : la pastille d'état porte l'échec. */
+async function refreshStatus(background = false) {
   try {
     renderStatus(await api(`${BASE}/status`));
   } catch (error) {
     renderStatus(null);
-    if (error.status !== 401) report(error);
+    if (!background && error.status !== 401) report(error);
   }
 }
 
@@ -159,19 +175,102 @@ themeToggle.addEventListener('click', () => {
   syncThemeButton();
 });
 
+/* ── Rafraîchissement ──────────────────────────────────────────────────── */
+
+// Sans lui, un onglet laissé ouvert affiche des données de dix minutes sous un libellé qui dit
+// « il y a 4 secondes » : l'écran ment précisément sur ce que tout le reste s'attache à dire.
+const REFRESH_MS = 15_000;
+const TICK_MS = 1_000;
+
+// Les écrans qui portent un formulaire ne se rafraîchissent pas : un rendu par-dessus effacerait
+// ce que quelqu'un est en train de saisir. Le chat non plus, pour la même raison.
+const SELF_REFRESHING = new Set(['overview', 'processes', 'decisions', 'alerts', 'audit', 'tools']);
+
+/**
+ * Un sondage est suspendu quand l'onglet est caché — il n'y a personne pour lire et chaque cycle
+ * coûte au budget de l'agent — et quand un panneau ou un dialogue est ouvert : re-rendre sous
+ * quelqu'un qui lit une décision avant de l'approuver est hostile.
+ */
+function paused() {
+  return document.hidden || drawerOpen() || document.querySelector('dialog[open]') !== null;
+}
+
+async function backgroundRefresh() {
+  if (paused()) return;
+  await refreshStatus(true);
+  const view = currentView();
+  if (SELF_REFRESHING.has(view)) await VIEWS[view].load?.();
+}
+
+// Le libellé de fraîcheur vieillit tout seul, sans requête : c'est lui qui doit dire la vérité
+// entre deux sondages.
+function tick() {
+  if (!document.hidden && status) renderStatus(status);
+}
+
+setInterval(backgroundRefresh, REFRESH_MS);
+setInterval(tick, TICK_MS);
+// Un onglet qu'on retrouve doit être à jour tout de suite, pas au prochain sondage.
+addEventListener('visibilitychange', () => {
+  if (!document.hidden) backgroundRefresh();
+});
+
+/* ── Connectivité ──────────────────────────────────────────────────────── */
+
+// `navigator.onLine` ne prouve pas qu'on atteint l'agent — un réseau sans route vers lui se dit
+// « en ligne ». Il prouve en revanche l'inverse : hors ligne, plus rien n'est à jour, et l'écran
+// continuerait de se lire comme d'habitude. L'échec de sondage reste porté par la pastille d'état.
+function syncConnectivity() {
+  $('#offline').hidden = navigator.onLine;
+}
+
+addEventListener('online', () => {
+  syncConnectivity();
+  backgroundRefresh();
+});
+addEventListener('offline', syncConnectivity);
+
 /* ── Routage ───────────────────────────────────────────────────────────── */
 
-function route() {
-  const name = location.hash.replace('#/', '') || 'overview';
-  const view = VIEWS[name] ? name : 'overview';
-  for (const key of Object.keys(VIEWS)) {
-    $(`#view-${key}`).hidden = key !== view;
-    const link = document.querySelector(`.nav-item[data-view="${key}"]`);
-    if (key === view) link.setAttribute('aria-current', 'page');
-    else link.removeAttribute('aria-current');
+const currentView = () => (VIEWS[viewName()] ? viewName() : 'overview');
+
+let rendered = null;
+
+async function route() {
+  const view = currentView();
+  // Un changement de paramètre — filtre, panneau ouvert — n'est pas un changement de vue : le
+  // recharger referait une requête et écraserait ce que l'utilisateur vient d'ouvrir.
+  if (view !== rendered) {
+    rendered = view;
+    for (const key of Object.keys(VIEWS)) {
+      $(`#view-${key}`).hidden = key !== view;
+      const link = document.querySelector(`.nav-item[data-view="${key}"]`);
+      if (key === view) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    }
+    $('#crumb').textContent = VIEWS[view].title;
+    // Le titre suit la vue : un onglet parmi dix ne se retrouve pas, et un signet pris sur un
+    // écran précis reviendrait avec le nom de l'application pour seul repère.
+    document.title = `${VIEWS[view].title} — Kex Agent Control Center`;
+    $('#announcer').textContent = VIEWS[view].title;
+    supervision.syncFilters();
+    await VIEWS[view].load?.();
   }
-  $('#crumb').textContent = VIEWS[view].title;
-  VIEWS[view].load?.();
+  else {
+    supervision.syncFilters();
+  }
+  await restoreDrawerFromUrl();
+}
+
+/**
+ * Recharge l'écran courant, que {@link route} laisserait intact faute de changement de vue. Sans
+ * cela, l'écran affiché pendant la saisie du jeton reste sur son « Jeton refusé » : le sondage de
+ * fond rattrape les vues qui s'auto-rafraîchissent, jamais Configuration ni Agent, qui portent un
+ * formulaire et en sont exclues.
+ */
+function reload() {
+  rendered = null;
+  return route();
 }
 
 /* ── Démarrage ─────────────────────────────────────────────────────────── */
@@ -179,6 +278,7 @@ function route() {
 supervision.wire();
 supervision.onSnapshot(renderBadges);
 tools.wire();
+llm.wire();
 chat.wire(openCredentials);
 
 $('#run-cycle').addEventListener('click', runCycle);
@@ -189,7 +289,7 @@ $('#credentials-form').addEventListener('submit', () => {
   credentials.set($('#api-key').value.trim());
   toast(credentials.get() ? 'Jeton enregistré.' : 'Jeton effacé.');
   refreshStatus();
-  route();
+  reload();
 });
 
 $('#forget-key').addEventListener('click', () => {
@@ -200,6 +300,7 @@ $('#forget-key').addEventListener('click', () => {
 addEventListener('hashchange', route);
 
 syncThemeButton();
+syncConnectivity();
 $('#credential-label').textContent = credentials.get() ? 'Jeton actif' : 'Jeton absent';
 route();
 refreshStatus();

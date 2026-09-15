@@ -15,6 +15,7 @@ import com.kex.agent.mcp.McpToolCatalog;
 import com.kex.agent.mcp.McpToolResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -234,6 +235,56 @@ class SupervisionServiceTest {
         assertThat(service.decision(id).resolvedBy()).isEqualTo("Système");
     }
 
+    /** Clé présente par défaut : sans quoi chaque cas existant basculerait en DÉGRADÉ. */
+    private ModelAvailability keyMissing = () -> false;
+
+    @Test
+    void sans_cle_de_modele_l_agent_n_est_pas_operationnel() {
+        // Le défaut que ce cas verrouille : l'état ne regardait que les cycles, donc une instance
+        // incapable du moindre échange affichait OPÉRATIONNEL en tête d'écran, au-dessus d'un
+        // bandeau qui disait « Aucune analyse exécutée ».
+        keyMissing = () -> true;
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        AgentStatus status = service.status();
+
+        assertThat(status.state()).isEqualTo(AgentState.DEGRADED);
+        assertThat(status.stateReason()).contains("Aucune clé");
+    }
+
+    @Test
+    void jamais_analyse_vaut_inconnu_et_non_operationnel() {
+        // Rien n'a été mesuré : l'agent n'affirme pas que tout va bien, il dit qu'il ne sait pas.
+        AgentStatus status = service(properties(List.of(ORDERS), Map.of(), Map.of())).status();
+
+        assertThat(status.state()).isEqualTo(AgentState.UNKNOWN);
+        assertThat(status.lastCycleAt()).isNull();
+        assertThat(status.stateReason()).contains("Aucune analyse");
+    }
+
+    @Test
+    void un_cycle_en_echec_prime_sur_l_absence_de_cle() {
+        // L'échec est un fait constaté, l'absence de clé une cause probable : c'est le fait qui
+        // s'affiche, et l'écran Configuration qui nomme la cause.
+        keyMissing = () -> true;
+        when(agentService.askStructured(anyString(), anyString(), any()))
+                .thenThrow(new IllegalStateException("401 Unauthorized"));
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        service.runCycle("test");
+
+        assertThat(service.status().state()).isEqualTo(AgentState.ERROR);
+        assertThat(service.status().stateReason()).contains("401 Unauthorized");
+    }
+
+    @Test
+    void une_pause_prime_sur_tout_le_reste() {
+        keyMissing = () -> true;
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        assertThat(service.pause("opérateur").state()).isEqualTo(AgentState.PAUSED);
+    }
+
     @Test
     void un_agent_en_pause_ne_lance_aucun_cycle() {
         SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
@@ -271,6 +322,62 @@ class SupervisionServiceTest {
 
         assertThat(service.status().state()).isEqualTo(AgentState.DEGRADED);
         assertThat(service.status().staleSince()).isNotNull();
+    }
+
+    @Test
+    void un_releve_partiel_degrade_l_agent_au_lieu_de_le_laisser_vert() {
+        // Bout en bout : un OK rendu sur une passe incomplète ne doit pas produire un cycle vert.
+        // Sans cela, l'anomalie restée dans ce qui n'a pas été lu passe inaperçue.
+        analysisReturns(Map.of("processes", List.of(Map.of(
+                "processId", "order-integration", "state", "OK",
+                "coverage", Map.of("complete", false, "stopReason", "TIME_BUDGET",
+                        "notReached", List.of("demo.orders.3.enriched")))),
+                "anomalies", List.of()));
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        service.runCycle("test");
+
+        assertThat(service.snapshots()).singleElement().satisfies(snapshot -> {
+            assertThat(snapshot.state()).isEqualTo(ProcessState.UNKNOWN);
+            assertThat(snapshot.coverage().notReached()).containsExactly("demo.orders.3.enriched");
+        });
+        assertThat(service.overview().processesOk()).isZero();
+        assertThat(service.overview().processesUnknown()).isEqualTo(1);
+        // L'état de l'agent le dit aussi : on ne sait pas, donc on n'est pas opérationnel.
+        assertThat(service.status().state()).isEqualTo(AgentState.DEGRADED);
+    }
+
+    @Test
+    void une_passe_complete_laisse_l_agent_operationnel() {
+        analysisReturns(Map.of("processes", List.of(Map.of(
+                "processId", "order-integration", "state", "OK",
+                "coverage", Map.of("complete", true, "stopReason", "EXHAUSTED"))),
+                "anomalies", List.of()));
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        service.runCycle("test");
+
+        assertThat(service.status().state()).isEqualTo(AgentState.OPERATIONAL);
+        assertThat(service.overview().processesOk()).isEqualTo(1);
+    }
+
+    @Test
+    void le_prompt_dit_au_modele_de_lire_la_couverture() {
+        // La règle ne tient que si le modèle sait qu'il doit rendre l'enveloppe : sans cette
+        // consigne, il n'y a rien à interpréter en aval et la correction est sans effet.
+        analysisReturns(Map.of("processes", List.of(), "anomalies", List.of()));
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        service.runCycle("test");
+
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        verify(agentService).askStructured(anyString(), prompt.capture(), any());
+        assertThat(prompt.getValue())
+                .contains("coverage")
+                .contains("EXHAUSTED")
+                .contains("topicsNotReached")
+                .contains("measured")
+                .contains("resumeToken");
     }
 
     @Test
@@ -440,7 +547,11 @@ class SupervisionServiceTest {
     /* ── Outillage ─────────────────────────────────────────────────────── */
 
     private SupervisionService service(SupervisionProperties properties) {
-        return new SupervisionService(agentService, toolCatalog, properties, clock);
+        return service(properties, keyMissing);
+    }
+
+    private SupervisionService service(SupervisionProperties properties, ModelAvailability model) {
+        return new SupervisionService(agentService, toolCatalog, properties, clock, model);
     }
 
     private void analysisReturns(Map<String, Object> content) {

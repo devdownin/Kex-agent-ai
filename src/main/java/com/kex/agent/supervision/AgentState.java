@@ -6,6 +6,13 @@ package com.kex.agent.supervision;
 public enum AgentState {
 
     OPERATIONAL,
+
+    /**
+     * Rien de mesuré. Distinct de {@link #OPERATIONAL}, qui affirme que tout va bien : un agent
+     * qui n'a jamais rien analysé n'en sait rien, et un vert en tête d'écran le dirait quand même.
+     */
+    UNKNOWN,
+
     DEGRADED,
     ERROR,
     PAUSED,

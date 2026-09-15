@@ -41,6 +41,19 @@ export KEX_AGENT_API_KEY="$(openssl rand -hex 32)"
 docker compose up -d
 ```
 
+Pas de clé Anthropic ? Branchez-le sur [OpenRouter](https://openrouter.ai) — même commande, deux
+variables de plus :
+
+```bash
+export KEX_AGENT_LLM_PROVIDER=openai
+export OPENROUTER_API_KEY=sk-or-v1-...
+export OPENROUTER_MODEL=anthropic/claude-sonnet-4.5   # n'importe quel modèle sachant appeler des outils
+```
+
+C'est une passerelle hébergée : les prompts et les résultats d'outils — donc les messages Kafka que
+l'agent lit — transitent par un tiers.
+[Ce que ça implique, en détail](docs/CONFIGURATION.md#choisir-le-fournisseur-de-modele).
+
 Trois conteneurs : un broker Kafka 4.3 (KRaft), Kafka SQL Explorer avec son serveur MCP allumé, et
 cet agent branché dessus. L'Explorer sur **http://localhost:8080**, l'agent sur
 **http://localhost:8081**.
@@ -76,7 +89,7 @@ L'agent sert sa propre console d'exploitation sur `/`, construite autour d'une s
 | Configuration | Seuils de détection et plancher de confiance, versionnés et audités |
 | Alertes | Regroupées, actionnables, liées à un processus et à une recommandation |
 | Audit | Acteur, action, motif, version de politique, résultat, identifiant de corrélation |
-| Technique | Serveurs MCP, invocation directe d'un outil, santé et métriques |
+| Technique | Topics Kafka et retard des groupes, serveurs MCP, invocation directe, santé |
 | Conversation | Le chat, en flux, avec les outils qu'il a exécutés |
 
 Quelques partis pris explicites :
@@ -95,6 +108,9 @@ Quelques partis pris explicites :
   et plus personne ne pourrait lire une politique sans vérifier chaque ligne.
 - **La confiance ne s'affiche jamais seule.** Elle est toujours accompagnée des observations qui la
   fondent, parce qu'un pourcentage rendu par un modèle n'est pas une probabilité mesurée.
+- **Un relevé partiel prouve une présence, jamais une absence.** Les outils MCP qui portent une
+  enveloppe `coverage` disent ce qu'ils n'ont *pas* lu ; un `OK` rendu sur une passe explicitement
+  incomplète devient `UNKNOWN`, là où un `WARNING` ou un `ERROR` tient — ce qui a été vu a été vu.
 - **Le même symptôme deux fois est une alerte, pas deux.** Les alertes sont dédupliquées d'un cycle
   à l'autre et portent leur récurrence ; celle que le dernier cycle ne revoit plus a cessé d'être
   vraie et sort de la liste.
@@ -203,6 +219,8 @@ y compris ce qu'est MCP si c'est votre premier — est dans [`docs/MCP.md`](docs
 | `POST` | `/api/agent/supervision/decisions/{id}/approve` `…/reject` | Valider ou refuser une action en attente |
 | `GET` `PUT` | `/api/agent/supervision/policy` | Mode, autonomie et plancher de confiance par capacité, seuils — versionnés |
 | `POST` | `/api/agent/supervision/pause` `…/resume` | Suspendre et reprendre les analyses |
+| `GET` | `/api/agent/kafka/topics` | Topics, avec les mesures absentes rendues absentes, jamais à zéro |
+| `GET` | `/api/agent/kafka/topics/{topic}/lag` | Les groupes qui lisent un topic, avec le verdict de retard de l'outil |
 | `GET` | `/api/agent/supervision/alerts` | Dédupliquées, priorisées, portant chacune son action en attente |
 | `GET` | `/api/agent/supervision/performance` | Ce que vaut l'agent lui-même — pertinence, autonomie, délais |
 | `GET` | `/api/agent/supervision/audit` | Qui a fait quoi, pourquoi, sous quelle politique, avec quel résultat |
@@ -268,7 +286,7 @@ découvre le serveur, son outil, et l'appelle à travers le réseau avec le bear
 | Java | 25 |
 | Spring Boot | 4.1.1 |
 | Spring AI | 2.0.1 |
-| Modèle | Anthropic (remplacer le starter pour OpenAI, Ollama, Bedrock…) |
+| Modèle | Anthropic, ou n'importe quel modèle d'OpenRouter — à une variable près |
 | MCP | `spring-ai-starter-mcp-client` — stdio, SSE, streamable-HTTP |
 
 ## 📖 Lui donner ce que votre équipe sait

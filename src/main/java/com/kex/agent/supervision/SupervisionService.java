@@ -50,6 +50,7 @@ public class SupervisionService {
     private final McpToolCatalog toolCatalog;
     private final SupervisionProperties properties;
     private final Clock clock;
+    private final ModelAvailability model;
 
     private final AtomicReference<SupervisionPolicy> policy = new AtomicReference<>();
     private final AtomicInteger policyRevision = new AtomicInteger(1);
@@ -70,11 +71,12 @@ public class SupervisionService {
     private volatile boolean paused;
 
     SupervisionService(AgentService agentService, McpToolCatalog toolCatalog,
-                       SupervisionProperties properties, Clock clock) {
+                       SupervisionProperties properties, Clock clock, ModelAvailability model) {
         this.agentService = agentService;
         this.toolCatalog = toolCatalog;
         this.properties = properties;
         this.clock = clock;
+        this.model = model;
         this.cycles = new History<>(properties.historySize());
         this.anomalies = new History<>(properties.historySize());
         this.decisions = new History<>(properties.historySize());
@@ -84,7 +86,7 @@ public class SupervisionService {
                 Map.copyOf(properties.confidenceThresholds()), properties.thresholds()));
         this.snapshots = properties.processes().stream()
                 .map(process -> new ProcessSnapshot(process.id(), process.name(), ProcessState.UNKNOWN,
-                        null, null, null, "Aucune analyse exécutée"))
+                        null, null, null, "Aucune analyse exécutée", Coverage.notReported()))
                 .toList();
     }
 
@@ -244,26 +246,52 @@ public class SupervisionService {
                 ? lastAt
                 : null;
         SupervisionPolicy current = policy.get();
-        return new AgentStatus(state(last, staleSince), current.mode(), paused, cycleLock.isLocked(),
+        Diagnosis diagnosis = diagnose(last, staleSince);
+        return new AgentStatus(diagnosis.state(), current.mode(), paused, cycleLock.isLocked(),
                 lastAt, last == null ? null : last.id(), staleSince, current.version(),
-                current.confidenceThreshold());
+                current.confidenceThreshold(), diagnosis.reason());
     }
 
-    private AgentState state(CycleReport last, Instant staleSince) {
+    /** @param reason {@code null} quand l'état est {@code OPERATIONAL} : il n'y a rien à expliquer. */
+    private record Diagnosis(AgentState state, String reason) {
+
+        static Diagnosis of(AgentState state) {
+            return new Diagnosis(state, null);
+        }
+    }
+
+    private Diagnosis diagnose(CycleReport last, Instant staleSince) {
         if (paused) {
-            return AgentState.PAUSED;
+            return Diagnosis.of(AgentState.PAUSED);
         }
         if (cycleLock.isLocked()) {
-            return AgentState.ANALYSING;
+            return Diagnosis.of(AgentState.ANALYSING);
         }
         if (last != null && last.failure() != null) {
-            return AgentState.ERROR;
+            return new Diagnosis(AgentState.ERROR, "Dernier cycle en échec : " + last.failure());
+        }
+        // Sans clé, aucun échange n'aboutit : le cycle ne peut rien observer. Dégradé et non en
+        // erreur — la console, l'introspection MCP et la vue Kafka répondent toujours —, mais
+        // sûrement pas opérationnel, ce que la pastille affirmait jusqu'ici.
+        if (model.keyKnownMissing()) {
+            return new Diagnosis(AgentState.DEGRADED,
+                    "Aucune clé pour le fournisseur de modèle retenu — voir Configuration");
+        }
+        // « Jamais analysé » n'est pas « tout va bien » : c'est l'absence de toute mesure. Le
+        // bandeau le disait déjà, la pastille affichait OPÉRATIONNEL par-dessus.
+        if (last == null) {
+            return new Diagnosis(AgentState.UNKNOWN, "Aucune analyse exécutée depuis le démarrage");
         }
         // Dégradé, pas opérationnel : des données périmées ou un processus dont on ne sait rien
         // ressemblent à un système sain sur un tableau de bord, et c'est exactement le piège.
-        boolean blind = staleSince != null
-                || snapshots.stream().anyMatch(snapshot -> snapshot.state() == ProcessState.UNKNOWN);
-        return blind ? AgentState.DEGRADED : AgentState.OPERATIONAL;
+        if (staleSince != null) {
+            return new Diagnosis(AgentState.DEGRADED, "Dernière analyse trop ancienne");
+        }
+        long blind = snapshots.stream().filter(snapshot -> snapshot.state() == ProcessState.UNKNOWN).count();
+        if (blind > 0) {
+            return new Diagnosis(AgentState.DEGRADED, blind + " processus dans un état inconnu");
+        }
+        return Diagnosis.of(AgentState.OPERATIONAL);
     }
 
     public Overview overview() {
@@ -397,6 +425,21 @@ public class SupervisionService {
                 Tu supervises des processus d'intégration. Relève leur état en interrogeant les \
                 outils dont tu disposes — n'invente aucune valeur : un relevé impossible se rend \
                 avec l'état UNKNOWN.
+
+                Avant de conclure quoi que ce soit, lis ce que l'outil dit avoir lu :
+
+                - Beaucoup d'outils rendent une enveloppe `coverage`. Un résultat vide dont le \
+                  `stopReason` n'est pas EXHAUSTED signifie « absent de ce que j'ai regardé », pas \
+                  « n'existe pas ». Ne conclus jamais à l'absence d'anomalie sur une passe \
+                  incomplète : rends l'état UNKNOWN et recopie la couverture.
+                - `topicsNotReached` est nommé, pas compté. Si ce qui concerne le processus s'y \
+                  trouve, le relevé est incomplet, quel que soit le reste.
+                - Une valeur marquée non mesurée (`measured: false`) n'est pas zéro. Zéro affirme \
+                  « rattrapé » ou « aucun échec » ; une mesure absente n'affirme rien.
+                - Quand un outil rend un verdict (CAUGHT_UP, BEHIND, STALLED...), suis-le plutôt \
+                  que de réinterpréter les nombres toi-même.
+                - Si un `resumeToken` est fourni et que le budget le permet, poursuis le relevé \
+                  avant de conclure.
 
                 Processus à relever :
                 """);
