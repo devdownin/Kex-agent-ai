@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -46,6 +47,13 @@ class SecurityConfig {
                         // est protégé, ce sont les routes qui agissent et qui coûtent.
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                         .permitAll()
+                        // La console est du HTML, du CSS et du JavaScript inertes : elle n'agit
+                        // pas et ne porte aucun secret — le jeton est saisi dans le navigateur et
+                        // n'existe que côté client. Même posture que Swagger UI ci-dessus, et même
+                        // raison : l'authentifier la rendrait inutilisable sans rien protéger. Les
+                        // chemins sont énumérés plutôt que laissés à un joker de racine, pour
+                        // qu'une future route servie ici n'hérite pas de l'ouverture.
+                        .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new ApiKeyAuthFilter(properties.apiKey()),
                         UsernamePasswordAuthenticationFilter.class)

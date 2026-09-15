@@ -18,9 +18,9 @@ import com.sun.net.httpserver.HttpServer;
  * ce qu'on veut verrouiller ici est le transport réel (en-têtes, JSON-RPC, notifications), pas
  * le comportement d'un mock.
  */
-final class FakeMcpServer implements AutoCloseable {
+public final class FakeMcpServer implements AutoCloseable {
 
-    static final String TOKEN = "jeton-de-test";
+    public static final String TOKEN = "jeton-de-test";
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -28,21 +28,21 @@ final class FakeMcpServer implements AutoCloseable {
     private final List<String> methods = new CopyOnWriteArrayList<>();
     private final List<Integer> unauthorized = new CopyOnWriteArrayList<>();
 
-    FakeMcpServer() throws IOException {
+    public FakeMcpServer() throws IOException {
         this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         this.server.createContext("/mcp", this::handle);
         this.server.start();
     }
 
-    int port() {
+    public int port() {
         return server.getAddress().getPort();
     }
 
-    List<String> methods() {
+    public List<String> methods() {
         return List.copyOf(methods);
     }
 
-    int unauthorizedCount() {
+    public int unauthorizedCount() {
         return unauthorized.size();
     }
 

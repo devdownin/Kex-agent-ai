@@ -55,7 +55,52 @@ curl -X POST localhost:8081/api/agent/chat \
 {"conversationId":"3f2b…","content":"Eight topics match demo.*. Three are empty: demo.returns, …"}
 ```
 
+Or open **http://localhost:8081** for the **Control Center** — the console the agent serves itself.
+Paste the same bearer once; it lives in `sessionStorage` and never leaves the browser.
+
 No Docker? [Run it from source](docs/CONFIGURATION.md#running-from-source) — JDK 25 and `./mvnw spring-boot:run`.
+
+## 🧭 The Control Center
+
+The agent ships with its own operations console at `/`, built around one loop:
+**observe → understand → decide → act → verify.**
+
+| Screen | What it answers |
+|---|---|
+| Overview | Is everything running, what needs me, has the agent decided anything |
+| Agent | What the agent may and may not do, and under which mode |
+| Processes | Per-process state, delay, and the anomalies found on each |
+| Decisions | Every decision, its observations, its confidence, and what it actually did |
+| Configuration | Detection thresholds and confidence floor, versioned and audited |
+| Alerts | Grouped, actionable, each tied to a process and a recommendation |
+| Audit | Actor, action, reason, policy version, result, correlation id |
+| Technical | MCP servers, direct tool invocation, health and metrics |
+| Conversation | The chat, streamed, with the tools it ran |
+
+A few things it deliberately does:
+
+- **An analysis cycle runs only when you ask it to.** There is no scheduler. In multi-instance
+  every replica would launch its own and actions would fire twice; adding one means a shared lock,
+  therefore a database — an operations decision this project does not make for you.
+- **Nothing is invented to fill the screen.** No process declared means an empty dashboard, and a
+  measurement the tools could not produce is `UNKNOWN`, never `OK`. A state that looks healthy
+  because the data is missing is exactly what makes an outage go unnoticed.
+- **Autonomy is set per capability, and the mode can only narrow it.** A capability not named in
+  the policy is forbidden — the right to act is not inherited from an install.
+- **Each capability can demand more confidence than the global floor, never less.** Restarting a
+  consumer deserves more certainty than sending a notification. A per-capability floor can only
+  raise the global one: letting it lower the floor would quietly weaken the guarantee the global
+  setting is there to carry, and nobody could read a policy without checking every line.
+- **Confidence never travels alone.** It is always shown next to the observations it rests on,
+  because a percentage produced by a model is not a measured probability.
+- **The same symptom twice is one alert, not two.** Alerts are deduplicated across cycles and carry
+  how often they recurred; one the latest cycle no longer sees has stopped being true and leaves.
+- **The agent measures itself, without inventing figures.** Its relevance rate counts only the
+  recommendations a human ruled on — an autonomous run never confirms itself — and stays absent
+  until someone has ruled, where a `0` would read as "always wrong".
+- **Colour never carries a state by itself.** Every state ships a glyph and a label too.
+- **Sensitive actions confirm with what they will do** — *Confirm: restart Consumer Integration-02*,
+  not *Are you sure?*
 
 ## 💬 What you can ask it
 
@@ -149,10 +194,20 @@ MCP is, if this is your first one — is in [`docs/MCP.md`](docs/MCP.md).
 | `GET` | `/api/agent/mcp/servers/{connection}/resources` | List a server's resources |
 | `GET` | `/api/agent/mcp/servers/{connection}/resource?uri=…` | Read one |
 | `POST` `GET` `DELETE` | `/api/agent/knowledge` | Feed, search and prune the knowledge base (when enabled) |
+| `GET` | `/api/agent/supervision/overview` | Everything the first screen needs, in one request |
+| `POST` | `/api/agent/supervision/cycles` | Run an analysis cycle now |
+| `GET` | `/api/agent/supervision/decisions` | Every decision, with its observations and outcome |
+| `POST` | `/api/agent/supervision/decisions/{id}/approve` `…/reject` | Human-in-the-loop on a pending action |
+| `GET` `PUT` | `/api/agent/supervision/policy` | Mode, per-capability autonomy and confidence floors, thresholds — versioned |
+| `POST` | `/api/agent/supervision/pause` `…/resume` | Stop and restart analysis |
+| `GET` | `/api/agent/supervision/alerts` | Deduplicated, prioritized, each carrying its pending action |
+| `GET` | `/api/agent/supervision/performance` | How the agent itself is doing — relevance, autonomy, delays |
+| `GET` | `/api/agent/supervision/audit` | Who did what, why, under which policy, with what result |
 
-The OpenAPI description is served at `/v3/api-docs`, with Swagger UI at `/swagger-ui.html`. Both are
-open: the *shape* of the API is already public in this repository, and hiding it would only make the
-UI unusable in a browser. What is protected is everything that acts or costs money.
+The OpenAPI description is served at `/v3/api-docs`, with Swagger UI at `/swagger-ui.html`, and the
+Control Center at `/`. All three are open on `GET`: the *shape* of the API is already public in this
+repository, and the console is inert HTML that holds no secret — hiding either would only make them
+unusable in a browser. What is protected is everything that acts or costs money.
 
 Every route under `/api/**` requires `Authorization: Bearer $KEX_AGENT_API_KEY`. `/actuator/health`
 stays open for container probes.

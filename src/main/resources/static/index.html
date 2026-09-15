@@ -1,0 +1,325 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 Kex Agent AI Contributors -->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kex Agent — Control Center</title>
+  <meta name="description" content="Control Center de l'agent Kex : état des processus surveillés, décisions, autonomie, validations et audit.">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/console.css">
+</head>
+<body>
+<a class="skip" href="#main">Aller au contenu</a>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">K</span>
+      <span class="brand-text">
+        <strong>Kex Agent</strong>
+        <small>Control Center</small>
+      </span>
+    </div>
+
+    <nav aria-label="Sections">
+      <a class="nav-item" href="#/overview" data-view="overview"><span class="nav-ico" aria-hidden="true">⌂</span>Vue d'ensemble</a>
+      <a class="nav-item" href="#/agent" data-view="agent"><span class="nav-ico" aria-hidden="true">◎</span>Agent</a>
+      <a class="nav-item" href="#/processes" data-view="processes"><span class="nav-ico" aria-hidden="true">▤</span>Processus</a>
+      <a class="nav-item" href="#/decisions" data-view="decisions"><span class="nav-ico" aria-hidden="true">◈</span>Décisions
+        <span class="badge" id="nav-pending" hidden>0</span></a>
+      <a class="nav-item" href="#/settings" data-view="settings"><span class="nav-ico" aria-hidden="true">⚙</span>Configuration</a>
+      <hr>
+      <a class="nav-item" href="#/alerts" data-view="alerts"><span class="nav-ico" aria-hidden="true">△</span>Alertes
+        <span class="badge" id="nav-alerts" hidden>0</span></a>
+      <a class="nav-item" href="#/audit" data-view="audit"><span class="nav-ico" aria-hidden="true">▦</span>Audit</a>
+      <hr>
+      <a class="nav-item" href="#/tools" data-view="tools"><span class="nav-ico" aria-hidden="true">◫</span>Technique</a>
+      <a class="nav-item" href="#/chat" data-view="chat"><span class="nav-ico" aria-hidden="true">▚</span>Conversation</a>
+    </nav>
+
+    <div class="rail-foot">
+      <button type="button" class="ghost" id="theme-toggle" aria-pressed="false">Thème</button>
+      <a class="ghost" href="swagger-ui.html" target="_blank" rel="noopener">API</a>
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <div class="topbar-id">
+      <div class="crumb" id="crumb">Vue d'ensemble</div>
+      <!-- La fraîcheur des données est une règle P0 de la spec : jamais masquée. -->
+      <div class="freshness" id="freshness">Aucune analyse exécutée</div>
+    </div>
+
+    <div class="topbar-right">
+      <!-- L'état combine pastille, forme et libellé : la couleur seule ne porte jamais l'information. -->
+      <span class="status" id="agent-status" data-state="unknown">
+        <span class="status-mark" aria-hidden="true">●</span>
+        <span id="agent-status-label">ÉTAT INCONNU</span>
+      </span>
+      <button type="button" class="ghost" id="toggle-pause">Pause agent</button>
+      <button type="button" class="primary" id="run-cycle">Exécuter maintenant</button>
+      <button type="button" class="ghost" id="open-credentials">
+        <span id="credential-label">Jeton absent</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+
+    <!-- ══ Vue d'ensemble ══ -->
+    <section class="view" id="view-overview" hidden>
+      <div class="kpis" id="kpis"></div>
+      <div class="split">
+        <section class="panel">
+          <div class="panel-head">
+            <h1>Processus surveillés</h1>
+            <a class="ghost" href="#/processes">Tout voir</a>
+          </div>
+          <div id="overview-processes"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Demande une décision</h2></div>
+          <div id="overview-attention"></div>
+        </section>
+      </div>
+      <section class="panel">
+        <div class="panel-head"><h2>Déroulé du dernier cycle</h2></div>
+        <div id="overview-timeline"></div>
+      </section>
+    </section>
+
+    <!-- ══ Agent ══ -->
+    <section class="view" id="view-agent" hidden>
+      <div class="split">
+        <section class="panel">
+          <div class="panel-head"><h1>Comportement</h1></div>
+          <div id="agent-summary"></div>
+
+          <form id="agent-form" class="stack">
+            <fieldset>
+              <legend>Mode d'exécution</legend>
+              <p class="hint">Le mode ne peut que restreindre l'autonomie déclarée d'une capacité, jamais l'élargir.</p>
+              <label class="choice"><input type="radio" name="mode" value="AUTOMATIC"> <span><strong>Automatique</strong> — l'agent exécute seul ce que sa politique autorise</span></label>
+              <label class="choice"><input type="radio" name="mode" value="SUPERVISED"> <span><strong>Supervisé</strong> — toute action passe par une validation humaine</span></label>
+              <label class="choice"><input type="radio" name="mode" value="MANUAL"> <span><strong>Manuel</strong> — l'agent observe et recommande, rien ne part sans un humain</span></label>
+            </fieldset>
+
+            <fieldset>
+              <legend>Autonomie par capacité</legend>
+              <p class="hint">Toute capacité non réglée est interdite : le droit d'agir ne s'hérite pas.
+                Le champ de droite est le plancher de confiance propre à la capacité — il ne peut que
+                relever le plancher global, jamais l'abaisser.</p>
+              <div id="autonomy-rows"></div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Seuil de confiance</legend>
+              <p class="hint">Plancher global : en deçà, une action autonome repasse par une validation
+                humaine au lieu de s'exécuter. Chaque capacité peut exiger davantage, jamais moins.</p>
+              <label for="confidence">Plancher</label>
+              <input type="range" id="confidence" min="0" max="100" step="5">
+              <output id="confidence-output" for="confidence">85 %</output>
+            </fieldset>
+
+            <label for="policy-reason">Motif du changement (conservé dans l'audit)</label>
+            <input type="text" id="policy-reason" placeholder="Pourquoi cette politique change">
+            <button type="submit" class="primary">Enregistrer la politique</button>
+          </form>
+        </section>
+
+        <div class="stack-panels">
+          <section class="panel">
+            <div class="panel-head"><h2>Ce que l'agent peut faire</h2></div>
+            <div id="capability-matrix"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Performance de l'agent</h2>
+              <button type="button" class="ghost" id="refresh-performance">Rafraîchir</button>
+            </div>
+            <p class="hint">Mesuré sur la fenêtre d'historique conservée en mémoire, pas depuis le
+              premier jour : ce sont des tendances récentes.</p>
+            <div id="performance"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ Processus ══ -->
+    <section class="view" id="view-processes" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <h1>Processus</h1>
+          <div class="filters" role="group" aria-label="Filtrer par état">
+            <button type="button" class="chip-toggle" data-filter="ALL" aria-pressed="true">Tous</button>
+            <button type="button" class="chip-toggle" data-filter="OK" aria-pressed="false">OK</button>
+            <button type="button" class="chip-toggle" data-filter="WARNING" aria-pressed="false">Warning</button>
+            <button type="button" class="chip-toggle" data-filter="ERROR" aria-pressed="false">Erreur</button>
+            <button type="button" class="chip-toggle" data-filter="ATTENTION" aria-pressed="false">Intervention requise</button>
+          </div>
+        </div>
+        <label class="sr-only" for="process-search">Rechercher un processus</label>
+        <input type="search" id="process-search" placeholder="Rechercher un processus">
+        <div id="processes-table"></div>
+      </section>
+    </section>
+
+    <!-- ══ Décisions ══ -->
+    <section class="view" id="view-decisions" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <h1>Décisions</h1>
+          <button type="button" class="ghost" id="refresh-decisions">Rafraîchir</button>
+        </div>
+        <div id="decisions-list"></div>
+      </section>
+    </section>
+
+    <!-- ══ Configuration ══ -->
+    <section class="view" id="view-settings" hidden>
+      <div class="split">
+        <section class="panel">
+          <div class="panel-head"><h1>Détection</h1></div>
+          <form id="thresholds-form" class="stack">
+            <p class="hint">Ces seuils sont transmis au modèle comme critères explicites : une anomalie doit se justifier par une mesure, pas par une impression.</p>
+            <label for="th-lag">Consumer lag supérieur à</label>
+            <input type="number" id="th-lag" min="0" step="1">
+            <label for="th-error">Taux d'erreur supérieur à (%)</label>
+            <input type="number" id="th-error" min="0" step="0.1">
+            <label for="th-processing">Temps de traitement supérieur à</label>
+            <input type="text" id="th-processing" placeholder="5m" pattern="[0-9]+[smh]">
+            <label for="th-blocked">Messages bloqués au-delà de</label>
+            <input type="number" id="th-blocked" min="0" step="1">
+            <label for="th-window">Fenêtre d'observation</label>
+            <input type="text" id="th-window" placeholder="15m" pattern="[0-9]+[smh]">
+            <label for="thresholds-reason">Motif du changement</label>
+            <input type="text" id="thresholds-reason" placeholder="Conservé dans l'audit">
+            <button type="submit" class="primary">Enregistrer les seuils</button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>Surveillance</h2></div>
+          <div id="settings-monitoring"></div>
+
+          <details class="advanced">
+            <summary>Paramètres avancés</summary>
+            <div id="settings-advanced"></div>
+          </details>
+        </section>
+      </div>
+    </section>
+
+    <!-- ══ Alertes ══ -->
+    <section class="view" id="view-alerts" hidden>
+      <section class="panel">
+        <div class="panel-head"><h1>Alertes</h1></div>
+        <div id="alerts-list"></div>
+      </section>
+    </section>
+
+    <!-- ══ Audit ══ -->
+    <section class="view" id="view-audit" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <h1>Audit</h1>
+          <button type="button" class="ghost" id="refresh-audit">Rafraîchir</button>
+        </div>
+        <label class="sr-only" for="audit-search">Filtrer l'audit</label>
+        <input type="search" id="audit-search" placeholder="Filtrer par acteur, action, processus ou identifiant">
+        <div id="audit-table"></div>
+      </section>
+    </section>
+
+    <!-- ══ Technique (MCP) ══ -->
+    <section class="view" id="view-tools" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <h1>Serveurs MCP</h1>
+          <button type="button" class="ghost" id="refresh-servers">Rafraîchir</button>
+        </div>
+        <p class="hint">La vue technique : ce que l'agent peut réellement observer et actionner. Le tableau de bord métier n'en est pas saturé.</p>
+        <div class="servers" id="servers"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>Santé de l'instance</h2></div>
+        <div class="tiles" id="metric-tiles"></div>
+        <pre class="dump" id="health-dump">—</pre>
+      </section>
+    </section>
+
+    <!-- ══ Conversation ══ -->
+    <section class="view" id="view-chat" hidden>
+      <div class="chat-layout">
+        <section class="panel chat-main">
+          <div class="panel-head">
+            <h1>Conversation</h1>
+            <div class="panel-actions">
+              <code class="conv-id" id="conversation-id" title="Identifiant de conversation">—</code>
+              <button type="button" class="ghost danger" id="clear-conversation" disabled>Purger</button>
+            </div>
+          </div>
+          <ol class="transcript" id="transcript" aria-live="polite" aria-label="Transcription"></ol>
+          <form class="composer" id="composer">
+            <label class="sr-only" for="prompt">Message</label>
+            <textarea id="prompt" rows="1" placeholder="Interroger l'agent… (Entrée pour envoyer, Maj+Entrée pour un saut de ligne)" required></textarea>
+            <div class="composer-side">
+              <label class="switch"><input type="checkbox" id="stream-mode" checked> <span>Flux</span></label>
+              <button type="submit" class="primary" id="send">Envoyer</button>
+              <button type="button" class="ghost danger" id="abort" hidden>Arrêter</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel chat-aside">
+          <div class="panel-head"><h2>Outils exécutés</h2></div>
+          <ul class="tool-log" id="tool-log"></ul>
+          <p class="empty" id="tool-log-empty">Les appels d'outils MCP du dernier échange apparaissent ici.</p>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <!-- Panneau latéral : le détail sans perdre le contexte de la liste. -->
+  <aside class="drawer" id="drawer" hidden aria-labelledby="drawer-title">
+    <div class="drawer-head">
+      <h2 id="drawer-title">Détail</h2>
+      <button type="button" class="ghost" id="drawer-close" aria-label="Fermer le panneau">✕</button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
+</div>
+
+<!-- Confirmation d'une action à impact : libellé explicite, jamais « Êtes-vous sûr ? ». -->
+<dialog id="confirm">
+  <form method="dialog" class="stack">
+    <h2 id="confirm-title">Confirmer</h2>
+    <div id="confirm-body"></div>
+    <div class="row-end">
+      <button type="submit" class="ghost" value="cancel">Annuler</button>
+      <button type="submit" class="primary" value="confirm" id="confirm-accept">Confirmer</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="credentials">
+  <form method="dialog" class="stack" id="credentials-form">
+    <h2>Jeton d'API</h2>
+    <p class="hint">Le bearer <code>kex.agent.api-key</code>. Conservé en <code>sessionStorage</code> : il disparaît à la fermeture de l'onglet et n'est jamais envoyé ailleurs qu'à cette instance.</p>
+    <label for="api-key">Bearer</label>
+    <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="…">
+    <div class="row-end">
+      <button type="button" class="ghost danger" id="forget-key">Oublier</button>
+      <button type="submit" class="primary" value="save">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toasts" id="toasts" aria-live="assertive"></div>
+
+<script src="assets/console.js" type="module"></script>
+</body>
+</html>

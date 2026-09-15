@@ -41,6 +41,10 @@ flowchart TB
 | `AgentConfig` | Construit le `ChatClient`, la mémoire, le catalogue |
 | `McpBearerTokenCustomizer` | Injecte `Authorization: Bearer` sur les transports MCP HTTP |
 | `SecurityConfig` + `ApiKeyAuthFilter` | Bearer statique sur `/api/**` |
+| `SupervisionService` | Le cycle : observer, analyser, décider, agir ; la politique et l'audit |
+| `SupervisionController` | Le Control Center côté API : vue d'ensemble, décisions, politique, audit |
+| `CycleAnalysis` | Le schéma imposé au modèle et la lecture défensive de ce qu'il rend |
+| `static/` | La Control Center : console d'exploitation servie par l'agent, sans étape de build |
 
 ## Le cycle d'une requête
 
@@ -223,6 +227,135 @@ sondes de conteneur tombaient. Le test `ApiSecurityUnconfiguredTest` l'a attrap�
 maintenant la forme du code qui l'empêche : le filtre authentifie, l'entry point refuse, et il n'est
 invoqué que pour une route réellement protégée.
 
+### Le cycle de supervision ne part que sur demande
+
+Pas de `@Scheduled`. En multi-instance, chaque réplique lancerait son propre cycle : deux analyses
+sur les mêmes faits, donc deux décisions et deux exécutions de la même action. Ordonnancer suppose
+un verrou partagé, donc une base — une décision d'exploitation qui n'a pas à être prise ici, et qui
+serait invisible dans un fichier de configuration.
+
+À l'intérieur d'une instance, un `ReentrantLock.tryLock()` refuse un second cycle concurrent plutôt
+que de le mettre en file : une file ne ferait que différer le doublon.
+
+La conversation du cycle est jetable (`supervision-<cycleId>`, purgée en `finally`). Réutiliser un
+identifiant ferait grossir la mémoire à chaque exécution jusqu'au plafond, en payant du contexte
+pour des faits périmés.
+
+### L'autonomie se règle par capacité, le mode ne peut que restreindre
+
+`SupervisionPolicy.effectiveAutonomy` croise le mode global et l'autonomie déclarée d'une capacité,
+et ne retient jamais la plus permissive des deux. Sans cette règle, passer le mode en automatique
+ouvrirait d'un coup des actions que quelqu'un avait délibérément mises sous supervision — le genre
+d'élargissement qu'on ne voit qu'après coup.
+
+Une capacité absente de la politique est `FORBIDDEN`, pas permissive : même posture que l'API, qui
+répond `503` sans clé plutôt que de s'ouvrir. Et le droit d'agir ne suffit pas : sans outil MCP lié
+à la capacité, l'exécution échoue en le disant, au lieu de réussir à moitié.
+
+La même doctrine s'applique au plancher de confiance, sur une seconde dimension :
+`confidenceThresholdOf` retient le maximum du plancher global et de celui déclaré pour la capacité.
+Un réglage par capacité ne peut donc que *durcir*. Laisser l'inverse rendrait le plancher global
+illisible — sa valeur ne dirait plus rien tant qu'on n'a pas relu chaque ligne de la politique pour
+vérifier qu'aucune ne le contourne. Une capacité qui doit se déclencher plus facilement se traite
+en abaissant le plancher global et en relevant celui des capacités coûteuses.
+
+L'écran Agent affiche les deux colonnes — déclarée et effective — et la confiance à partir de
+laquelle chaque action autonome part réellement. Régler une autonomie sans voir ce qu'elle donnera
+vraiment, c'est régler à l'aveugle. Le champ de plancher affiche d'ailleurs la valeur *appliquée*
+et non celle qui est stockée : un réglage sous le plancher global n'a aucun effet, et le laisser à
+l'écran rendrait le champ invalide au regard de son propre minimum — formulaire insoumettable, sans
+rien pour l'expliquer.
+
+### La sortie du modèle est contrainte, pas garantie
+
+`CycleAnalysis` impose un schéma, puis lit la réponse défensivement. Un champ manquant, un état
+inconnu, une confiance à 3,2, un processus inventé : rien de tout cela ne fait échouer le cycle, et
+rien n'est deviné. Un état illisible devient `UNKNOWN` — jamais `OK` : une anomalie mal formée ne
+doit pas effacer les vingt-trois processus analysés correctement, et un processus dont on ne sait
+rien ne doit pas ressembler à un processus sain.
+
+Par la même logique, un processus déclaré mais absent de la réponse reste affiché en `UNKNOWN` au
+lieu de disparaître : le faire sortir du tableau le ferait passer pour surveillé alors qu'il ne
+l'est pas. `CycleAnalysisTest` fixe chacun de ces cas.
+
+### Une alerte est un symptôme dédupliqué, pas un relevé
+
+Deux cycles qui voient le même retard sur le même processus signalent un incident, pas deux. Les
+anomalies brutes sont regroupées par `processId + titre` : l'alerte porte alors un compteur, une
+date de première apparition et la dernière analyse en date.
+
+Seul le dernier cycle décide qu'une alerte est active. Une alerte qui ne réapparaît pas a cessé
+d'être vraie, et la laisser à l'écran ferait traiter un incident déjà passé — mais son historique
+reste, ce qui distingue un symptôme qui dure d'un pic isolé.
+
+La priorisation est calculée côté serveur, pas dans la console : gravité d'abord, puis nombre de
+relevés, puis fraîcheur. Une alerte porte aussi la décision en attente qui lui correspond, pour que
+l'action soit à portée de clic plutôt qu'à chercher dans un autre écran.
+
+`GET /api/agent/supervision/anomalies` a été retiré au profit de `/alerts` : un point d'entrée sans
+consommateur est de la surface publique à maintenir pour personne. Les relevés bruts restent
+internes au service.
+
+### Mesurer l'agent sans inventer de chiffre
+
+`GET /api/agent/supervision/performance` rend ce que l'agent fait de lui-même : cycles, détections,
+décisions autonomes contre validations humaines, actions réussies ou en échec, délais.
+
+Trois précautions y sont prises, et ce sont elles qui comptent :
+
+- **Le taux de pertinence ne se calcule que sur les verdicts humains** — approbations contre refus.
+  Une exécution autonome n'y entre pas : l'agent ne se confirme pas lui-même. Tant que personne n'a
+  tranché, le taux est `null` et l'interface dit pourquoi, là où un `0` se lirait « l'agent se
+  trompe toujours ».
+- **La durée moyenne d'un cycle n'est pas présentée comme un délai de détection.** Celui-ci se
+  compterait depuis le début de l'incident, que rien ici ne connaît. Le délai de dénouement d'une
+  décision, lui, est réellement mesuré.
+- **Tout porte sur la fenêtre d'historique conservée**, pas depuis le premier jour. L'interface
+  l'affiche, faute de quoi un compteur qui retombe passerait pour une amélioration.
+
+`DecisionStatus.EXPIRED` est distinct de `FAILED` pour la même raison : confondre « l'outil a
+échoué » et « personne n'a répondu » masquerait un défaut d'organisation en défaut technique.
+
+### L'historique est en mémoire, donc mono-instance
+
+Cycles, anomalies, décisions et audit vivent dans des `History` bornés, en mémoire du processus.
+Derrière un load balancer, chaque réplique tiendrait le sien et l'audit serait partiel. C'est
+assumé et écrit ici plutôt que masqué : la persistance partagée est une décision d'exploitation,
+au même titre que le profil `shared-memory` pour la mémoire de conversation.
+
+L'acteur inscrit à l'audit est le principal authentifié. Le bearer étant unique et partagé, il
+désigne le jeton, pas une personne : tracer une identité que le système ne connaît pas serait une
+fiction, et l'audit n'en vaudrait rien.
+
+### Une demande de validation expire
+
+Approuvée trois heures après les faits, une action agirait sur une situation qui n'existe plus. Les
+demandes dépassant `approval-timeout` basculent en `FAILED` à la lecture suivante, avec leur trace
+d'audit. L'expiration est évaluée à la lecture et non par une tâche de fond : sans planificateur,
+une tâche de plus serait le seul composant à tourner tout seul.
+
+### La console est servie ouverte, mais n'ouvre rien
+
+`src/main/resources/static/` porte la Control Center : conversation en flux, introspection MCP,
+invocation directe d'un outil, base de connaissance, santé. Trois fichiers statiques, aucun
+outillage JavaScript — le projet est construit par Maven, et ajouter npm ferait vivre deux chaînes
+de build pour trois fichiers.
+
+`GET /`, `/index.html` et `/assets/**` sont en `permitAll`, comme Swagger UI et pour la même raison :
+c'est du HTML inerte qui ne porte aucun secret, et l'authentifier empêcherait le navigateur de
+charger la page qui *demande* le jeton. Trois garde-fous encadrent cette ouverture, tous tenus par
+`ConsoleTest` :
+
+- elle est restreinte au `GET` — un `POST` sur les mêmes chemins reste authentifié ;
+- les chemins sont énumérés plutôt que couverts par un joker de racine, pour qu'une future route
+  servie ici n'hérite pas de l'ouverture ;
+- `/api/**` et `/actuator/prometheus` répondent toujours `401` sans jeton.
+
+Le jeton est saisi dans le navigateur et vit en `sessionStorage` : il disparaît à la fermeture de
+l'onglet et n'est jamais écrit côté serveur. Les réponses du modèle et les contenus MCP sont
+injectés par `textContent`, jamais par `innerHTML` : ce sont des données non fiables, et un serveur
+MCP hostile pourrait sinon placer un XSS sur la même origine que l'API.
+
 ## Ce que les tests couvrent
 
 | Test | Ce qu'il verrouille |
@@ -234,3 +367,8 @@ invoqué que pour une route réellement protégée.
 | `AgentControllerTest` | Contrat HTTP des 7 routes |
 | `SharedMemoryProfileTest` | Le profil `shared-memory` remplace bien le dépôt en mémoire |
 | `KexAgentApplicationTests` | Le contexte démarre sans aucun serveur MCP configuré |
+| `ConsoleTest` | La console est servie sans jeton, n'ouvre ni `/api/**` ni le `POST`, et appelle les routes qui existent |
+| `SupervisionCycleIntegrationTest` | Le cycle jusqu'à un appel d'outil MCP réel : contexte Spring complet, transport streamable-HTTP, bearer, audit. Seul le modèle est simulé |
+| `SupervisionServiceTest` | Autonomie, seuil de confiance, expiration, pause, cycle en échec, péremption des données |
+| `CycleAnalysisTest` | Ce qui arrive quand le modèle rend autre chose que le schéma demandé |
+| `SupervisionControllerTest` | Contrat HTTP du Control Center, dont 409 sur conflit d'état et 404 sur décision inconnue |

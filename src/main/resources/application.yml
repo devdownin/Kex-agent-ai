@@ -80,6 +80,49 @@ kex:
       similarity-threshold: 0.6
       store-path: ""
 
+    supervision:
+      # Le Control Center : observer, comprendre, décider, agir, vérifier. Allumé par défaut — il
+      # n'exige aucune infrastructure de plus que l'agent lui-même.
+      enabled: true
+      # Rien n'est surveillé tant que rien n'est déclaré : l'agent ne devine pas les processus
+      # d'intégration d'une installation, et un tableau de bord vide vaut mieux qu'inventé.
+      processes: []
+        # - id: order-integration
+        #   name: Order Integration
+        #   description: Commandes reçues du site vers l'ERP
+        #   hint: topic integration.events, consumer group integration-consumer
+      # Le mode ne peut que restreindre l'autonomie déclarée d'une capacité, jamais l'élargir.
+      mode: SUPERVISED
+      # En deçà, une action autonome repasse en validation humaine plutôt que de s'exécuter.
+      confidence-threshold: 0.85
+      thresholds:
+        consumer-lag: 1000
+        error-rate-percent: 2.0
+        processing-time: 5m
+        blocked-messages: 50
+        observation-window: 15m
+      # Toute capacité non citée est interdite. Même posture que l'API, qui refuse sans clé
+      # plutôt que de s'ouvrir : le droit d'agir ne s'hérite pas d'une installation.
+      autonomy: {}
+        # NOTIFY: AUTOMATIC
+        # RESTART_CONSUMER: SUPERVISED
+      # Plancher de confiance propre à une capacité : « redémarrer un consumer » mérite plus de
+      # certitude que « notifier ». Un réglage ici ne peut que relever le plancher global, jamais
+      # l'abaisser — sinon il affaiblirait en silence la garantie que le plancher global porte.
+      confidence-thresholds: {}
+        # RESTART_CONSUMER: 0.95
+      # Sans outil lié, une capacité reste recommandable mais inexécutable — et le dit.
+      actions: {}
+        # RESTART_CONSUMER:
+        #   connection: kafka-explorer
+        #   tool: restart_consumer_group
+      # Historique en mémoire du processus, donc mono-instance. Voir docs/ARCHITECTURE.md.
+      history-size: 200
+      # Une validation arrivée bien après les faits agirait sur une situation qui n'existe plus.
+      approval-timeout: 30m
+      # Au-delà, l'interface signale des données potentiellement obsolètes.
+      stale-after: 15m
+
     rate-limit:
       # Limite d'instance, pas par appelant : le bearer est unique et partagé. Elle protège le
       # budget ; en multi-instance, diviser le seuil par le nombre de répliques.
