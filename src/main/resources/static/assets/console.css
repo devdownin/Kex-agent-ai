@@ -165,7 +165,7 @@ body {
 }
 .nav-item:hover { background: var(--surface-2); color: var(--ink); }
 .nav-item[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
-.nav-ico { font-family: var(--mono); opacity: .85; width: 1em; text-align: center; }
+.nav-ico { flex: none; width: 18px; height: 18px; opacity: .85; }
 
 .badge {
   margin-left: auto;
@@ -292,7 +292,17 @@ button, .ghost {
 button:hover:not(:disabled), a.ghost:hover { border-color: var(--ink-3); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 
-.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+/* L'action qui compte le plus sur l'écran — lancer un cycle, enregistrer une politique — se
+   fondait dans les boutons secondaires une fois la couleur d'accent perçue comme un simple
+   habillage. Une ombre et un léger relief au survol la distinguent sans changer la palette. */
+.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
+}
+.primary:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 2px 6px rgb(0 0 0 / 16%); }
 .danger { color: var(--danger); }
 
 :where(button, a, input, textarea, select, summary, tr.clickable):focus-visible {
@@ -375,7 +385,12 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
   font-size: 13px;
 }
 .state p { margin: 0; }
+/* Même règle que les pastilles et les KPI : la couleur ne porte jamais l'état seule. Sans ce
+   glyphe, une erreur ne se distinguait de « rien à signaler » que par la couleur du texte, et
+   `.state.empty` — pas d'anomalie, pas de décision en attente — restait le seul état vraiment
+   neutre du lot. */
 .state.error { border-style: solid; border-color: var(--danger); color: var(--danger); }
+.state.error p:first-child::before { content: "✕ "; font-family: var(--mono); }
 .state.loading::before { content: "◌ "; font-family: var(--mono); }
 
 /* La couleur ne porte jamais l'état seule : le glyphe et le libellé sont toujours là. */
@@ -770,11 +785,17 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   border-left: 3px solid var(--accent);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 14%);
   font-size: 13px;
   overflow-wrap: anywhere;
+  animation: toast-in .18s ease-out;
 }
+@keyframes toast-in { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 .toast.error { border-left-color: var(--danger); }
+/* Même règle que `.state.error` : le rouge seul ne distinguait pas un échec d'une simple
+   confirmation dans la pile de notifications. */
+.toast.error::before { content: "✕ "; font-family: var(--mono); font-weight: 600; color: var(--danger); }
 
 /* ── Tablette ────────────────────────────────────────────────────────── */
 

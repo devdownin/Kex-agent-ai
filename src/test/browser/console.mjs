@@ -166,12 +166,17 @@ await check('le tableau compact de la vue d’ensemble signale qu’il défile',
   // indépendante du rendu du chrome) tient partout ailleurs, Safari compris.
   await page.goto(`${BASE}/#/overview`, { waitUntil: 'networkidle' });
   await page.waitForSelector('#overview-processes .scroll-x table.grid tbody tr');
+  // Le bascule hors-ligne juste avant ce cas déclenche son propre rechargement de fond en
+  // reprenant la connexion : attendre le débordement plutôt que le lire une fois évite une course
+  // avec ce second rendu.
+  await page.waitForFunction(() => {
+    const node = document.querySelector('#overview-processes .scroll-x');
+    return node && node.scrollWidth > node.clientWidth;
+  }, null, { timeout: 5000 });
   const scroll = await page.$eval('#overview-processes .scroll-x', (node) => ({
-    overflows: node.scrollWidth > node.clientWidth,
     scrollbarWidth: getComputedStyle(node).scrollbarWidth,
     hasEdgeShadow: getComputedStyle(node).backgroundImage.includes('gradient'),
   }));
-  assert.ok(scroll.overflows, 'le tableau compact déborde bien dans ce panneau étroit');
   assert.equal(scroll.scrollbarWidth, 'thin');
   assert.ok(scroll.hasEdgeShadow, 'un halo de bord signale le contenu caché');
 });
