@@ -278,6 +278,44 @@ Par la même logique, un processus déclaré mais absent de la réponse reste af
 lieu de disparaître : le faire sortir du tableau le ferait passer pour surveillé alors qu'il ne
 l'est pas. `CycleAnalysisTest` fixe chacun de ces cas.
 
+### Une alerte est un symptôme dédupliqué, pas un relevé
+
+Deux cycles qui voient le même retard sur le même processus signalent un incident, pas deux. Les
+anomalies brutes sont regroupées par `processId + titre` : l'alerte porte alors un compteur, une
+date de première apparition et la dernière analyse en date.
+
+Seul le dernier cycle décide qu'une alerte est active. Une alerte qui ne réapparaît pas a cessé
+d'être vraie, et la laisser à l'écran ferait traiter un incident déjà passé — mais son historique
+reste, ce qui distingue un symptôme qui dure d'un pic isolé.
+
+La priorisation est calculée côté serveur, pas dans la console : gravité d'abord, puis nombre de
+relevés, puis fraîcheur. Une alerte porte aussi la décision en attente qui lui correspond, pour que
+l'action soit à portée de clic plutôt qu'à chercher dans un autre écran.
+
+`GET /api/agent/supervision/anomalies` a été retiré au profit de `/alerts` : un point d'entrée sans
+consommateur est de la surface publique à maintenir pour personne. Les relevés bruts restent
+internes au service.
+
+### Mesurer l'agent sans inventer de chiffre
+
+`GET /api/agent/supervision/performance` rend ce que l'agent fait de lui-même : cycles, détections,
+décisions autonomes contre validations humaines, actions réussies ou en échec, délais.
+
+Trois précautions y sont prises, et ce sont elles qui comptent :
+
+- **Le taux de pertinence ne se calcule que sur les verdicts humains** — approbations contre refus.
+  Une exécution autonome n'y entre pas : l'agent ne se confirme pas lui-même. Tant que personne n'a
+  tranché, le taux est `null` et l'interface dit pourquoi, là où un `0` se lirait « l'agent se
+  trompe toujours ».
+- **La durée moyenne d'un cycle n'est pas présentée comme un délai de détection.** Celui-ci se
+  compterait depuis le début de l'incident, que rien ici ne connaît. Le délai de dénouement d'une
+  décision, lui, est réellement mesuré.
+- **Tout porte sur la fenêtre d'historique conservée**, pas depuis le premier jour. L'interface
+  l'affiche, faute de quoi un compteur qui retombe passerait pour une amélioration.
+
+`DecisionStatus.EXPIRED` est distinct de `FAILED` pour la même raison : confondre « l'outil a
+échoué » et « personne n'a répondu » masquerait un défaut d'organisation en défaut technique.
+
 ### L'historique est en mémoire, donc mono-instance
 
 Cycles, anomalies, décisions et audit vivent dans des `History` bornés, en mémoire du processus.
@@ -330,6 +368,7 @@ MCP hostile pourrait sinon placer un XSS sur la même origine que l'API.
 | `SharedMemoryProfileTest` | Le profil `shared-memory` remplace bien le dépôt en mémoire |
 | `KexAgentApplicationTests` | Le contexte démarre sans aucun serveur MCP configuré |
 | `ConsoleTest` | La console est servie sans jeton, n'ouvre ni `/api/**` ni le `POST`, et appelle les routes qui existent |
+| `SupervisionCycleIntegrationTest` | Le cycle jusqu'à un appel d'outil MCP réel : contexte Spring complet, transport streamable-HTTP, bearer, audit. Seul le modèle est simulé |
 | `SupervisionServiceTest` | Autonomie, seuil de confiance, expiration, pause, cycle en échec, péremption des données |
 | `CycleAnalysisTest` | Ce qui arrive quand le modèle rend autre chose que le schéma demandé |
 | `SupervisionControllerTest` | Contrat HTTP du Control Center, dont 409 sur conflit d'état et 404 sur décision inconnue |

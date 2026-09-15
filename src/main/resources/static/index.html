@@ -129,10 +129,22 @@
           </form>
         </section>
 
-        <section class="panel">
-          <div class="panel-head"><h2>Ce que l'agent peut faire</h2></div>
-          <div id="capability-matrix"></div>
-        </section>
+        <div class="stack-panels">
+          <section class="panel">
+            <div class="panel-head"><h2>Ce que l'agent peut faire</h2></div>
+            <div id="capability-matrix"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Performance de l'agent</h2>
+              <button type="button" class="ghost" id="refresh-performance">Rafraîchir</button>
+            </div>
+            <p class="hint">Mesuré sur la fenêtre d'historique conservée en mémoire, pas depuis le
+              premier jour : ce sont des tendances récentes.</p>
+            <div id="performance"></div>
+          </section>
+        </div>
       </div>
     </section>
 

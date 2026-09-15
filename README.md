@@ -93,6 +93,11 @@ A few things it deliberately does:
   setting is there to carry, and nobody could read a policy without checking every line.
 - **Confidence never travels alone.** It is always shown next to the observations it rests on,
   because a percentage produced by a model is not a measured probability.
+- **The same symptom twice is one alert, not two.** Alerts are deduplicated across cycles and carry
+  how often they recurred; one the latest cycle no longer sees has stopped being true and leaves.
+- **The agent measures itself, without inventing figures.** Its relevance rate counts only the
+  recommendations a human ruled on — an autonomous run never confirms itself — and stays absent
+  until someone has ruled, where a `0` would read as "always wrong".
 - **Colour never carries a state by itself.** Every state ships a glyph and a label too.
 - **Sensitive actions confirm with what they will do** — *Confirm: restart Consumer Integration-02*,
   not *Are you sure?*
@@ -195,6 +200,8 @@ MCP is, if this is your first one — is in [`docs/MCP.md`](docs/MCP.md).
 | `POST` | `/api/agent/supervision/decisions/{id}/approve` `…/reject` | Human-in-the-loop on a pending action |
 | `GET` `PUT` | `/api/agent/supervision/policy` | Mode, per-capability autonomy and confidence floors, thresholds — versioned |
 | `POST` | `/api/agent/supervision/pause` `…/resume` | Stop and restart analysis |
+| `GET` | `/api/agent/supervision/alerts` | Deduplicated, prioritized, each carrying its pending action |
+| `GET` | `/api/agent/supervision/performance` | How the agent itself is doing — relevance, autonomy, delays |
 | `GET` | `/api/agent/supervision/audit` | Who did what, why, under which policy, with what result |
 
 The OpenAPI description is served at `/v3/api-docs`, with Swagger UI at `/swagger-ui.html`, and the

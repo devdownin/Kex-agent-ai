@@ -38,9 +38,22 @@ class SupervisionControllerTest {
     SupervisionService supervision;
 
     @Test
+    void le_taux_de_pertinence_absent_se_rend_absent_et_non_a_zero() {
+        // Un 0 sérialisé se lirait « l'agent se trompe toujours » là où personne n'a encore tranché.
+        given(supervision.performance()).willReturn(new AgentPerformance(3, 0, 1200L, 5, 2, 4, 1, 0, 0,
+                null, 1, 0, 1, 0, null));
+
+        assertThat(mvc.get().uri("/api/agent/supervision/performance"))
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.relevanceRate").isNull();
+    }
+
+    @Test
     void rend_la_vue_d_ensemble_en_une_requete() {
         given(supervision.overview()).willReturn(new Overview(status(AgentState.OPERATIONAL), 24, 23, 1, 0, 0,
                 3, 2, List.of(), List.of(), List.of(), null));
+        given(supervision.alerts()).willReturn(List.of());
 
         assertThat(mvc.get().uri("/api/agent/supervision/overview"))
                 .hasStatusOk()
@@ -168,13 +181,16 @@ class SupervisionControllerTest {
     @Test
     void expose_processus_anomalies_cycles_et_audit() {
         given(supervision.snapshots()).willReturn(List.of());
-        given(supervision.anomalies()).willReturn(List.of());
+        given(supervision.alerts()).willReturn(List.of());
+        given(supervision.performance()).willReturn(new AgentPerformance(0, 0, null, 0, 0, 0, 0, 0, 0,
+                null, 0, 0, 0, 0, null));
         given(supervision.cycles()).willReturn(List.of());
         given(supervision.audit()).willReturn(List.of());
         given(supervision.decisions()).willReturn(List.of());
         given(supervision.status()).willReturn(status(AgentState.OPERATIONAL));
 
-        for (String path : List.of("processes", "anomalies", "cycles", "audit", "decisions", "status")) {
+        for (String path : List.of("processes", "alerts", "cycles", "audit", "decisions", "status",
+                "performance")) {
             assertThat(mvc.get().uri("/api/agent/supervision/" + path)).hasStatusOk();
         }
     }
@@ -187,6 +203,6 @@ class SupervisionControllerTest {
     private static Decision decision(DecisionStatus status) {
         return new Decision("d1", "cycle-1", "a1", "order-integration", "Order Integration",
                 Capability.RESTART_CONSUMER, "objectif", "contexte", "Redémarrer", List.of(), "Faible",
-                0.96, status, "ok", "policy-v1", "corr", NOW, NOW, NOW.plusSeconds(1800));
+                0.96, status, "ok", "policy-v1", "corr", "opérateur", NOW, NOW, NOW.plusSeconds(1800));
     }
 }

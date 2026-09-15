@@ -72,11 +72,8 @@ class ConsoleTest {
                 .contains("/api/agent/supervision");
 
         // Les vues de supervision et les routes du contrôleur doivent citer les mêmes segments.
-        // /anomalies n'y figure pas : la console lit les anomalies du dernier cycle dans
-        // /overview, en une requête, pour que les compteurs et les listes qu'ils annoncent ne
-        // puissent pas se contredire à l'écran.
         for (String route : List.of("/overview", "/status", "/cycles", "/decisions", "/policy",
-                "/audit", "/processes")) {
+                "/audit", "/processes", "/alerts", "/performance")) {
             assertThat(modules).as(route).contains(route);
         }
         // La mise en pause et la reprise partagent un gabarit : c'est le segment qui est cité.

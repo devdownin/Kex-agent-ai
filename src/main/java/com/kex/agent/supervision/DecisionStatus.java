@@ -12,6 +12,15 @@ public enum DecisionStatus {
     PENDING_APPROVAL,
     EXECUTED,
     REJECTED,
+
+    /** L'action est partie et a échoué : outil en erreur, ou aucun outil lié à la capacité. */
     FAILED,
+
+    /**
+     * Personne n'a répondu à temps. Distinct de {@code FAILED} : confondre « l'outil a échoué » et
+     * « la demande est restée sans réponse » masquerait un défaut d'organisation en défaut technique.
+     */
+    EXPIRED,
+
     BLOCKED
 }

@@ -228,8 +228,10 @@ class SupervisionServiceTest {
         clock.advance(Duration.ofHours(3));
 
         assertThat(service.pending()).isEmpty();
-        assertThat(service.decision(id).status()).isEqualTo(DecisionStatus.FAILED);
+        // EXPIRED et non FAILED : « personne n'a répondu » n'est pas « l'outil a échoué ».
+        assertThat(service.decision(id).status()).isEqualTo(DecisionStatus.EXPIRED);
         assertThat(service.decision(id).result()).contains("expirée");
+        assertThat(service.decision(id).resolvedBy()).isEqualTo("Système");
     }
 
     @Test
@@ -283,6 +285,99 @@ class SupervisionServiceTest {
             assertThat(snapshot.state()).isEqualTo(ProcessState.UNKNOWN);
         });
         assertThat(service.overview().processesUnknown()).isEqualTo(1);
+    }
+
+    @Test
+    void deux_cycles_voyant_le_meme_symptome_ne_font_qu_une_alerte() {
+        analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.9));
+        SupervisionService service = service(properties(List.of(ORDERS),
+                Map.of(Capability.RESTART_CONSUMER, Autonomy.SUPERVISED), Map.of()));
+
+        service.runCycle("test");
+        clock.advance(Duration.ofMinutes(1));
+        service.runCycle("test");
+
+        assertThat(service.alerts()).singleElement().satisfies(alert -> {
+            assertThat(alert.title()).isEqualTo("Retard de traitement");
+            assertThat(alert.occurrences()).isEqualTo(2);
+            assertThat(alert.firstSeenAt()).isBefore(alert.lastSeenAt());
+            // L'alerte porte l'action à prendre : la chercher ailleurs coûterait un aller-retour.
+            assertThat(alert.pendingDecisionId()).isNotNull();
+        });
+    }
+
+    @Test
+    void une_alerte_que_le_dernier_cycle_ne_revoit_plus_sort_de_la_liste() {
+        analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.9));
+        SupervisionService service = service(properties(List.of(ORDERS),
+                Map.of(Capability.RESTART_CONSUMER, Autonomy.SUPERVISED), Map.of()));
+        service.runCycle("test");
+        assertThat(service.alerts()).hasSize(1);
+
+        // Deuxième cycle sans anomalie : le symptôme a cessé d'être vrai.
+        analysisReturns(Map.of("processes",
+                List.of(Map.of("processId", "order-integration", "state", "OK")), "anomalies", List.of()));
+        service.runCycle("test");
+
+        assertThat(service.alerts()).isEmpty();
+    }
+
+    @Test
+    void une_erreur_passe_devant_un_avertissement_qui_se_repete() {
+        analysisReturns(Map.of("processes", List.of(), "anomalies", List.of(
+                Map.of("processId", "order-integration", "title", "Retard", "severity", "WARNING",
+                        "confidence", 0.8),
+                Map.of("processId", "order-integration", "title", "Timeout", "severity", "ERROR",
+                        "confidence", 0.9))));
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+        service.runCycle("test");
+        service.runCycle("test");
+
+        assertThat(service.alerts()).extracting(Alert::title).containsExactly("Timeout", "Retard");
+    }
+
+    @Test
+    void la_mesure_de_l_agent_ne_devine_pas_ce_qu_elle_ne_sait_pas() {
+        analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.9));
+        SupervisionService service = service(properties(List.of(ORDERS),
+                Map.of(Capability.RESTART_CONSUMER, Autonomy.SUPERVISED), Map.of()));
+        service.runCycle("test");
+
+        // Personne n'a tranché : le taux de pertinence est absent, pas à zéro.
+        assertThat(service.performance()).satisfies(perf -> {
+            assertThat(perf.cycles()).isEqualTo(1);
+            assertThat(perf.decisionsTaken()).isEqualTo(1);
+            assertThat(perf.relevanceRate()).isNull();
+            assertThat(perf.autonomousDecisions()).isZero();
+            assertThat(perf.averageResolutionMillis()).isNull();
+        });
+
+        service.reject(service.pending().getFirst().id(), "faux positif", "opérateur");
+
+        assertThat(service.performance()).satisfies(perf -> {
+            assertThat(perf.humanRejections()).isEqualTo(1);
+            assertThat(perf.relevanceRate()).isZero();
+            assertThat(perf.averageResolutionMillis()).isNotNull();
+        });
+    }
+
+    @Test
+    void une_execution_autonome_n_entre_pas_dans_le_taux_de_pertinence() {
+        // L'agent ne se confirme pas lui-même : seul un verdict humain compte.
+        analysisReturns(anomalyPayload("NOTIFY", 0.99));
+        when(toolCatalog.call(anyString(), anyString(), any()))
+                .thenReturn(new McpToolResult("c", "t", false, List.of("prévenu"), null));
+        SupervisionService service = service(properties(ExecutionMode.AUTOMATIC, List.of(ORDERS),
+                Map.of(Capability.NOTIFY, Autonomy.AUTOMATIC),
+                Map.of(Capability.NOTIFY, new ActionBinding("c", "t", Map.of()))));
+        service.runCycle("test");
+
+        assertThat(service.performance()).satisfies(perf -> {
+            assertThat(perf.autonomousDecisions()).isEqualTo(1);
+            assertThat(perf.actionsExecuted()).isEqualTo(1);
+            assertThat(perf.humanApprovals()).isZero();
+            assertThat(perf.relevanceRate()).isNull();
+        });
     }
 
     @Test

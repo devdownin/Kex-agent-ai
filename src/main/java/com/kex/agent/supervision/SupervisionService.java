@@ -3,10 +3,13 @@
 package com.kex.agent.supervision;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -39,6 +42,9 @@ public class SupervisionService {
     private static final Logger log = LoggerFactory.getLogger(SupervisionService.class);
 
     private static final String AGENT = "Agent";
+
+    /** Ni l'agent ni un humain : ce qui expire une demande que personne n'a tranchée. */
+    private static final String SYSTEM = "Système";
 
     private final AgentService agentService;
     private final McpToolCatalog toolCatalog;
@@ -96,8 +102,113 @@ public class SupervisionService {
         return snapshots;
     }
 
-    public List<Anomaly> anomalies() {
+    /**
+     * Relevés bruts, du plus récent au plus ancien. Non exposé par l'API : ce qu'un humain lit,
+     * ce sont des alertes dédupliquées, et un point d'entrée sans consommateur est de la surface
+     * publique qu'il faudrait maintenir pour personne.
+     */
+    List<Anomaly> rawAnomalies() {
         return anomalies.list();
+    }
+
+    /**
+     * Anomalies dédupliquées, limitées à celles que le dernier cycle voit encore, triées par ce qui
+     * mérite l'attention en premier : gravité, puis nombre de relevés, puis fraîcheur.
+     *
+     * <p>Seul le dernier cycle décide qu'une alerte est active. Une alerte qui ne réapparaît pas
+     * a cessé d'être vraie, et la laisser à l'écran ferait traiter un incident déjà passé — mais
+     * son historique reste, d'où le compteur et la date de première apparition.
+     */
+    public List<Alert> alerts() {
+        CycleReport last = cycles.first();
+        if (last == null) {
+            return List.of();
+        }
+        Map<String, List<Anomaly>> grouped = new LinkedHashMap<>();
+        for (Anomaly anomaly : rawAnomalies()) {
+            grouped.computeIfAbsent(Alert.identity(anomaly.processId(), anomaly.title()),
+                    key -> new ArrayList<>()).add(anomaly);
+        }
+
+        List<Decision> waiting = pending();
+        List<Alert> alerts = new ArrayList<>();
+        for (Map.Entry<String, List<Anomaly>> entry : grouped.entrySet()) {
+            List<Anomaly> occurrences = entry.getValue();
+            // anomalies.list() rend du plus récent au plus ancien : le premier porte l'état courant.
+            Anomaly latest = occurrences.getFirst();
+            if (!last.id().equals(latest.cycleId())) {
+                continue;
+            }
+            String pendingId = waiting.stream()
+                    .filter(decision -> occurrences.stream().anyMatch(a -> a.id().equals(decision.anomalyId())))
+                    .map(Decision::id)
+                    .findFirst()
+                    .orElse(null);
+            alerts.add(new Alert(entry.getKey(), latest.processId(), latest.processName(), latest.title(),
+                    worst(occurrences), occurrences.size(), occurrences.getLast().detectedAt(),
+                    latest.detectedAt(), latest.observations(), latest.analysis(), latest.probableCause(),
+                    latest.confidence(), latest.recommendation(), latest.capability(), pendingId));
+        }
+
+        // Une erreur passe devant un avertissement, un symptôme qui se répète devant un isolé.
+        alerts.sort(Comparator
+                .comparingInt((Alert alert) -> alert.severity() == ProcessState.ERROR ? 0 : 1)
+                .thenComparing(Comparator.comparingInt(Alert::occurrences).reversed())
+                .thenComparing(Comparator.comparing(Alert::lastSeenAt).reversed()));
+        return List.copyOf(alerts);
+    }
+
+    private static ProcessState worst(List<Anomaly> occurrences) {
+        return occurrences.stream().anyMatch(anomaly -> anomaly.severity() == ProcessState.ERROR)
+                ? ProcessState.ERROR
+                : ProcessState.WARNING;
+    }
+
+    /**
+     * Mesure de l'agent lui-même sur la fenêtre conservée. Ce qui n'est pas mesurable n'est pas
+     * estimé : le taux de pertinence reste {@code null} tant qu'aucun humain n'a tranché, et la
+     * durée moyenne d'un cycle n'est pas présentée comme un délai de détection.
+     */
+    public AgentPerformance performance() {
+        List<CycleReport> runs = cycles.list();
+        List<Decision> taken = decisions();
+
+        long approved = taken.stream().filter(d -> isHuman(d) && d.status() != DecisionStatus.REJECTED).count();
+        long rejected = taken.stream().filter(d -> d.status() == DecisionStatus.REJECTED).count();
+        long ruled = approved + rejected;
+
+        return new AgentPerformance(
+                runs.size(),
+                (int) runs.stream().filter(report -> report.failure() != null).count(),
+                average(runs.stream()
+                        .filter(report -> report.startedAt() != null && report.finishedAt() != null)
+                        .map(report -> Duration.between(report.startedAt(), report.finishedAt()).toMillis())),
+                rawAnomalies().size(),
+                alerts().size(),
+                taken.size(),
+                (int) taken.stream().filter(d -> AGENT.equals(d.resolvedBy())).count(),
+                (int) approved,
+                (int) rejected,
+                // Aucun verdict humain : un taux calculé sur zéro serait un chiffre inventé.
+                ruled == 0 ? null : (double) approved / ruled,
+                (int) taken.stream().filter(d -> d.status() == DecisionStatus.EXECUTED).count(),
+                (int) taken.stream().filter(d -> d.status() == DecisionStatus.FAILED).count(),
+                (int) taken.stream().filter(d -> d.status() == DecisionStatus.BLOCKED).count(),
+                (int) taken.stream().filter(d -> d.status() == DecisionStatus.EXPIRED).count(),
+                average(taken.stream()
+                        .filter(d -> d.resolvedAt() != null)
+                        .map(d -> Duration.between(d.decidedAt(), d.resolvedAt()).toMillis())));
+    }
+
+    /** Une validation humaine porte le nom de qui l'a donnée ; l'agent, lui, signe {@code Agent}. */
+    private static boolean isHuman(Decision decision) {
+        return decision.resolvedBy() != null && !AGENT.equals(decision.resolvedBy())
+                && !SYSTEM.equals(decision.resolvedBy());
+    }
+
+    private static Long average(java.util.stream.Stream<Long> values) {
+        java.util.OptionalDouble mean = values.mapToLong(Long::longValue).average();
+        return mean.isPresent() ? Math.round(mean.getAsDouble()) : null;
     }
 
     public List<CycleReport> cycles() {
@@ -159,13 +270,11 @@ public class SupervisionService {
         List<ProcessSnapshot> current = snapshots;
         Map<ProcessState, Long> counts = new EnumMap<>(ProcessState.class);
         current.forEach(snapshot -> counts.merge(snapshot.state(), 1L, Long::sum));
-        CycleReport last = cycles.first();
-        List<Anomaly> open = last == null ? List.of()
-                : anomalies.list().stream().filter(a -> last.id().equals(a.cycleId())).toList();
+        List<Alert> open = alerts();
         return new Overview(status(), current.size(),
                 count(counts, ProcessState.OK), count(counts, ProcessState.WARNING),
                 count(counts, ProcessState.ERROR), count(counts, ProcessState.UNKNOWN),
-                open.size(), pending().size(), current, open, pending(), last);
+                open.size(), pending().size(), current, open, pending(), cycles.first());
     }
 
     private static int count(Map<ProcessState, Long> counts, ProcessState state) {
@@ -330,11 +439,12 @@ public class SupervisionService {
                 "Ramener %s sous les seuils de surveillance".formatted(anomaly.processName()),
                 anomaly.analysis(), action(capability, anomaly), anomaly.observations(),
                 impact(capability), anomaly.confidence(), DecisionStatus.PENDING_APPROVAL, null,
-                current.version(), anomaly.id(), at, null, at.plus(properties.approvalTimeout()));
+                current.version(), anomaly.id(), null, at, null, at.plus(properties.approvalTimeout()));
 
         if (autonomy == Autonomy.FORBIDDEN) {
             decision = decision.resolvedAs(DecisionStatus.BLOCKED,
-                    "Capacité %s interdite par la politique : recommandation seule".formatted(capability), at);
+                    "Capacité %s interdite par la politique : recommandation seule".formatted(capability),
+                    AGENT, at);
         }
         else if (autonomy == Autonomy.AUTOMATIC && anomaly.confidence() >= floor) {
             decision = execute(decision, AGENT);
@@ -363,7 +473,7 @@ public class SupervisionService {
     public Decision reject(String id, String reason, String actor) {
         Decision decision = pendingOrFail(id);
         Decision rejected = decision.resolvedAs(DecisionStatus.REJECTED,
-                StringUtils.hasText(reason) ? reason : "Refusée par " + actor, clock.instant());
+                StringUtils.hasText(reason) ? reason : "Refusée par " + actor, actor, clock.instant());
         store(rejected);
         record(actor, "Refus : " + decision.action(), decision.processId(), id, reason, "Refusée");
         return rejected;
@@ -392,8 +502,8 @@ public class SupervisionService {
                 .filter(d -> d.expiresAt() != null && now.isAfter(d.expiresAt()))
                 .toList();
         for (Decision decision : expired) {
-            store(decision.resolvedAs(DecisionStatus.FAILED, "Demande de validation expirée", now));
-            record("Système", "Expiration : " + decision.action(), decision.processId(), decision.id(),
+            store(decision.resolvedAs(DecisionStatus.EXPIRED, "Demande de validation expirée", SYSTEM, now));
+            record(SYSTEM, "Expiration : " + decision.action(), decision.processId(), decision.id(),
                     "Aucune réponse avant " + decision.expiresAt(), "Expirée");
         }
     }
@@ -405,7 +515,7 @@ public class SupervisionService {
             // Le droit d'agir et le moyen d'agir sont deux choses : la politique peut autoriser une
             // capacité qu'aucun outil n'implémente, et le dire vaut mieux que l'exécuter à moitié.
             return decision.resolvedAs(DecisionStatus.FAILED,
-                    "Aucun outil MCP lié à la capacité " + decision.capability(), at);
+                    "Aucun outil MCP lié à la capacité " + decision.capability(), actor, at);
         }
         Map<String, Object> arguments = new HashMap<>(binding.arguments());
         arguments.put("processId", decision.processId());
@@ -414,11 +524,11 @@ public class SupervisionService {
             McpToolResult result = toolCatalog.call(binding.connection(), binding.tool(), arguments);
             String output = String.join("\n", result.content());
             return decision.resolvedAs(result.error() ? DecisionStatus.FAILED : DecisionStatus.EXECUTED,
-                    StringUtils.hasText(output) ? output : "Exécutée par " + actor, at);
+                    StringUtils.hasText(output) ? output : "Exécutée par " + actor, actor, at);
         }
         catch (RuntimeException ex) {
             log.warn("Exécution de la décision {} en échec", decision.id(), ex);
-            return decision.resolvedAs(DecisionStatus.FAILED, ex.getMessage(), at);
+            return decision.resolvedAs(DecisionStatus.FAILED, ex.getMessage(), actor, at);
         }
     }
 

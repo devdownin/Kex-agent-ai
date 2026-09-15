@@ -95,6 +95,12 @@ Quelques partis pris explicites :
   et plus personne ne pourrait lire une politique sans vérifier chaque ligne.
 - **La confiance ne s'affiche jamais seule.** Elle est toujours accompagnée des observations qui la
   fondent, parce qu'un pourcentage rendu par un modèle n'est pas une probabilité mesurée.
+- **Le même symptôme deux fois est une alerte, pas deux.** Les alertes sont dédupliquées d'un cycle
+  à l'autre et portent leur récurrence ; celle que le dernier cycle ne revoit plus a cessé d'être
+  vraie et sort de la liste.
+- **L'agent se mesure lui-même, sans inventer de chiffre.** Son taux de pertinence ne compte que les
+  recommandations qu'un humain a tranchées — une exécution autonome ne se confirme pas elle-même —
+  et reste absent tant que personne n'a tranché, là où un `0` se lirait « toujours faux ».
 - **La couleur ne porte jamais un état à elle seule.** Chaque état vient avec un glyphe et un libellé.
 - **Une action sensible se confirme avec ce qu'elle va faire** — *Confirmer : Redémarrer Consumer
   Integration-02*, pas *Êtes-vous sûr ?*
@@ -197,6 +203,8 @@ y compris ce qu'est MCP si c'est votre premier — est dans [`docs/MCP.md`](docs
 | `POST` | `/api/agent/supervision/decisions/{id}/approve` `…/reject` | Valider ou refuser une action en attente |
 | `GET` `PUT` | `/api/agent/supervision/policy` | Mode, autonomie et plancher de confiance par capacité, seuils — versionnés |
 | `POST` | `/api/agent/supervision/pause` `…/resume` | Suspendre et reprendre les analyses |
+| `GET` | `/api/agent/supervision/alerts` | Dédupliquées, priorisées, portant chacune son action en attente |
+| `GET` | `/api/agent/supervision/performance` | Ce que vaut l'agent lui-même — pertinence, autonomie, délais |
 | `GET` | `/api/agent/supervision/audit` | Qui a fait quoi, pourquoi, sous quelle politique, avec quel résultat |
 
 La description OpenAPI est servie sur `/v3/api-docs`, Swagger UI sur `/swagger-ui.html`, et la

@@ -64,6 +64,9 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 - **Un plancher de confiance par capacité ne peut que relever le plancher global.** L'abaisser
   rendrait le plancher global illisible : sa valeur ne dirait plus rien sans relire chaque ligne.
 
+- **Un taux calculé sur zéro verdict est un chiffre inventé.** Le taux de pertinence reste `null`
+  tant qu'aucun humain n'a tranché : un `0` se lirait « l'agent se trompe toujours ».
+
 - **Pas de `@Scheduled` sur le cycle de supervision.** En multi-instance, chaque réplique lancerait
   le sien et les actions partiraient en double.
 

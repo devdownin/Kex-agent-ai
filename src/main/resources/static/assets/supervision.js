@@ -29,6 +29,7 @@ const DECISION_LABELS = {
   EXECUTED: 'Exécutée',
   REJECTED: 'Refusée',
   FAILED: 'Échec',
+  EXPIRED: 'Expirée sans réponse',
   BLOCKED: 'Recommandation seule',
 };
 
@@ -37,6 +38,7 @@ const DECISION_STATES = {
   EXECUTED: 'OK',
   REJECTED: 'UNKNOWN',
   FAILED: 'ERROR',
+  EXPIRED: 'WARNING',
   BLOCKED: 'WARNING',
 };
 
@@ -93,8 +95,8 @@ function kpis(data) {
     kpi('Dernière analyse', clockTime(data.agent.lastCycleAt),
       data.agent.staleSince ? 'Données potentiellement obsolètes' : ago(data.agent.lastCycleAt) || 'Jamais',
       '#/audit', data.agent.staleSince ? 'WARNING' : null),
-    kpi('Anomalies détectées', data.anomaliesDetected,
-      data.anomaliesDetected ? 'Sur le dernier cycle' : 'Aucune sur le dernier cycle',
+    kpi('Alertes actives', data.anomaliesDetected,
+      data.anomaliesDetected ? 'Encore vues au dernier cycle' : 'Aucune au dernier cycle',
       '#/alerts', data.anomaliesDetected ? 'WARNING' : null),
     kpi('Actions en attente', data.pendingApprovals,
       data.pendingApprovals ? 'À valider' : 'Rien à valider',
@@ -120,15 +122,16 @@ function kpi(label, value, detail, href, state) {
 
 function attention(data) {
   const pending = data.pending || [];
-  const anomalies = data.anomalies || [];
-  if (!pending.length && !anomalies.length) {
+  const alerts = data.alerts || [];
+  if (!pending.length && !alerts.length) {
     return empty('Aucune anomalie détectée.', `Dernière analyse : ${clockTime(data.agent.lastCycleAt)}`);
   }
   const list = el('div', 'cards');
   pending.forEach((decision) => list.append(approvalCard(decision)));
-  anomalies
-    .filter((anomaly) => !pending.some((decision) => decision.anomalyId === anomaly.id))
-    .forEach((anomaly) => list.append(anomalyCard(anomaly)));
+  // Une alerte déjà portée par une demande de validation n'est pas répétée en dessous.
+  alerts
+    .filter((alert) => !pending.some((decision) => decision.id === alert.pendingDecisionId))
+    .forEach((alert) => list.append(alertCard(alert)));
   return list;
 }
 
@@ -216,7 +219,7 @@ function processTable(rows, onSelect, limit, columns = FULL) {
 
 function openProcess(row) {
   const data = current();
-  const anomalies = (data?.anomalies || []).filter((anomaly) => anomaly.processId === row.processId);
+  const alerts = (data?.alerts || []).filter((alert) => alert.processId === row.processId);
   const body = frag(
     definition('État', stateTag(row.state)),
     definition('Dernière exécution', el('span', null, stamp(row.lastRun))),
@@ -225,31 +228,41 @@ function openProcess(row) {
     definition('Relevé', el('span', null, row.note || '—')),
   );
   const extra = el('div');
-  if (anomalies.length) {
-    extra.append(el('h3', 'drawer-sub', 'Anomalies du dernier cycle'));
-    anomalies.forEach((anomaly) => extra.append(anomalyCard(anomaly)));
+  if (alerts.length) {
+    extra.append(el('h3', 'drawer-sub', 'Alertes actives'));
+    alerts.forEach((alert) => extra.append(alertCard(alert)));
   } else {
-    extra.append(empty('Aucune anomalie sur ce processus.'));
+    extra.append(empty('Aucune alerte sur ce processus.'));
   }
   openDrawer(row.name, frag(body, extra));
 }
 
 /* ── Anomalies et décisions ────────────────────────────────────────────── */
 
-function anomalyCard(anomaly) {
+function alertCard(alert) {
   const card = el('article', 'card');
-  card.dataset.state = anomaly.severity;
+  card.dataset.state = alert.severity;
   const head = el('header');
-  head.append(el('h3', null, anomaly.title));
-  head.append(stateTag(anomaly.severity));
+  head.append(el('h3', null, alert.title));
+  head.append(stateTag(alert.severity));
   card.append(head);
-  card.append(el('p', 'muted', anomaly.processName));
-  card.append(confidenceBar(anomaly.confidence, anomaly.observations?.length));
+  card.append(el('p', 'muted', alert.processName));
+  card.append(recurrence(alert));
+  card.append(confidenceBar(alert.confidence, alert.observations?.length));
   const open = el('button', 'ghost', 'Examiner');
   open.type = 'button';
-  open.addEventListener('click', () => openAnomaly(anomaly));
+  open.addEventListener('click', () => openAnomaly(alert));
   card.append(open);
   return card;
+}
+
+/** Un symptôme qui revient n'est pas un incident de plus : c'est le même, qui dure. */
+function recurrence(alert) {
+  if (!alert.occurrences || alert.occurrences < 2) {
+    return el('p', 'hint', `Premier relevé ${ago(alert.lastSeenAt)}`);
+  }
+  return el('p', 'hint',
+    `${alert.occurrences} relevés depuis ${clockTime(alert.firstSeenAt)} — dernier ${ago(alert.lastSeenAt)}`);
 }
 
 function openAnomaly(anomaly) {
@@ -257,6 +270,7 @@ function openAnomaly(anomaly) {
   // Le titre est déjà celui du panneau : la pastille n'y ajoute que la gravité, en français.
   body.append(stateTag(anomaly.severity));
   body.append(el('p', 'muted', anomaly.processName));
+  if (anomaly.occurrences) body.append(recurrence(anomaly));
 
   body.append(el('h3', 'drawer-sub', 'Ce que l’agent observe'));
   if (anomaly.observations?.length) {
@@ -285,10 +299,22 @@ function openAnomaly(anomaly) {
     body.append(el('p', null, anomaly.recommendation));
   }
 
-  const decision = (current()?.pending || []).find((item) => item.anomalyId === anomaly.id);
+  const decision = (current()?.pending || []).find((item) => item.id === anomaly.pendingDecisionId);
   if (decision) body.append(approvalCard(decision));
 
   openDrawer(anomaly.title, body);
+}
+
+/** Une jauge ne s'affiche jamais seule : ce qui la fonde l'accompagne toujours. */
+function rateBar(label, ratio, footnote) {
+  const wrap = el('div', 'confidence');
+  const bar = el('div', 'bar');
+  const fill = el('span');
+  fill.style.width = `${Math.round((ratio ?? 0) * 100)}%`;
+  bar.append(fill);
+  wrap.append(el('span', 'label', `${label} ${percent(ratio)}`), bar);
+  wrap.append(el('span', 'hint', footnote));
+  return wrap;
 }
 
 /**
@@ -296,16 +322,9 @@ function openAnomaly(anomaly) {
  * parce qu'un pourcentage rendu par un modèle n'est pas une probabilité mesurée.
  */
 function confidenceBar(confidence, observations) {
-  const wrap = el('div', 'confidence');
-  const bar = el('div', 'bar');
-  const fill = el('span');
-  fill.style.width = `${Math.round((confidence ?? 0) * 100)}%`;
-  bar.append(fill);
-  wrap.append(el('span', 'label', `Confiance ${percent(confidence)}`), bar);
-  wrap.append(el('span', 'hint', observations
+  return rateBar('Confiance', confidence, observations
     ? `Fondée sur ${observations} observation${observations > 1 ? 's' : ''}`
-    : 'Aucune observation à l’appui'));
-  return wrap;
+    : 'Aucune observation à l’appui');
 }
 
 function approvalCard(decision) {
@@ -429,35 +448,46 @@ async function openDecision(id) {
 /* ── Alertes ───────────────────────────────────────────────────────────── */
 
 export async function alerts() {
-  await render($('#alerts-list'), refresh, (data) => {
-    const items = data.anomalies || [];
+  await render($('#alerts-list'), () => api(`${BASE}/alerts`), (items) => {
     if (!items.length) {
-      return empty('Aucune alerte active.', `Dernière analyse : ${clockTime(data.agent.lastCycleAt)}`);
+      return empty('Aucune alerte active.',
+        'Une alerte que le dernier cycle ne revoit plus a cessé d’être vraie et sort de cette liste.');
     }
-    // Regroupées par processus : dix alertes sur le même processus sont un incident, pas dix.
+    // Le serveur les rend déjà dédupliquées et triées — gravité, puis récurrence, puis fraîcheur.
+    // Ne restent ici que le regroupement par processus et l'action à portée de clic.
     const groups = new Map();
-    items.forEach((anomaly) => {
-      const bucket = groups.get(anomaly.processId) || [];
-      bucket.push(anomaly);
-      groups.set(anomaly.processId, bucket);
+    items.forEach((alert) => {
+      const bucket = groups.get(alert.processId) || [];
+      bucket.push(alert);
+      groups.set(alert.processId, bucket);
     });
     const list = el('div', 'cards wide');
     for (const [, group] of groups) {
       const card = el('article', 'card');
-      const worst = group.some((anomaly) => anomaly.severity === 'ERROR') ? 'ERROR' : 'WARNING';
+      const worst = group.some((alert) => alert.severity === 'ERROR') ? 'ERROR' : 'WARNING';
       card.dataset.state = worst;
       const head = el('header');
       head.append(el('h3', null, group[0].processName));
-      head.append(stateTag(worst, `${group.length} signalement${group.length > 1 ? 's' : ''}`));
+      head.append(stateTag(worst, `${group.length} alerte${group.length > 1 ? 's' : ''}`));
       card.append(head);
-      group.forEach((anomaly) => {
+      group.forEach((alert) => {
         const line = el('div', 'alert-line');
-        line.append(el('strong', null, anomaly.title));
-        line.append(el('span', 'muted', anomaly.recommendation || anomaly.analysis || ''));
+        const text = el('div', 'alert-text');
+        text.append(el('strong', null, alert.title));
+        text.append(el('span', 'muted', alert.recommendation || alert.analysis || ''));
+        text.append(recurrence(alert));
+        line.append(text);
         const examine = el('button', 'ghost', 'Examiner');
         examine.type = 'button';
-        examine.addEventListener('click', () => openAnomaly(anomaly));
+        examine.addEventListener('click', () => openAnomaly(alert));
         line.append(examine);
+        // Une alerte actionnable porte son action : la chercher ailleurs coûte un aller-retour.
+        if (alert.pendingDecisionId) {
+          const decide = el('button', 'primary', 'Décider');
+          decide.type = 'button';
+          decide.addEventListener('click', () => openDecision(alert.pendingDecisionId));
+          line.append(decide);
+        }
         card.append(line);
       });
       list.append(card);
@@ -517,6 +547,70 @@ export async function agent() {
   } catch (error) {
     summary.replaceChildren(errorState(error, agent));
   }
+  await performance();
+}
+
+/**
+ * Mesure de l'agent lui-même. Ce qui n'est pas mesurable n'est pas estimé : le taux de pertinence
+ * reste absent tant qu'aucun humain n'a tranché, et la durée d'un cycle n'est pas présentée comme
+ * un délai de détection — celui-ci se compterait depuis le début de l'incident, que rien ne connaît.
+ */
+export async function performance() {
+  await render($('#performance'), () => api(`${BASE}/performance`), (data) => {
+    const wrap = el('div', 'perf');
+
+    wrap.append(perfGroup('Détections', [
+      ['Cycles exécutés', data.cycles],
+      ['Cycles en échec', data.cyclesFailed, data.cyclesFailed ? 'ko' : null],
+      ['Relevés d’anomalie', data.anomaliesDetected],
+      ['Alertes actives', data.activeAlerts],
+      ['Durée moyenne d’un cycle', duration(data.averageCycleMillis)],
+    ]));
+
+    wrap.append(perfGroup('Décisions', [
+      ['Prises', data.decisionsTaken],
+      ['Exécutées seules', data.autonomousDecisions],
+      ['Approuvées par un humain', data.humanApprovals],
+      ['Refusées', data.humanRejections],
+      ['Expirées sans réponse', data.approvalsExpired, data.approvalsExpired ? 'ko' : null],
+    ]));
+
+    wrap.append(perfGroup('Actions', [
+      ['Réussies', data.actionsExecuted],
+      ['En échec', data.actionsFailed, data.actionsFailed ? 'ko' : null],
+      ['Bloquées par la politique', data.actionsBlocked],
+      ['Délai moyen de dénouement', duration(data.averageResolutionMillis)],
+    ]));
+
+    const relevance = el('div', 'perf-group');
+    relevance.append(el('h3', 'drawer-sub', 'Pertinence'));
+    if (data.relevanceRate == null) {
+      // Un taux calculé sur zéro verdict serait un chiffre inventé : on dit pourquoi il manque.
+      relevance.append(empty('Pas encore mesurable.',
+        'Le taux se calcule sur les recommandations qu’un humain a tranchées. Aucune ne l’a été.'));
+    } else {
+      const ruled = data.humanApprovals + data.humanRejections;
+      // Ni une confiance ni des observations : un taux, fondé sur des verdicts humains.
+      relevance.append(rateBar('Taux de pertinence', data.relevanceRate,
+        `${data.humanApprovals} approuvée(s) sur ${ruled} tranchée(s) par un humain`));
+      relevance.append(el('p', 'hint',
+        'Les exécutions autonomes n’y entrent pas : l’agent ne se confirme pas lui-même.'));
+    }
+    wrap.append(relevance);
+    return wrap;
+  });
+}
+
+function perfGroup(title, rows) {
+  const group = el('div', 'perf-group');
+  group.append(el('h3', 'drawer-sub', title));
+  rows.forEach(([label, value, kind]) => {
+    const row = el('div', 'perf-row');
+    row.append(el('span', 'label', label));
+    row.append(el('span', kind === 'ko' ? 'value ko' : 'value', value ?? '—'));
+    group.append(row);
+  });
+  return group;
 }
 
 function agentSummary(status) {
@@ -742,6 +836,7 @@ export function wire() {
   });
 
   $('#refresh-decisions').addEventListener('click', decisions);
+  $('#refresh-performance').addEventListener('click', performance);
   $('#refresh-audit').addEventListener('click', audit);
 
   $('#audit-search').addEventListener('input', (event) => {

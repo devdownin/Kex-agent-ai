@@ -457,7 +457,7 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
   padding: 8px 0;
   border-top: 1px solid var(--line-soft);
 }
-.alert-line .muted { flex: 1; min-width: 200px; font-size: 13px; }
+.alert-line .muted { font-size: 13px; }
 
 /* ── Définitions, résumés, confiance ─────────────────────────────────── */
 
@@ -483,6 +483,24 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
   font-size: 13px;
 }
 .observations .value { font-family: var(--mono); font-weight: 600; }
+
+.stack-panels { display: flex; flex-direction: column; gap: 16px; }
+
+.perf { display: flex; flex-direction: column; gap: 14px; }
+.perf-group h3 { margin: 0 0 6px; }
+.perf-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 13px;
+}
+.perf-row .value { font-family: var(--mono); font-weight: 600; }
+.perf-row .value.ko { color: var(--danger); }
+
+.alert-text { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 2px; }
+.alert-text .hint { margin: 0; }
 
 .autonomy-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; flex-wrap: wrap; }
 .autonomy-row > label:not(.sr-only) { flex: 1; min-width: 140px; font-size: 13px; color: var(--ink); margin: 0; }

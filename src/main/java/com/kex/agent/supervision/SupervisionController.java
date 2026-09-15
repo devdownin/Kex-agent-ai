@@ -54,9 +54,16 @@ class SupervisionController {
         return supervision.snapshots();
     }
 
-    @GetMapping("/anomalies")
-    List<Anomaly> anomalies() {
-        return supervision.anomalies();
+    /** Dédupliquées et priorisées : deux cycles voyant le même symptôme signalent un incident. */
+    @GetMapping("/alerts")
+    List<Alert> alerts() {
+        return supervision.alerts();
+    }
+
+    /** Mesure de l'agent lui-même : sans elle, son autonomie se règle à l'aveugle. */
+    @GetMapping("/performance")
+    AgentPerformance performance() {
+        return supervision.performance();
     }
 
     @GetMapping("/cycles")

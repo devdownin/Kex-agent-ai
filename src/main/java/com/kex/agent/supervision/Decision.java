@@ -12,23 +12,26 @@ import java.util.List;
  * @param estimatedImpact impact estimé de l'action, affiché avant toute validation humaine
  * @param policyVersion   version de politique en vigueur au moment de la décision : sans elle, une
  *                        décision relue six mois plus tard est inexplicable
+ * @param resolvedBy      qui l'a tranchée. Porté ici et pas seulement dans l'audit : distinguer une
+ *                        exécution autonome d'une validation humaine est ce qui permet de mesurer
+ *                        l'agent, et rapprocher deux historiques bornés séparément serait fragile.
  */
 public record Decision(String id, String cycleId, String anomalyId, String processId, String processName,
                        Capability capability, String objective, String context, String action,
                        List<Observation> observations, String estimatedImpact, double confidence,
                        DecisionStatus status, String result, String policyVersion, String correlationId,
-                       Instant decidedAt, Instant resolvedAt, Instant expiresAt) {
+                       String resolvedBy, Instant decidedAt, Instant resolvedAt, Instant expiresAt) {
 
     /** Annote une décision sans la trancher : elle attend toujours, mais on sait pourquoi. */
     public Decision withResult(String note) {
         return new Decision(id, cycleId, anomalyId, processId, processName, capability, objective, context,
                 action, observations, estimatedImpact, confidence, status, note, policyVersion,
-                correlationId, decidedAt, resolvedAt, expiresAt);
+                correlationId, resolvedBy, decidedAt, resolvedAt, expiresAt);
     }
 
-    public Decision resolvedAs(DecisionStatus newStatus, String outcome, Instant at) {
+    public Decision resolvedAs(DecisionStatus newStatus, String outcome, String actor, Instant at) {
         return new Decision(id, cycleId, anomalyId, processId, processName, capability, objective, context,
                 action, observations, estimatedImpact, confidence, newStatus, outcome, policyVersion,
-                correlationId, decidedAt, at, expiresAt);
+                correlationId, actor, decidedAt, at, expiresAt);
     }
 }
