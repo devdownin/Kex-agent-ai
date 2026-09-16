@@ -2,10 +2,14 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.config;
 
+import java.time.Duration;
 import java.util.Map;
 
 import com.kex.agent.agent.AgentEvent;
 import com.kex.agent.agent.ToolCallRecorder;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
@@ -42,7 +46,12 @@ class RecordingToolCallbackProviderTest {
     }
 
     private static ToolCallback wrap(ToolCallback delegate) {
-        return new RecordingToolCallbackProvider(ToolCallbackProvider.from(delegate)).getToolCallbacks()[0];
+        return wrap(delegate, CircuitBreaker.ofDefaults("mcp-tool"));
+    }
+
+    private static ToolCallback wrap(ToolCallback delegate, CircuitBreaker circuitBreaker) {
+        return new RecordingToolCallbackProvider(ToolCallbackProvider.from(delegate), circuitBreaker)
+                .getToolCallbacks()[0];
     }
 
     @Test
@@ -83,5 +92,26 @@ class RecordingToolCallbackProviderTest {
     void balise_le_resultat_de_l_appel_a_un_seul_argument() {
         assertThat(wrap(callback("pong", null)).call("{}"))
                 .isEqualTo("<tool_result tool=\"echo\" trust=\"untrusted\">\npong\n</tool_result>");
+    }
+
+    /**
+     * Le chemin piloté par le LLM appelle le même {@code McpSyncClient} que l'invocation directe de
+     * {@code McpToolCatalog} : sans ce disjoncteur, un serveur MCP qui dégrade pendant une
+     * conversation ferait attendre chaque appel jusqu'au plafond de temps au lieu d'échouer vite.
+     */
+    @Test
+    void ouvre_le_disjoncteur_apres_des_echecs_repetes() {
+        CircuitBreaker circuitBreaker = CircuitBreaker.of("mcp-tool", CircuitBreakerConfig.custom()
+                .slidingWindowSize(2)
+                .minimumNumberOfCalls(2)
+                .failureRateThreshold(50)
+                .waitDurationInOpenState(Duration.ofMinutes(1))
+                .build());
+        ToolCallback wrapped = wrap(callback(null, new IllegalStateException("boum")), circuitBreaker);
+
+        assertThatThrownBy(() -> wrapped.call("{}")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> wrapped.call("{}")).isInstanceOf(IllegalStateException.class);
+
+        assertThatThrownBy(() -> wrapped.call("{}")).isInstanceOf(CallNotPermittedException.class);
     }
 }

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.web;
 
+import java.security.Principal;
 import java.util.List;
 import java.util.Map;
 
@@ -22,6 +23,7 @@ import com.kex.agent.mcp.McpToolCatalog;
 import com.kex.agent.mcp.McpToolResult;
 import com.kex.agent.mcp.UnknownMcpServerException;
 import com.kex.agent.mcp.UnsupportedMcpCapabilityException;
+import com.kex.agent.supervision.SupervisionService;
 import com.openai.errors.OpenAIException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.modelcontextprotocol.spec.McpError;
@@ -52,10 +54,12 @@ class AgentController {
 
     private final AgentService agentService;
     private final McpToolCatalog toolCatalog;
+    private final SupervisionService supervision;
 
-    AgentController(AgentService agentService, McpToolCatalog toolCatalog) {
+    AgentController(AgentService agentService, McpToolCatalog toolCatalog, SupervisionService supervision) {
         this.agentService = agentService;
         this.toolCatalog = toolCatalog;
+        this.supervision = supervision;
     }
 
     @PostMapping("/chat")
@@ -117,12 +121,33 @@ class AgentController {
         return toolCatalog.servers();
     }
 
-    /** Invocation directe d'un outil MCP, sans passer par le modèle. */
+    /**
+     * Invocation directe d'un outil MCP, sans passer par le modèle ni par une décision de
+     * supervision : aucune capacité ni politique n'encadre cet appel, l'audit est donc la seule
+     * trace de qui a appelé quoi (voir {@link SupervisionService#auditAction}, déjà utilisé pour un
+     * acte humain hors cycle de supervision par {@code MemoryController}).
+     */
     @PostMapping("/mcp/servers/{connection}/tools/{tool}")
     McpToolResult callTool(@PathVariable String connection,
                            @PathVariable String tool,
-                           @RequestBody(required = false) McpToolCallRequest request) {
-        return toolCatalog.call(connection, tool, request == null ? Map.of() : request.arguments());
+                           @RequestBody(required = false) McpToolCallRequest request,
+                           Principal principal) {
+        String actor = actor(principal);
+        String action = "Appel MCP direct : " + tool + " sur " + connection;
+        try {
+            McpToolResult result = toolCatalog.call(connection, tool, request == null ? Map.of() : request.arguments());
+            supervision.auditAction(actor, action,
+                    result.error() ? "Erreur : " + String.join(" ", result.content()) : "Exécuté");
+            return result;
+        }
+        catch (RuntimeException ex) {
+            supervision.auditAction(actor, action, "Échec : " + ex.getMessage());
+            throw ex;
+        }
+    }
+
+    private static String actor(Principal principal) {
+        return principal == null ? "Anonyme" : principal.getName();
     }
 
     @GetMapping("/mcp/servers/{connection}/resources")

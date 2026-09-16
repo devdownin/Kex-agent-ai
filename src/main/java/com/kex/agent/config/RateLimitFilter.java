@@ -15,11 +15,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Ne protège que les routes qui appellent le modèle : ailleurs il n'y a pas de budget à brûler,
- * et limiter l'introspection MCP gênerait la supervision sans rien préserver.
+ * Protège les routes qui appellent le modèle et celle qui invoque un outil MCP directement :
+ * l'une consomme des jetons, l'autre déclenche un vrai traitement côté serveur MCP à chaque appel.
+ * Le reste de l'introspection MCP (les routes en lecture, GET) reste libre : la limiter gênerait
+ * la supervision sans rien préserver.
  *
  * <p>Un seau par principal authentifié, pas un seau unique pour l'instance : avec
  * {@code kex.agent.api-keys}, plusieurs opérateurs partagent l'instance sans partager leur
@@ -30,6 +33,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 class RateLimitFilter extends OncePerRequestFilter {
 
     private static final String CHAT_PATH = "/api/agent/chat";
+    private static final String DIRECT_TOOL_CALL_PATTERN = "/api/agent/mcp/servers/*/tools/*";
+    private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
     private final RateLimitProperties properties;
     private final Map<String, TokenBucket> bucketsByPrincipal = new ConcurrentHashMap<>();
@@ -40,7 +45,10 @@ class RateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith(CHAT_PATH);
+        String uri = request.getRequestURI();
+        boolean limited = uri.startsWith(CHAT_PATH)
+                || ("POST".equals(request.getMethod()) && PATH_MATCHER.match(DIRECT_TOOL_CALL_PATTERN, uri));
+        return !limited;
     }
 
     @Override
