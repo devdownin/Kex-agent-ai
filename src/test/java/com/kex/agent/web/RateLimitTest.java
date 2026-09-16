@@ -25,6 +25,8 @@ import static org.mockito.BDDMockito.given;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "kex.agent.api-key=secret",
+        "kex.agent.api-keys.ops-console=jeton-ops",
+        "kex.agent.api-keys.ci-pipeline=jeton-ci",
         "kex.agent.rate-limit.enabled=true",
         // Débit lent : le seau ne doit pas se recharger pendant la rafale du test.
         "kex.agent.rate-limit.requests-per-minute=1",
@@ -43,24 +45,39 @@ class RateLimitTest {
     void refuse_au_dela_de_la_pointe_autorisee() throws Exception {
         given(agentService.ask(any(), anyString())).willReturn(new AgentAnswer("conv-1", "ok", java.util.List.of()));
 
-        List<Integer> codes = IntStream.range(0, 5).mapToObj(i -> chat()).toList();
+        List<Integer> codes = IntStream.range(0, 5).mapToObj(i -> chat("Bearer secret")).toList();
 
         assertThat(codes).startsWith(200, 200, 200).endsWith(429, 429);
+    }
+
+    /**
+     * Deux clés nommées, deux seaux : une clé qui a épuisé le sien ne doit rien retirer au budget
+     * d'une autre, faute de quoi un pipeline CI en boucle affamerait la console d'un opérateur.
+     */
+    @Test
+    void isole_le_debit_entre_deux_clefs_nommees() throws Exception {
+        given(agentService.ask(any(), anyString())).willReturn(new AgentAnswer("conv-1", "ok", java.util.List.of()));
+
+        List<Integer> ci = IntStream.range(0, 5).mapToObj(i -> chat("Bearer jeton-ci")).toList();
+        assertThat(ci).startsWith(200, 200, 200).endsWith(429, 429);
+
+        // La clé de la console n'a encore rien consommé : elle garde son plein débit.
+        assertThat(chat("Bearer jeton-ops")).isEqualTo(200);
     }
 
     @Test
     void ne_limite_pas_l_introspection_mcp() throws Exception {
         // Le quota du chat ne doit pas couper la supervision, qui ne coûte pas de jetons.
         for (int i = 0; i < 5; i++) {
-            chat();
+            chat("Bearer secret");
         }
         assertThat(get("/api/agent/mcp/servers")).isEqualTo(200);
     }
 
-    private int chat() {
+    private int chat(String authorization) {
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/agent/chat"))
-                    .header("Authorization", "Bearer secret")
+                    .header("Authorization", authorization)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString("{\"message\":\"ping\"}"))
                     .build();

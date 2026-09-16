@@ -51,8 +51,8 @@ arrive.
 | `api-keys.<nom>` | *(vide)* | Bearers nommés, en plus ou à la place d'`api-key` : chaque nom devient le principal authentifié, donc l'acteur inscrit à l'audit de supervision |
 | `request-timeout` | `120s` | Attente maximale d'un échange, tours d'outils compris |
 | `rate-limit.enabled` | `true` | Limite de débit sur `/api/agent/chat` et `/chat/stream` |
-| `rate-limit.requests-per-minute` | `60` | Débit soutenu. Limite **d'instance**, pas par appelant |
-| `rate-limit.burst` | `20` | Pointe tolérée au-delà du débit soutenu |
+| `rate-limit.requests-per-minute` | `60` | Débit soutenu, **par principal authentifié** — un seau par nom d'`api-keys`, un seul avec `api-key` |
+| `rate-limit.burst` | `20` | Pointe tolérée au-delà du débit soutenu, par principal également |
 
 ### `kex.resilience.*`
 
@@ -102,7 +102,7 @@ Le filtrage par préfixe évite qu'un jeton parte vers un serveur MCP autre que 
 | Profil | Effet |
 |---|---|
 | *(aucun)* | Mémoire en mémoire process, connexion `kafka-explorer` déclarée |
-| `shared-memory` | Mémoire de conversation en PostgreSQL, schéma créé au démarrage |
+| `shared-memory` | Mémoire de conversation **et audit de supervision** en PostgreSQL, schéma créé au démarrage |
 | `test` | Clé factice, client MCP désactivé — utilisé par la suite de tests |
 | `mcp-it` | Test d'intégration MCP : serveur monté dans le test |
 
@@ -122,6 +122,12 @@ SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/kex \
 
 Le profil annule la liste `spring.autoconfigure.exclude` d'`application.yml` : sans cela, le starter
 JDBC sur le classpath fait échouer le démarrage quand aucune base n'est configurée.
+
+Le même bascule active `JdbcAuditRepository` : l'audit de supervision (`GET
+/api/agent/supervision/audit`) persiste dans `kex_supervision_audit`, table créée par
+`CREATE TABLE IF NOT EXISTS` au démarrage. Cycles, anomalies et décisions restent en mémoire du
+processus, donc mono-instance — voir « L'historique est en mémoire, donc mono-instance — l'audit
+seul en sort » dans ARCHITECTURE.md.
 
 <a id="choisir-le-fournisseur-de-modele"></a>
 

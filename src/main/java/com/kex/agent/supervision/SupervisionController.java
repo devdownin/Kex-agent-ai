@@ -136,7 +136,7 @@ class SupervisionController {
 
     /** Conflit et non erreur d'appelant : la demande est valide, c'est l'état qui la refuse. */
     @ExceptionHandler({AgentPausedException.class, CycleInProgressException.class,
-            DecisionNotPendingException.class})
+            DecisionNotPendingException.class, DecisionInProgressException.class})
     ProblemDetail conflict(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }

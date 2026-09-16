@@ -6,9 +6,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
- * Limite les routes qui appellent le modèle. Le bearer est unique et partagé, donc la limite est
- * globale à l'instance : elle protège le budget, elle ne répartit pas l'accès entre appelants.
- * En multi-instance, chaque réplique a son propre seau — diviser le seuil en conséquence.
+ * Limite les routes qui appellent le modèle, par principal authentifié : avec le seul bearer
+ * historique il n'existe qu'un principal, donc un budget d'instance comme avant ; avec
+ * {@code kex.agent.api-keys}, chaque nom a le sien, pour qu'une clé qui tourne en boucle n'affame
+ * pas les autres. En multi-instance, chaque réplique a son propre jeu de seaux — diviser le seuil
+ * en conséquence.
  */
 @ConfigurationProperties("kex.agent.rate-limit")
 public record RateLimitProperties(

@@ -692,12 +692,35 @@ function perfGroup(title, rows) {
   return group;
 }
 
+// Un disjoncteur n'est pas un des états de ProcessState/DecisionStatus/AgentState : sa propre
+// petite table plutôt que de forcer une correspondance qui n'a pas de sens ailleurs.
+const CIRCUIT_STATES = {
+  CLOSED: 'OK',
+  HALF_OPEN: 'WARNING',
+  OPEN: 'ERROR',
+  FORCED_OPEN: 'ERROR',
+  DISABLED: 'UNKNOWN',
+  METRICS_ONLY: 'UNKNOWN',
+};
+
+function circuitBreakersValue(circuitBreakers) {
+  if (!circuitBreakers || !circuitBreakers.length) {
+    return el('span', 'muted', 'Aucun');
+  }
+  const wrap = el('span', 'tag-group');
+  circuitBreakers.forEach((breaker) => {
+    wrap.append(stateTag(CIRCUIT_STATES[breaker.state] || 'UNKNOWN', `${breaker.name} : ${breaker.state}`));
+  });
+  return wrap;
+}
+
 function agentSummary(status) {
   const wrap = el('div', 'summary');
   wrap.append(definition('État', stateTag(agentState(status.state).tag, agentState(status.state).label)));
   wrap.append(definition('Mode', el('span', null, status.mode)));
   wrap.append(definition('Politique', el('span', null, status.policyVersion)));
   wrap.append(definition('Dernier cycle', el('span', null, stamp(status.lastCycleAt))));
+  wrap.append(definition('Disjoncteurs', circuitBreakersValue(status.circuitBreakers)));
   if (status.paused) {
     wrap.append(el('p', 'banner', 'Agent en pause : aucune analyse n’est exécutée.'));
   }
