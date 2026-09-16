@@ -154,6 +154,15 @@ kex:
       similarity-threshold: 0.6
       store-path: ""
 
+    memory:
+      # Mémoire long-terme du modèle (outils remember_fact / recall_facts), distincte de la fenêtre
+      # de conversation (max-history-messages). Allumée par défaut : contrairement à la base de
+      # connaissance, elle n'exige aucune infrastructure de plus que l'agent lui-même.
+      enabled: true
+      capacity: 200
+      max-content-length: 500
+      retention: 30d
+
     supervision:
       # Le Control Center : observer, comprendre, décider, agir, vérifier. Allumé par défaut — il
       # n'exige aucune infrastructure de plus que l'agent lui-même.

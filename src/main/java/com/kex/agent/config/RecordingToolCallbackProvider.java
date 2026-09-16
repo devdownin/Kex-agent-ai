@@ -57,22 +57,9 @@ class RecordingToolCallbackProvider implements ToolCallbackProvider {
 
         @Override
         public String call(String toolInput, ToolContext toolContext) {
-            ToolCallRecorder recorder = toolContext == null ? null
-                    : ToolCallRecorder.from(toolContext.getContext().get(ToolCallRecorder.CONTEXT_KEY));
-            if (recorder == null) {
-                return wrapUntrusted(getToolDefinition().name(), delegate.call(toolInput, toolContext));
-            }
-            long start = System.nanoTime();
-            boolean failed = true;
-            try {
-                String result = delegate.call(toolInput, toolContext);
-                failed = false;
-                return wrapUntrusted(getToolDefinition().name(), result);
-            }
-            finally {
-                recorder.record(getToolDefinition().name(),
-                        (System.nanoTime() - start) / 1_000_000, failed);
-            }
+            String name = getToolDefinition().name();
+            return wrapUntrusted(name,
+                    ToolCallRecorder.timed(toolContext, name, () -> delegate.call(toolInput, toolContext)));
         }
 
         /**

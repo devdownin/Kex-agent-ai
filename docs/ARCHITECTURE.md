@@ -249,6 +249,37 @@ d'avoir le starter JDBC sur le classpath fait échouer le démarrage sans base
 `application.yml`, et le profil **annule** cette liste — une liste de propriétés n'est pas fusionnée
 entre sources, la source la plus prioritaire gagne en entier.
 
+### Mémoire long-terme : un outil que le modèle choisit d'appeler, jamais une capture automatique
+
+`MessageWindowChatMemory` oublie par troncature : passé `max-history-messages`, un fait dit plus tôt
+sort de la fenêtre sans qu'aucune conversation future ne puisse le retrouver. `remember_fact` et
+`recall_facts` (`com.kex.agent.memory`) comblent ce manque, mais pas en élargissant la fenêtre — la
+panne la plus citée sur la mémoire des agents est l'absence de garde d'écriture : sans elle, chaque
+observation devient permanente et la relecture finit par ne renvoyer que du bruit.
+
+La garde tient à deux niveaux. Le modèle décide *quoi* écrire — le prompt système lui dit de ne
+retenir qu'un fait opérationnel durable, jamais un détail propre à l'échange en cours ni une
+information déjà disponible ailleurs. `MemoryService` décide *combien* en rester, indépendamment de
+ce que le modèle respecte ou non l'instruction : un souvenir plus long que
+`kex.agent.memory.max-content-length` est tronqué, le plus ancien au-delà de `capacity` est évincé
+à l'écriture, et un souvenir plus vieux que `retention` n'est plus rendu par `recall_facts` — sans
+être supprimé, comme un `AuditEntry` qui sort d'une fenêtre de lecture sans disparaître de la table.
+
+Ces deux outils sont **locaux**, pas issus d'un serveur MCP : ils passent par
+`ChatClient.Builder.defaultTools(Object...)`, pas par `defaultToolCallbacks(...)`, et donc jamais
+par `RecordingToolCallbackProvider` — ce qui est correct : leur résultat est notre propre lecture
+d'une base, pas le texte d'un tiers, et le baliser `<tool_result untrusted>` affirmerait une méfiance
+qui n'a pas lieu d'être. Chronométrage et visibilité dans `AgentAnswer.toolCalls()` restent malgré
+tout partagés avec les outils MCP : `ToolCallRecorder.timed(...)` factorise ce que
+`RecordingToolCallbackProvider` faisait déjà, pour que les deux chemins ne dérivent pas l'un de
+l'autre. L'identité de la conversation qui a écrit un souvenir voyage par le même mécanisme que le
+collecteur d'appels — une clé `kex.`-préfixée dans le `ToolContext`, filtrée avant d'atteindre un
+serveur MCP par le même `ToolContextToMcpMetaConverter`.
+
+Allumée par défaut (`kex.agent.memory.enabled: true`), à la différence de la base de connaissance :
+elle n'exige aucune infrastructure de plus que l'agent lui-même, en mémoire du processus par défaut
+et sur la même table Postgres que l'audit et la mémoire de conversation sous `shared-memory`.
+
 ### Le flux SSE porte son identité et ses erreurs
 
 `POST /chat/stream` rendait un flux de texte nu. Deux défauts qui n'en sont pas moins réels pour
@@ -877,3 +908,7 @@ n'entre dans la chaîne de build, la même contrainte que pour le reste de la co
 | `SupervisionServiceTest` (verrou, trace, disjoncteurs) | Une seconde approbation concurrente échoue avec `DecisionInProgressException` sans exécuter deux fois l'action ; `AuditEntry.traceId` reprend la trace en cours ou reste `null` hors d'une trace ; `AgentStatus.circuitBreakers` liste les disjoncteurs connus |
 | `JdbcAuditRepositoryTest` | Le SQL et le mappage d'une ligne d'audit, sur H2 |
 | `SharedSupervisionAuditTest` | Le profil `shared-memory` bascule bien l'audit sur `JdbcAuditRepository`, et une entrée écrite s'y relit |
+| `MemoryServiceTest` | La garde d'écriture : contenu vide ignoré, souvenir tronqué au-delà de `max-content-length`, le plus ancien évincé au-delà de `capacity`, un souvenir périmé n'est plus relu |
+| `MemoryToolsTest` | `remember_fact` et `recall_facts` se répondent l'un à l'autre, fonctionnent sans identité de conversation, et chronomètrent l'appel quand un collecteur est présent |
+| `JdbcMemoryRepositoryTest` | Le SQL, le mappage d'une ligne et la borne de capacité côté base, sur H2 |
+| `SharedMemoryRepositoryTest` | Le profil `shared-memory` bascule bien la mémoire long-terme sur `JdbcMemoryRepository`, et un souvenir écrit s'y relit |

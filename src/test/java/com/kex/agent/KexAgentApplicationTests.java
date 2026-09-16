@@ -60,6 +60,7 @@ class KexAgentApplicationTests {
         // réseau. Les clés internes sont filtrées, les autres doivent passer.
         Map<String, Object> meta = metaConverter.convert(new ToolContext(Map.of(
                 ToolCallRecorder.CONTEXT_KEY, new ToolCallRecorder(),
+                AgentService.CONVERSATION_ID_CONTEXT_KEY, "conv-1",
                 "exchange", "interne",
                 "tenant", "acme")));
 
@@ -82,5 +83,18 @@ class KexAgentApplicationTests {
         // prouver que c'est bien l'implémentation en mémoire qui a été retenue par défaut.
         assertThat(context.getBean("inMemoryAuditRepository").getClass().getSimpleName())
                 .isEqualTo("InMemoryAuditRepository");
+    }
+
+    @Test
+    void garde_la_memoire_long_terme_en_memoire_hors_du_profil_shared_memory() {
+        assertThat(context.getBean("inMemoryMemoryRepository").getClass().getSimpleName())
+                .isEqualTo("InMemoryMemoryRepository");
+    }
+
+    @Test
+    void expose_les_outils_de_memoire_long_terme_par_defaut() {
+        // kex.agent.memory.enabled vaut true par défaut, contrairement à la connaissance : aucune
+        // infrastructure de plus que l'agent lui-même n'est nécessaire pour l'allumer.
+        assertThat(context.getBeanNamesForType(com.kex.agent.memory.MemoryTools.class)).isNotEmpty();
     }
 }

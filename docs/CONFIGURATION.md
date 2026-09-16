@@ -53,6 +53,10 @@ arrive.
 | `rate-limit.enabled` | `true` | Limite de débit sur `/api/agent/chat` et `/chat/stream` |
 | `rate-limit.requests-per-minute` | `60` | Débit soutenu, **par principal authentifié** — un seau par nom d'`api-keys`, un seul avec `api-key` |
 | `rate-limit.burst` | `20` | Pointe tolérée au-delà du débit soutenu, par principal également |
+| `memory.enabled` | `true` | Outils `remember_fact` / `recall_facts` (mémoire long-terme, distincte de `max-history-messages`) |
+| `memory.capacity` | `200` | Souvenirs actifs conservés, le plus ancien évincé au-delà |
+| `memory.max-content-length` | `500` | Un souvenir plus long est tronqué à l'écriture |
+| `memory.retention` | `30d` | Au-delà, un souvenir n'est plus relu (sans être supprimé) |
 
 ### `kex.resilience.*`
 
