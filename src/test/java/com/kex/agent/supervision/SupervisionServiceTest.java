@@ -8,11 +8,16 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
 import com.kex.agent.agent.AgentService;
 import com.kex.agent.agent.AgentStructuredAnswer;
 import com.kex.agent.mcp.McpToolCatalog;
 import com.kex.agent.mcp.McpToolResult;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.TraceContext;
+import io.micrometer.tracing.Tracer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -216,6 +221,83 @@ class SupervisionServiceTest {
         });
         assertThatThrownBy(() -> service.approve(id, "opérateur"))
                 .isInstanceOf(DecisionNotPendingException.class);
+    }
+
+    @Test
+    void correle_l_audit_a_la_trace_en_cours() {
+        Tracer tracer = mock(Tracer.class);
+        Span span = mock(Span.class);
+        TraceContext traceContext = mock(TraceContext.class);
+        when(tracer.currentSpan()).thenReturn(span);
+        when(span.context()).thenReturn(traceContext);
+        when(traceContext.traceId()).thenReturn("trace-42");
+        SupervisionService service = new SupervisionService(agentService, toolCatalog,
+                properties(List.of(), Map.of(), Map.of()), clock, keyMissing, tracer,
+                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200));
+
+        service.pause("opérateur");
+
+        assertThat(service.audit()).singleElement().extracting(AuditEntry::traceId).isEqualTo("trace-42");
+    }
+
+    @Test
+    void ne_correle_rien_hors_d_une_trace_en_cours() {
+        SupervisionService service = new SupervisionService(agentService, toolCatalog,
+                properties(List.of(), Map.of(), Map.of()), clock, keyMissing, mock(Tracer.class),
+                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200));
+
+        service.pause("opérateur");
+
+        assertThat(service.audit()).singleElement().extracting(AuditEntry::traceId).isNull();
+    }
+
+    @Test
+    void expose_l_etat_des_disjoncteurs_dans_le_statut() {
+        CircuitBreakerRegistry registry = CircuitBreakerRegistry.ofDefaults();
+        registry.circuitBreaker("mcp-tool");
+        SupervisionService service = new SupervisionService(agentService, toolCatalog,
+                properties(List.of(), Map.of(), Map.of()), clock, keyMissing, mock(Tracer.class),
+                registry, new InMemoryAuditRepository(200));
+
+        assertThat(service.status().circuitBreakers())
+                .extracting(CircuitBreakerStatus::name)
+                .contains("mcp-tool");
+    }
+
+    /**
+     * Deux requêtes concurrentes sur la même décision : sans verrou, toutes deux liraient
+     * PENDING_APPROVAL avant que l'une n'ait écrit son résultat, et exécuteraient l'action deux fois.
+     */
+    @Test
+    void refuse_une_seconde_approbation_concurrente_de_la_meme_decision() throws Exception {
+        analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.9));
+        SupervisionService service = service(properties(List.of(ORDERS),
+                Map.of(Capability.RESTART_CONSUMER, Autonomy.SUPERVISED),
+                Map.of(Capability.RESTART_CONSUMER, new ActionBinding("faux", "tool", Map.of()))));
+        service.runCycle("test");
+        String id = service.pending().getFirst().id();
+
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        when(toolCatalog.call(eq("faux"), eq("tool"), any())).thenAnswer(invocation -> {
+            entered.countDown();
+            release.await();
+            return new McpToolResult("faux", "tool", false, List.of("pong"), null);
+        });
+
+        Thread first = new Thread(() -> service.approve(id, "opérateur"));
+        first.start();
+        entered.await();
+
+        assertThatThrownBy(() -> service.approve(id, "opérateur"))
+                .isInstanceOf(DecisionInProgressException.class);
+
+        release.countDown();
+        first.join();
+
+        assertThat(service.decisions()).singleElement()
+                .extracting(Decision::status).isEqualTo(DecisionStatus.EXECUTED);
+        verify(toolCatalog, org.mockito.Mockito.times(1)).call(eq("faux"), eq("tool"), any());
     }
 
     @Test
@@ -554,7 +636,9 @@ class SupervisionServiceTest {
     }
 
     private SupervisionService service(SupervisionProperties properties, ModelAvailability model) {
-        return new SupervisionService(agentService, toolCatalog, properties, clock, model);
+        return new SupervisionService(agentService, toolCatalog, properties, clock, model,
+                mock(Tracer.class), CircuitBreakerRegistry.ofDefaults(),
+                new InMemoryAuditRepository(properties.historySize()));
     }
 
     private void analysisReturns(Map<String, Object> content) {

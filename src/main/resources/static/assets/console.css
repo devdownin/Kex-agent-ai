@@ -563,6 +563,9 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 .definition dd { margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .summary { display: flex; flex-direction: column; }
 
+/* Plusieurs pastilles côte à côte dans une même valeur de définition (disjoncteurs, ...). */
+.tag-group { display: flex; flex-wrap: wrap; gap: 6px; }
+
 .confidence { display: flex; flex-direction: column; gap: 4px; }
 .confidence .label { font-size: 12px; font-weight: 600; }
 .confidence .bar { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }

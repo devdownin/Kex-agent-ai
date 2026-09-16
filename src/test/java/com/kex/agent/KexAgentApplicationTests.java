@@ -75,4 +75,12 @@ class KexAgentApplicationTests {
         assertThat(context.getBeanNamesForType(
                 com.kex.agent.knowledge.KnowledgeService.class)).isEmpty();
     }
+
+    @Test
+    void garde_l_audit_en_memoire_hors_du_profil_shared_memory() {
+        // AuditRepository est un type de paquet, invisible d'ici : le nom du bean suffit à
+        // prouver que c'est bien l'implémentation en mémoire qui a été retenue par défaut.
+        assertThat(context.getBean("inMemoryAuditRepository").getClass().getSimpleName())
+                .isEqualTo("InMemoryAuditRepository");
+    }
 }

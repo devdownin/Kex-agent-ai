@@ -197,7 +197,7 @@ class SupervisionControllerTest {
 
     private static AgentStatus status(AgentState state) {
         return new AgentStatus(state, ExecutionMode.SUPERVISED, state == AgentState.PAUSED, false, NOW,
-                "cycle-1", null, "policy-v1", 0.85, null);
+                "cycle-1", null, "policy-v1", 0.85, null, List.of());
     }
 
     private static Decision decision(DecisionStatus status) {

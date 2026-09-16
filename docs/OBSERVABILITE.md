@@ -67,6 +67,9 @@ Un disjoncteur ouvert (`resilience4j_circuitbreaker_state{state="open"} == 1`) d
 intégration échoue déjà assez pour que l'agent ait cessé de la solliciter — plus précis et plus
 rapide que d'attendre la remontée des `503`/`502` HTTP.
 
+Même état, sans Prometheus : `GET /api/agent/supervision/status` (`circuitBreakers`) et la fiche
+Agent du Control Center l'affichent directement, une pastille par disjoncteur.
+
 ## Ce qui mérite une alerte
 
 | Signal | Requête | Pourquoi |

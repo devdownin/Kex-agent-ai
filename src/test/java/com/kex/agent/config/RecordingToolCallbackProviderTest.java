@@ -52,7 +52,8 @@ class RecordingToolCallbackProviderTest {
         String result = wrap(callback("pong", null))
                 .call("{}", new ToolContext(Map.of(ToolCallRecorder.CONTEXT_KEY, recorder)));
 
-        assertThat(result).isEqualTo("pong");
+        assertThat(result).isEqualTo(
+                "<tool_result tool=\"echo\" trust=\"untrusted\">\npong\n</tool_result>");
         assertThat(recorder.calls()).singleElement().satisfies(call -> {
             assertThat(call.tool()).isEqualTo("echo");
             assertThat(call.failed()).isFalse();
@@ -73,7 +74,14 @@ class RecordingToolCallbackProviderTest {
     }
 
     @Test
-    void reste_transparent_sans_collecteur() {
-        assertThat(wrap(callback("pong", null)).call("{}", new ToolContext(Map.of()))).isEqualTo("pong");
+    void balise_le_resultat_meme_sans_collecteur() {
+        assertThat(wrap(callback("pong", null)).call("{}", new ToolContext(Map.of())))
+                .isEqualTo("<tool_result tool=\"echo\" trust=\"untrusted\">\npong\n</tool_result>");
+    }
+
+    @Test
+    void balise_le_resultat_de_l_appel_a_un_seul_argument() {
+        assertThat(wrap(callback("pong", null)).call("{}"))
+                .isEqualTo("<tool_result tool=\"echo\" trust=\"untrusted\">\npong\n</tool_result>");
     }
 }

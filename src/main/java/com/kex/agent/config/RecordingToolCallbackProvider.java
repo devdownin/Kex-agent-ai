@@ -12,9 +12,16 @@ import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.tool.metadata.ToolMetadata;
 
 /**
- * Enveloppe les outils pour mesurer chaque appel. Les observations de Spring AI donnent déjà des
- * métriques agrégées ; ce qui manque est le détail d'un échange précis, pour le rendre à l'appelant
- * — sans quoi le flux reste muet pendant qu'un outil tourne, jusqu'à une minute.
+ * Enveloppe les outils pour mesurer chaque appel et baliser leur résultat comme une donnée non
+ * fiable. Les observations de Spring AI donnent déjà des métriques agrégées ; ce qui manque est le
+ * détail d'un échange précis, pour le rendre à l'appelant — sans quoi le flux reste muet pendant
+ * qu'un outil tourne, jusqu'à une minute.
+ *
+ * <p>Le balisage {@code <tool_result>} défend contre l'injection indirecte : un serveur MCP peut
+ * renvoyer n'importe quel texte — un nom de topic, un message applicatif — et rien ne garantit
+ * qu'il ne contienne pas une phrase qui ressemble à une instruction. Le prompt système dit au
+ * modèle de lire ce qui est entre ces balises comme une donnée, jamais comme une consigne ; ceci
+ * pose la balise, quel que soit le serveur MCP branché.
  */
 class RecordingToolCallbackProvider implements ToolCallbackProvider {
 
@@ -45,7 +52,7 @@ class RecordingToolCallbackProvider implements ToolCallbackProvider {
 
         @Override
         public String call(String toolInput) {
-            return delegate.call(toolInput);
+            return wrapUntrusted(getToolDefinition().name(), delegate.call(toolInput));
         }
 
         @Override
@@ -53,19 +60,29 @@ class RecordingToolCallbackProvider implements ToolCallbackProvider {
             ToolCallRecorder recorder = toolContext == null ? null
                     : ToolCallRecorder.from(toolContext.getContext().get(ToolCallRecorder.CONTEXT_KEY));
             if (recorder == null) {
-                return delegate.call(toolInput, toolContext);
+                return wrapUntrusted(getToolDefinition().name(), delegate.call(toolInput, toolContext));
             }
             long start = System.nanoTime();
             boolean failed = true;
             try {
                 String result = delegate.call(toolInput, toolContext);
                 failed = false;
-                return result;
+                return wrapUntrusted(getToolDefinition().name(), result);
             }
             finally {
                 recorder.record(getToolDefinition().name(),
                         (System.nanoTime() - start) / 1_000_000, failed);
             }
+        }
+
+        /**
+         * Une erreur d'outil (isError côté MCP) reste du texte fourni par le serveur, donc tout
+         * aussi peu fiable que le résultat réussi : elle passe par le même balisage plutôt que
+         * d'en être exemptée.
+         */
+        private static String wrapUntrusted(String toolName, String content) {
+            return "<tool_result tool=\"%s\" trust=\"untrusted\">\n%s\n</tool_result>"
+                    .formatted(toolName, content);
         }
     }
 }

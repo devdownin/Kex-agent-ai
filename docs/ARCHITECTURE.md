@@ -280,6 +280,25 @@ Ce choix a un piège, et il est testé : le convertisseur par défaut de Spring 
 sérialisable — serait poussé sur le réseau. Le convertisseur déclaré ici filtre les clés préfixées
 `kex.` et laisse passer le reste, pour les serveurs qui exploitent ce champ.
 
+### Un résultat d'outil est balisé comme une donnée, jamais comme une instruction
+
+`RecordingToolCallbackProvider` enveloppe chaque résultat dans
+`<tool_result tool="…" trust="untrusted">…</tool_result>` avant de le rendre au modèle. Un serveur
+MCP peut renvoyer n'importe quel texte — un nom de topic, un message applicatif — et rien ne
+garantit qu'il ne contienne pas une phrase qui ressemble à une consigne. Le prompt système (agent
+de conversation et cycle de supervision, chacun le sien) dit explicitement au modèle de lire ce qui
+est entre ces balises comme une donnée, jamais comme une instruction, même si elle prétend venir de
+l'utilisateur ou du système.
+
+Le balisage s'applique uniformément, échec d'outil compris : une erreur MCP (`isError`) reste du
+texte fourni par le serveur, donc tout aussi peu fiable qu'un résultat réussi. Il ne couvre que la
+boucle d'outils du `ChatClient` — l'[endpoint d'appel direct](#the-direct-tool-endpoint), qui
+n'a pas de modèle dans la boucle, n'a rien à baliser.
+
+Le cycle de supervision en a d'autant plus besoin qu'il a un pouvoir de décision : un contenu
+malveillant qui parviendrait à détourner son jugement ne se contenterait pas de fausser une
+réponse, il pourrait faire naître une action.
+
 ### Sortie structurée contre un schéma d'appelant
 
 Les convertisseurs de Spring AI partent d'un type Java ; ici le schéma n'est connu qu'à la requête.
@@ -333,6 +352,13 @@ même raison qui l'exempte du plafond bloquant plus haut.
 
 Un disjoncteur ouvert rend `503` (`CallNotPermittedException`, capté à côté des exceptions MCP et
 fournisseur) plutôt que de laisser l'appelant redécouvrir la panne en silence jusqu'au timeout.
+
+`AgentStatus.circuitBreakers` rend l'état de chacun (`CircuitBreakerStatus`), lu depuis
+`CircuitBreakerRegistry.getAllCircuitBreakers()` — visible dans le Control Center sans ouvrir un
+Prometheus séparé pour savoir qu'une intégration est en difficulté. C'est de la visibilité, pas un
+facteur du diagnostic : un disjoncteur ouvert ne change ni l'`AgentState` calculé par `diagnose()`
+ni son motif, les deux questions — « l'agent peut-il faire son travail » et « telle intégration
+précise est-elle en difficulté » — ne se confondent pas.
 
 ### Traçage distribué, opt-in
 
@@ -403,6 +429,14 @@ pas un annuaire à l'échelle d'un système d'authentification. Les deux sources
 `SecurityConfig.tokensByName` : `api-key` seul reste le comportement historique inchangé, et
 `/api/**` ne s'ouvre que si l'une des deux porte au moins un jeton — même posture que le jeton
 unique d'avant : rien de configuré, `503`.
+
+Plusieurs principals distincts posaient une question que le limiteur de débit ignorait encore :
+`RateLimitFilter` tenait un unique `TokenBucket` pour toute l'instance, hérité de l'époque où un
+seul jeton pouvait appeler `/api/agent/chat`. Un seau par principal (`bucketsByPrincipal`, tenu par
+le nom que renvoie l'authentification déjà posée à ce point de la chaîne) referme ce trou : une clé
+CI qui tourne en boucle épuise son propre seau, jamais celui d'un autre opérateur. Avec le seul
+bearer historique, il n'existe qu'un principal, donc qu'un seau — le comportement d'une
+installation à une seule clé ne change pas.
 
 ### Un échec du fournisseur du modèle ne recopie pas notre propre 401
 
@@ -611,12 +645,21 @@ Trois précautions y sont prises, et ce sont elles qui comptent :
 `DecisionStatus.EXPIRED` est distinct de `FAILED` pour la même raison : confondre « l'outil a
 échoué » et « personne n'a répondu » masquerait un défaut d'organisation en défaut technique.
 
-### L'historique est en mémoire, donc mono-instance
+### L'historique est en mémoire, donc mono-instance — l'audit seul en sort
 
-Cycles, anomalies, décisions et audit vivent dans des `History` bornés, en mémoire du processus.
-Derrière un load balancer, chaque réplique tiendrait le sien et l'audit serait partiel. C'est
-assumé et écrit ici plutôt que masqué : la persistance partagée est une décision d'exploitation,
-au même titre que le profil `shared-memory` pour la mémoire de conversation.
+Cycles, anomalies et décisions vivent dans des `History` bornés, en mémoire du processus. Derrière
+un load balancer, chaque réplique tiendrait le sien : un tableau de bord opérationnel qui diverge
+un peu d'une instance à l'autre est un inconvénient, pas une régression de conformité. C'est assumé
+et écrit ici plutôt que masqué.
+
+L'audit, lui, est la pièce de conformité, et ne supporte pas d'être partiel : `AuditRepository`
+l'abstrait derrière `InMemoryAuditRepository` (défaut, mono-instance, un `History` comme les
+autres) et `JdbcAuditRepository`, actif sous le profil `shared-memory` — le même bascule qui sert
+déjà la mémoire de conversation, puisque `JdbcTemplate` existe alors déjà. `CREATE TABLE IF NOT
+EXISTS` à la construction plutôt qu'un outil de migration pour une seule table, même raisonnement
+que `spring.ai.chat.memory.repository.jdbc.initialize-schema: always`. Cycles, anomalies et
+décisions restent volontairement hors de ce bascule : les y ajouter suppose une sémantique de mise
+à jour (une décision se résout après coup) que l'audit, purement additif, n'a pas à porter.
 
 L'acteur inscrit à l'audit est le principal authentifié. Avec le seul `kex.agent.api-key`
 historique, il désigne le jeton, pas une personne : tracer une identité que le système ne connaît
@@ -624,12 +667,40 @@ pas serait une fiction, et l'audit n'en vaudrait rien. `kex.agent.api-keys` nomm
 chaque nom devient alors le principal, donc l'acteur réellement inscrit. Voir « Plusieurs clés API
 nommées » plus bas.
 
+`AuditEntry` porte deux identifiants qui ne se confondent pas : `correlationId` relie l'entrée à la
+décision, au cycle et à l'anomalie dont elle découle — un identifiant de domaine, posé même sans
+traçage actif — et `traceId` relie la même entrée à ce qu'une trace OpenTelemetry montre du même
+échange, `null` hors d'une trace en cours (échantillonnage à 0, ou cycle déclenché hors d'une
+requête tracée). Une valeur non mesurée reste `null`, jamais inventée — même règle que `Coverage`
+plus haut, appliquée à l'infrastructure de traçage plutôt qu'à un relevé Kafka.
+
 ### Une demande de validation expire
 
 Approuvée trois heures après les faits, une action agirait sur une situation qui n'existe plus. Les
 demandes dépassant `approval-timeout` basculent en `FAILED` à la lecture suivante, avec leur trace
 d'audit. L'expiration est évaluée à la lecture et non par une tâche de fond : sans planificateur,
 une tâche de plus serait le seul composant à tourner tout seul.
+
+### Une décision ne s'exécute qu'une fois, même approuvée deux fois
+
+`approve(id, actor)` lit la décision, exécute l'action, puis stocke le résultat — trois étapes, pas
+une opération atomique. Deux requêtes concurrentes sur le même identifiant (un double-clic dans la
+console, une relecture HTTP après un timeout côté client) liraient toutes deux `PENDING_APPROVAL`
+avant que la première n'ait eu le temps d'écrire la sienne, et exécuteraient toutes les deux
+l'action réelle.
+
+Un verrou par décision (`executionLocks`, une `ReentrantLock` par identifiant) referme la fenêtre :
+`tryLock()` plutôt qu'un verrou bloquant, parce que la seconde requête n'a rien à gagner à attendre
+la première — la décision qu'elle trouverait à son réveil ne serait de toute façon plus
+`PENDING_APPROVAL`. Elle échoue tout de suite avec `DecisionInProgressException` (`409`, aux côtés
+de `CycleInProgressException` et `DecisionNotPendingException`). Le verrou ne bloquant jamais,
+aucun concurrent ne peut se trouver en attente dessus au moment où il est libéré : le retirer de la
+table juste après ne fait donc fuir personne.
+
+Sans effet observable aujourd'hui — le seul serveur MCP branché est en lecture seule, exécuter deux
+fois `kex_consumer_lag` ne change rien — mais c'est précisément pourquoi ce verrou devait être posé
+maintenant : le jour où un serveur MCP mutant sera lié à une capacité, la fenêtre de double
+exécution aurait déjà existé depuis le début, sans qu'aucun test n'ait eu de raison de la révéler.
 
 ### L'image est scannée avant de partir, jamais republiée sous un tag déjà pris
 
@@ -769,3 +840,8 @@ n'entre dans la chaîne de build, la même contrainte que pour le reste de la co
 | `ApiKeyPrincipalTest` | Deux opérateurs nommés distincts dans l'audit de supervision |
 | `LlmProviderTest` (cache) | Le préfixe de propriété du cache Anthropic est le bon, jusqu'au `ChatModel` réellement construit |
 | `ModelJudgmentEvalTest` *(`@Tag("eval")`, hors `verify`)* | Le modèle configuré recopie une couverture qu'il sait incomplète plutôt que de conclure à tort — un vrai appel au fournisseur, à la main |
+| `RecordingToolCallbackProviderTest` (balisage) | Chaque résultat d'outil part balisé `<tool_result untrusted>`, y compris sans collecteur et sur l'appel à un seul argument |
+| `RateLimitTest` (par clé) | Deux clés nommées ont chacune leur seau ; l'une épuisée n'affame pas l'autre |
+| `SupervisionServiceTest` (verrou, trace, disjoncteurs) | Une seconde approbation concurrente échoue avec `DecisionInProgressException` sans exécuter deux fois l'action ; `AuditEntry.traceId` reprend la trace en cours ou reste `null` hors d'une trace ; `AgentStatus.circuitBreakers` liste les disjoncteurs connus |
+| `JdbcAuditRepositoryTest` | Le SQL et le mappage d'une ligne d'audit, sur H2 |
+| `SharedSupervisionAuditTest` | Le profil `shared-memory` bascule bien l'audit sur `JdbcAuditRepository`, et une entrée écrite s'y relit |
