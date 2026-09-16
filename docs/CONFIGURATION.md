@@ -280,9 +280,10 @@ ARCHITECTURE.md.
 
 Le workflow `publish.yml` pousse sur Docker Hub **et sur GHCR, en miroir** — le même digest sous
 `ghcr.io/devdownin/kex-agent-ai`, sans secret de plus : GHCR se pousse avec le jeton que GitHub
-fournit déjà à chaque exécution. **Rien n'est saisi au déclenchement** : la version est celle de
-`pom.xml`, lue par Maven. Une version tapée à la main finit par diverger du jar qu'elle étiquette,
-et une image mal étiquetée est pire qu'une image absente — personne ne saura ce qui tourne.
+fournit déjà à chaque exécution. **Rien n'est saisi au déclenchement** : sur un tag `vX.Y.Z`, la
+version publiée est celle du tag — le pom du checkout est réaligné dessus avant de construire,
+jamais commité. Le pom sur `main` garde sa propre valeur ; il n'y a plus de bump à synchroniser à
+la main avec le tag.
 
 ### Réglages GitHub
 
@@ -305,18 +306,14 @@ l'image, elle, aboutit.
 ### Publier une version
 
 ```bash
-# 1. La version du projet, une fois — c'est elle qui étiquettera l'image
-sed -i 's|<version>0.1.0-SNAPSHOT</version>|<version>0.2.0</version>|' pom.xml
-git commit -am "chore: version 0.2.0"
-
-# 2. Le tag déclenche la publication
 git tag v0.2.0
 git push origin main --follow-tags
 ```
 
-Le workflow **refuse de publier** si le tag et la version du `pom.xml` divergent, ou si la version
-porte `SNAPSHOT` : un tag Git n'est pas récupérable une fois poussé, et une image dont le contenu
-change sous le même nom ne veut rien dire.
+Rien de plus : le pom n'a pas à être bumpé avant de taguer, le workflow s'en charge dans son propre
+checkout (`versions:set`, jamais commité). Le tag reste refusé s'il porte `SNAPSHOT` : un tag n'est
+pas récupérable une fois poussé, et une image dont le contenu change sous le même nom ne veut rien
+dire.
 
 Sur un tag, trois étapes de plus s'ajoutent après la publication : une **release GitHub** est créée
 (notes générées depuis les commits, marquée préversion pour un tag `-rc`/`-beta`/…), la **description

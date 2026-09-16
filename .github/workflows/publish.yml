@@ -2,13 +2,15 @@ name: Publish
 
 # Publication de l'image sur Docker Hub et sur GHCR, en miroir.
 #
-# Rien à saisir au déclenchement : la version est celle de `pom.xml`, lue par Maven. Une version
-# tapée à la main finit par diverger du jar qu'elle étiquette, et une image mal étiquetée est pire
-# qu'une image absente — personne ne saura ce qui tourne.
+# Sur un tag `vX.Y.Z`, c'est lui qui fixe la version publiée : le pom de ce checkout est réaligné
+# dessus avant de construire (jamais commité), plutôt que d'exiger un commit de bump synchronisé
+# à la main avec le tag. Un `v0.3.0` pointant sur un pom resté en `0.2.1` a déjà cassé une
+# publication — le tag gagne désormais, il n'est plus seulement vérifié contre le pom.
 #
 # Deux déclencheurs, deux politiques :
-#   - un tag `vX.Y.Z` publie une version, avec ses tags mobiles, un SBOM attesté et une release ;
-#   - un lancement manuel publie `edge` et l'empreinte du commit, jamais `latest`.
+#   - un tag `vX.Y.Z` publie cette version, avec ses tags mobiles, un SBOM attesté et une release ;
+#   - un lancement manuel publie `edge` (version du pom telle quelle) et l'empreinte du commit,
+#     jamais `latest`.
 on:
   push:
     tags: [ "v*" ]
@@ -92,19 +94,14 @@ jobs:
           echo "Docker Hub : ${namespace}/${image_lower}"
           echo "GHCR       : ghcr.io/${owner_lower}/${image_lower}"
 
-      # La version vient du projet, jamais d'une saisie. Sur un tag, les deux doivent coïncider :
-      # un `v0.3.0` posé sur un pom resté en 0.2.0 publierait une image qui ment sur son contenu,
-      # et le tag Git n'est pas récupérable une fois poussé.
+      # Le tag est la source de vérité, jamais une saisie séparée : sur un tag, la version du pom
+      # de ce checkout est réécrite pour coïncider (`versions:set`, jamais commité) plutôt que
+      # vérifiée puis refusée en cas d'écart. `docker build` (plus bas, même contexte) empaquette
+      # ce pom réécrit, donc c'est bien lui que `build-info.properties` porte dans l'image.
       - name: Resolve the version and the tags
         id: version
         run: |
           set -euo pipefail
-          # La dernière ligne non vide : un avertissement de Maven en tête de sortie deviendrait
-          # sinon une partie de la version, et le tag publié serait illisible.
-          version="$(./mvnw -B -q --no-transfer-progress help:evaluate \
-            -Dexpression=project.version -DforceStdout | tr -d '\r' | grep -v '^$' | tail -1)"
-          echo "Version du projet : ${version}"
-
           dockerhub="${{ steps.destination.outputs.dockerhub_repository }}"
           ghcr="${{ steps.destination.outputs.ghcr_repository }}"
           short="$(git rev-parse --short HEAD)"
@@ -121,17 +118,18 @@ jobs:
           add_tag "sha-${short}"
 
           if [ "${{ github.ref_type }}" = "tag" ]; then
-            tag="${GITHUB_REF_NAME#v}"
-            if [ "$tag" != "$version" ]; then
-              echo "::error::Le tag ${GITHUB_REF_NAME} ne correspond pas à la version du pom (${version}). Aligner l'un sur l'autre avant de republier."
-              exit 1
-            fi
+            version="${GITHUB_REF_NAME#v}"
             case "$version" in
               *SNAPSHOT*)
-                echo "::error::Une version SNAPSHOT ne se publie pas : son contenu change sous le même nom."
+                echo "::error::Un tag ne porte jamais SNAPSHOT : son contenu changerait sous un nom qui prétend être figé."
                 exit 1
                 ;;
             esac
+            # Réécrit le pom de ce checkout pour qu'il coïncide avec le tag ; celui de `main`
+            # garde sa propre valeur, cette réécriture ne sort jamais du job.
+            ./mvnw -B -q --no-transfer-progress org.codehaus.mojo:versions-maven-plugin:2.22.0:set \
+              -DnewVersion="${version}" -DgenerateBackupPoms=false
+            echo "Version alignée sur le tag : ${version}"
             add_tag "${version}"
             # Les tags mobiles n'accompagnent qu'une version finale. Faire pointer `latest` sur une
             # préversion enverrait un `docker pull` sans tag sur du code qu'on n'a pas fini de juger.
@@ -154,7 +152,13 @@ jobs:
                 ;;
             esac
           else
-            # Hors tag, `edge` désigne « la dernière construite », ce qu'elle est vraiment.
+            # Hors tag, rien à aligner : la version affichée reste celle du pom telle quelle, et
+            # `edge` désigne « la dernière construite », ce qu'elle est vraiment.
+            # La dernière ligne non vide : un avertissement de Maven en tête de sortie deviendrait
+            # sinon une partie de la version.
+            version="$(./mvnw -B -q --no-transfer-progress help:evaluate \
+              -Dexpression=project.version -DforceStdout | tr -d '\r' | grep -v '^$' | tail -1)"
+            echo "Version du projet (hors tag) : ${version}"
             add_tag "edge"
           fi
 
