@@ -85,9 +85,12 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
 - **Un tri lit `data-sort` quand l'affiché ne se trie pas.** « il y a 4 min » ou « 200 000 » avec
   son espace fine, rangés par ordre alphabétique, donnent un ordre qui a l'air juste.
 
-- **La version publiée vient de `pom.xml`, jamais d'une saisie.** `publish.yml` refuse un tag qui
-  diverge du pom et refuse une version `SNAPSHOT` : un tag Git n'est pas récupérable une fois
-  poussé, et une image mal étiquetée est pire qu'une image absente.
+- **Sur un tag, c'est lui qui fixe la version publiée, jamais une saisie séparée.** `publish.yml`
+  réaligne le pom de son propre checkout sur le tag (`versions:set`, jamais commité) avant de
+  construire, plutôt que de vérifier puis refuser un écart : un `v0.3.0` posé sur un pom resté en
+  `0.2.1` a déjà cassé une publication, avec un tag qui n'était plus récupérable une fois poussé.
+  Une version `SNAPSHOT` reste refusée pour la même raison qu'avant : son contenu changerait sous
+  un nom censé être figé.
 
 - **L'image se construit deux fois avant de partir sur un registre public.** La première, chargée
   en local (`load`), sert au scan de vulnérabilités ; la seconde, poussée (`push`), relit le même

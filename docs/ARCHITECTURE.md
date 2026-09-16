@@ -729,9 +729,25 @@ correctif disponible, celle qu'aucune version de cette image ne peut corriger se
 corrigible bloque, à raison : c'est ce qui vient de se passer.
 
 Le tag `v0.2.0` n'a pas été retagué vers la version corrigée : un tag Git n'est pas récupérable une
-fois poussé, et le déplacer casserait la règle que ce même workflow fait respecter à tout le
-monde — le pom refuse de publier sous un tag qui ne coïncide pas avec sa propre version. `0.2.1`
-porte le correctif sous un nom neuf.
+fois poussé. `0.2.1` porte le correctif sous un nom neuf plutôt que de déplacer un tag déjà publié.
+
+### Le tag fixe la version publiée, pas l'inverse
+
+`vX.Y.Z` réaligne le pom de ce checkout sur `X.Y.Z` (`versions:set`, jamais commité) avant de
+construire — l'inverse d'avant, où le workflow lisait la version du pom et **refusait** de publier
+si le tag ne coïncidait pas. Le changement vient d'un incident réel : `v0.3.0` avait été poussé sur
+un commit dont le pom était resté en `0.2.1`, jamais avancé après deux PR de design mergées entre
+temps. Le tag ne pouvait pas être déplacé — déjà rencontré plus haut avec `v0.2.0` — donc la seule
+sortie était un nouveau commit qui aligne le pom, suivi d'un nouveau tag. Une vérification qui ne
+sait qu'échouer sur un tag déjà poussé n'évite rien : elle déplace le problème après coup, jamais
+avant.
+
+Le pom sur `main` garde sa propre valeur — cette réécriture ne sort jamais du checkout du job, et
+rien ne la commite. Ce que `main` porte n'a donc plus à suivre le tag ; c'est le tag qui, désormais,
+décide seul de ce qui part sur les registres. Un tag `*SNAPSHOT*` reste refusé pour la même raison
+qu'avant : son contenu changerait sous un nom qui prétend être figé. Un lancement manuel
+(`workflow_dispatch`, tags `edge`/`sha-…`) n'a rien à aligner : la version affichée reste celle du
+pom telle quelle, purement informative sur une image qui n'annonce aucune version stable.
 
 L'image part aussi vers `ghcr.io`, en miroir, dans le même appel `docker/build-push-action` — donc
 le même digest que Docker Hub, ce qui dispense de vérifier les deux séparément. Aucun secret de
