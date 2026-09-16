@@ -23,9 +23,10 @@ import org.springframework.web.bind.annotation.RestController;
  * et non sur la présence du service, comme la base de connaissance : une condition sur bean dépend
  * de l'ordre d'enregistrement, une condition sur propriété non.
  *
- * <p>L'acteur inscrit à l'audit est le principal authentifié. Le bearer étant unique et partagé,
- * il désigne le jeton, pas une personne : tracer une identité que le système ne connaît pas serait
- * une fiction, et l'audit n'en vaudrait rien.
+ * <p>L'acteur inscrit à l'audit est le principal authentifié. Avec le seul {@code kex.agent.api-key}
+ * historique, il désigne le jeton, pas une personne : tracer une identité que le système ne connaît
+ * pas serait une fiction. {@code kex.agent.api-keys} nomme les jetons — chaque nom devient alors le
+ * principal, donc l'acteur réellement inscrit.
  */
 @RestController
 @RequestMapping("/api/agent/supervision")

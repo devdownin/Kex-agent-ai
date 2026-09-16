@@ -3,6 +3,7 @@
 package com.kex.agent.config;
 
 import java.time.Duration;
+import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
@@ -24,9 +25,18 @@ public record AgentProperties(
 
         /**
          * Bearer exigé sur /api/**. Vide, l'API refuse tout avec 503 : un agent qui dépense des
-         * jetons et exécute des outils MCP ne s'ouvre pas par défaut d'installation.
+         * jetons et exécute des outils MCP ne s'ouvre pas par défaut d'installation. Authentifié,
+         * le principal porte toujours le même nom : {@code kex-agent-api}.
          */
         @DefaultValue("") String apiKey,
+
+        /**
+         * Clés API nommées, en plus ou à la place de {@code apiKey} : chaque nom devient le
+         * principal authentifié, donc l'acteur inscrit à l'audit de supervision, là où un jeton
+         * unique et partagé ne distingue jamais qui a agi. Vide par défaut ; un seul opérateur n'a
+         * besoin de rien nommer.
+         */
+        @DefaultValue Map<String, String> apiKeys,
 
         /**
          * Attente maximale d'un échange complet, tours d'outils compris. Sans elle, 20 appels

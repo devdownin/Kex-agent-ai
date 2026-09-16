@@ -48,6 +48,13 @@ spring:
           model: claude-opus-5
           max-tokens: 4096
           temperature: 0.2
+          # Le prompt système et les définitions d'outils ne changent pas d'un tour à l'autre d'un
+          # même échange, mais tools/list est rejoué à chaque requête (voir ARCHITECTURE.md) : sans
+          # cache, ce contenu est refacturé en entier à chaque appel. En dessous du seuil minimal
+          # d'Anthropic (~1024 tokens selon le modèle), la pose du point de cache est ignorée sans
+          # erreur — l'activer ici ne coûte rien sur un petit prompt système isolé.
+          cache-options:
+            strategy: SYSTEM_AND_TOOLS
 
     openai:
       # OpenRouter : une passerelle hébergée devant les modèles de la plupart des fournisseurs.
@@ -98,6 +105,18 @@ spring:
               endpoint: /mcp
 
 kex:
+  resilience:
+    # Disjoncteur et réessai des intégrations externes (serveurs MCP, fournisseur du modèle). Les
+    # exceptions qui comptent comme échec ou déclenchent un réessai sont fixées en code, par
+    # instance (mcp-tool, agent-model) : voir ResilienceConfig.
+    sliding-window-size: 10
+    minimum-number-of-calls: 5
+    failure-rate-threshold: 50
+    wait-duration-in-open-state: 30s
+    permitted-calls-in-half-open-state: 3
+    retry-max-attempts: 3
+    retry-wait-duration: 500ms
+
   mcp:
     # Le transport MCP n'a pas de propriété d'en-tête : le jeton est injecté par
     # McpBearerTokenCustomizer, restreint au préfixe d'URL pour ne pas le diffuser ailleurs.
@@ -107,6 +126,15 @@ kex:
 
   agent:
     request-timeout: 120s
+
+    # Bearer historique, sous le principal anonyme "kex-agent-api". Vide, /api/** répond 503.
+    api-key: ${KEX_AGENT_API_KEY:}
+    # Clés nommées, en plus ou à la place d'api-key : chaque nom devient le principal authentifié,
+    # donc l'acteur inscrit à l'audit de supervision plutôt qu'un jeton unique qui ne distingue
+    # personne. Vide par défaut ; un seul opérateur n'a besoin de rien nommer.
+    api-keys: {}
+      # ops-console: ${KEX_AGENT_API_KEY_OPS:}
+      # ci-pipeline: ${KEX_AGENT_API_KEY_CI:}
 
     kafka:
       # Vue technique du cluster, adossée aux outils de Kafka SQL Explorer. Les noms d'outils sont
@@ -199,6 +227,18 @@ management:
   observations:
     key-values:
       application: ${spring.application.name}
+  tracing:
+    sampling:
+      # 0 par défaut : le pont de traçage crée un Tracer même sans collecteur en face, mais rien
+      # n'est exporté tant qu'aucune installation n'en déclare un explicitement. Un cycle traverse
+      # contrôleur, ChatClient, appels MCP et modèle ; sans traçage, seules des métriques agrégées
+      # les relient, jamais une trace corrélée d'une requête précise.
+      probability: ${KEX_AGENT_TRACING_SAMPLING:0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${KEX_AGENT_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
 
   # /actuator/prometheus n'est pas en permitAll : il porte le modèle utilisé, le volume de jetons
   # et les outils appelés. Le scraper doit présenter le même bearer que l'API.

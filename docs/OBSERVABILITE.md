@@ -55,6 +55,18 @@ Le second existe parce que le chemin direct ne passe pas par Spring AI : sans lu
 `http_server_requests_seconds` (par `uri`, `status`, `outcome`) et les métriques JVM standard,
 fournies par Spring Boot.
 
+### Résilience
+
+| Métrique | Origine | Étiquettes utiles |
+|---|---|---|
+| `resilience4j_circuitbreaker_state` | `mcp-tool`, `agent-model` | `name`, `state` (`closed`/`open`/`half_open`) |
+| `resilience4j_circuitbreaker_calls_seconds` | idem | `name`, `kind` (`successful`/`failed`/`not_permitted`) |
+| `resilience4j_retry_calls` | `mcp-tool` seulement | `name`, `kind` (`successful_without_retry`/`successful_with_retry`/`failed_with_retry`) |
+
+Un disjoncteur ouvert (`resilience4j_circuitbreaker_state{state="open"} == 1`) dit qu'une
+intégration échoue déjà assez pour que l'agent ait cessé de la solliciter — plus précis et plus
+rapide que d'attendre la remontée des `503`/`502` HTTP.
+
 ## Ce qui mérite une alerte
 
 | Signal | Requête | Pourquoi |
@@ -63,6 +75,27 @@ fournies par Spring Boot.
 | Échecs d'outils | `sum(rate(kex_mcp_tool_call_seconds_count{error!="none"}[5m]))` | Un serveur MCP dégradé rend des réponses fausses plutôt qu'une erreur visible |
 | Plafond atteint | `rate(http_server_requests_seconds_count{status="504"}[5m])` | Le plafond `kex.agent.request-timeout` se déclenche : échanges trop longs |
 | Serveur MCP muet | `kex_mcp_tool_call_seconds_count{error!="none"}` en hausse avec `503` côté HTTP | Initialisation impossible, l'agent tourne sans ses outils |
+| Disjoncteur ouvert | `resilience4j_circuitbreaker_state{state="open"} == 1` | Une intégration (serveur MCP ou fournisseur du modèle) échoue en série |
+
+## Traçage
+
+Éteint par défaut (`management.tracing.sampling.probability: 0`) : le pont OpenTelemetry crée un
+`Tracer` même sans collecteur en face, mais rien n'est exporté tant qu'une installation ne le
+demande pas explicitement. Pour l'activer :
+
+```bash
+export KEX_AGENT_TRACING_SAMPLING=1        # ou une fraction, 0.1 par exemple
+export KEX_AGENT_OTLP_ENDPOINT=http://collecteur:4318/v1/traces
+```
+
+Une trace suit un échange à travers le contrôleur, le `ChatClient`, chaque appel MCP et le modèle —
+ce qu'aucune métrique agrégée ne peut reconstituer après coup. L'identifiant de trace apparaît
+aussi dans chaque ligne de journal dès qu'un `Tracer` existe, échantillonné ou non : c'est ce qui
+relie une ligne de log à sa trace, une fois celle-ci exportée.
+
+Les appels vers les serveurs MCP portent le contexte de trace courant (`traceparent` W3C) : un
+serveur MCP lui-même instrumenté rattache sa propre trace à celle de l'agent plutôt que d'en
+ouvrir une détachée.
 
 ## Journaux
 

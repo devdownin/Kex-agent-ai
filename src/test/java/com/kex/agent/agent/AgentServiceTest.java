@@ -8,6 +8,9 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 import com.kex.agent.config.AgentProperties;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -49,7 +52,7 @@ class AgentServiceTest {
     ChatClient.StreamResponseSpec streamSpec;
 
     private static AgentProperties properties(Duration timeout) {
-        return new AgentProperties("prompt", 40, false, "", timeout);
+        return new AgentProperties("prompt", 40, false, "", Map.of(), timeout);
     }
 
     private AgentService agentService() {
@@ -59,7 +62,7 @@ class AgentServiceTest {
         given(requestSpec.toolContext(any())).willReturn(requestSpec);
         given(requestSpec.call()).willReturn(callSpec);
         given(callSpec.content()).willReturn("pong");
-        return new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)));
+        return new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), CircuitBreakerRegistry.ofDefaults());
     }
 
     @Test
@@ -96,7 +99,7 @@ class AgentServiceTest {
 
     @Test
     void purge_la_memoire_de_la_conversation() {
-        new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10))).clear("conv-1");
+        new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), CircuitBreakerRegistry.ofDefaults()).clear("conv-1");
 
         verify(chatMemory).clear("conv-1");
     }
@@ -110,7 +113,7 @@ class AgentServiceTest {
         given(requestSpec.stream()).willReturn(streamSpec);
         given(streamSpec.content()).willReturn(Flux.just("pong"));
 
-        var stream = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)))
+        var stream = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), CircuitBreakerRegistry.ofDefaults())
                 .stream(null, "ping");
 
         // Sans identifiant rendu, la conversation créée serait inatteignable et impurgeable.
@@ -129,7 +132,7 @@ class AgentServiceTest {
         given(requestSpec.stream()).willReturn(streamSpec);
         given(streamSpec.content()).willReturn(Flux.never());
 
-        var stream = new AgentService(chatClient, chatMemory, properties(Duration.ofMillis(100)))
+        var stream = new AgentService(chatClient, chatMemory, properties(Duration.ofMillis(100)), CircuitBreakerRegistry.ofDefaults())
                 .stream("conv-1", "ping");
 
         StepVerifier.create(stream.events()).expectError(AgentTimeoutException.class).verify();
@@ -147,7 +150,7 @@ class AgentServiceTest {
             return "trop tard";
         });
 
-        AgentService service = new AgentService(chatClient, chatMemory, properties(Duration.ofMillis(100)));
+        AgentService service = new AgentService(chatClient, chatMemory, properties(Duration.ofMillis(100)), CircuitBreakerRegistry.ofDefaults());
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.ask("conv-1", "ping"))
                 .isInstanceOf(AgentTimeoutException.class);
@@ -163,7 +166,7 @@ class AgentServiceTest {
         given(callSpec.entity(any(org.springframework.ai.converter.StructuredOutputConverter.class)))
                 .willReturn(Map.of("total", 8));
 
-        var answer = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)))
+        var answer = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), CircuitBreakerRegistry.ofDefaults())
                 .askStructured("conv-1", "combien ?", Map.of("type", "object"));
 
         assertThat(answer.conversationId()).isEqualTo("conv-1");
@@ -172,9 +175,38 @@ class AgentServiceTest {
 
     @Test
     void refuse_une_sortie_structuree_sans_schema() {
-        AgentService service = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)));
+        AgentService service = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), CircuitBreakerRegistry.ofDefaults());
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.askStructured("c", "m", Map.of()))
                 .isInstanceOf(InvalidJsonSchemaException.class);
+    }
+
+    @Test
+    void echoue_vite_apres_plusieurs_pannes_du_fournisseur() {
+        given(chatClient.prompt()).willReturn(requestSpec);
+        given(requestSpec.user(anyString())).willReturn(requestSpec);
+        given(requestSpec.advisors(any(Consumer.class))).willReturn(requestSpec);
+        given(requestSpec.toolContext(any())).willReturn(requestSpec);
+        given(requestSpec.call()).willReturn(callSpec);
+        given(callSpec.content()).willThrow(new AgentTimeoutException(Duration.ofSeconds(1)));
+
+        CircuitBreakerRegistry registry = CircuitBreakerRegistry.ofDefaults();
+        registry.circuitBreaker("agent-model", CircuitBreakerConfig.custom()
+                .slidingWindowSize(2)
+                .minimumNumberOfCalls(2)
+                .failureRateThreshold(50)
+                .waitDurationInOpenState(Duration.ofMinutes(1))
+                .recordExceptions(AgentTimeoutException.class)
+                .build());
+        AgentService service = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), registry);
+
+        // Les deux premiers appels échouent normalement et ouvrent le disjoncteur ; le troisième
+        // n'atteint même plus le mock, faute de quoi il attendrait le plafond de temps pour rien.
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.ask("c", "m"))
+                .isInstanceOf(AgentTimeoutException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.ask("c", "m"))
+                .isInstanceOf(AgentTimeoutException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.ask("c", "m"))
+                .isInstanceOf(CallNotPermittedException.class);
     }
 }

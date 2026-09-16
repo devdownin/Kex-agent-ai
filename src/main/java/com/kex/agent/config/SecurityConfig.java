@@ -2,6 +2,10 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.config;
 
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
@@ -25,7 +29,8 @@ class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, AgentProperties properties,
                                             RateLimitProperties rateLimit) throws Exception {
-        if (!StringUtils.hasText(properties.apiKey())) {
+        Map<String, byte[]> tokensByName = tokensByName(properties);
+        if (tokensByName.isEmpty()) {
             log.warn("kex.agent.api-key est vide : /api/** répondra 503. Définir KEX_AGENT_API_KEY.");
         }
         http
@@ -55,10 +60,10 @@ class SecurityConfig {
                         // qu'une future route servie ici n'hérite pas de l'ouverture.
                         .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**").permitAll()
                         .anyRequest().authenticated())
-                .addFilterBefore(new ApiKeyAuthFilter(properties.apiKey()),
+                .addFilterBefore(new ApiKeyAuthFilter(tokensByName),
                         UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(handling -> handling
-                        .authenticationEntryPoint(new ApiKeyAuthenticationEntryPoint(properties.apiKey())));
+                        .authenticationEntryPoint(new ApiKeyAuthenticationEntryPoint(!tokensByName.isEmpty())));
 
         if (rateLimit.enabled()) {
             // Après l'autorisation : un appel non authentifié doit être refusé, pas consommer
@@ -66,5 +71,23 @@ class SecurityConfig {
             http.addFilterAfter(new RateLimitFilter(rateLimit), AuthorizationFilter.class);
         }
         return http.build();
+    }
+
+    /**
+     * {@code apiKey} reste le jeton anonyme historique ({@code kex-agent-api}) ; {@code apiKeys}
+     * ajoute des jetons nommés qui deviennent chacun un principal distinct. Un ordre stable évite
+     * qu'un doublon de nom entre les deux sources dépende de l'ordre d'itération d'une Map.
+     */
+    private static Map<String, byte[]> tokensByName(AgentProperties properties) {
+        Map<String, byte[]> tokens = new LinkedHashMap<>();
+        if (StringUtils.hasText(properties.apiKey())) {
+            tokens.put("kex-agent-api", properties.apiKey().getBytes(StandardCharsets.UTF_8));
+        }
+        properties.apiKeys().forEach((name, token) -> {
+            if (StringUtils.hasText(token)) {
+                tokens.put(name, token.getBytes(StandardCharsets.UTF_8));
+            }
+        });
+        return tokens;
     }
 }

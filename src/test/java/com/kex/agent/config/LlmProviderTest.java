@@ -4,7 +4,9 @@ package com.kex.agent.config;
 
 import com.kex.agent.KexAgentApplication;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.anthropic.AnthropicCacheStrategy;
 import org.springframework.ai.anthropic.AnthropicChatModel;
+import org.springframework.ai.anthropic.AnthropicChatOptions;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -99,6 +101,23 @@ class LlmProviderTest {
                         .doesNotHaveBean("openAiSdkModerationModel")
                         // Le modèle de conversation, lui, reste : c'est le seul qu'on veuille.
                         .hasBean("openAiChatModel"));
+    }
+
+    /**
+     * Vérifie le chemin de configuration, pas la bibliothèque Spring AI elle-même : un préfixe de
+     * propriété mal orthographié se lierait en silence sans lever d'erreur, et le cache resterait
+     * simplement inactif sans que rien ne le signale.
+     */
+    @Test
+    void active_le_cache_anthropic_sur_le_systeme_et_les_outils() {
+        context.withPropertyValues("spring.ai.model.chat=anthropic",
+                        "spring.ai.anthropic.chat.options.cache-options.strategy=SYSTEM_AND_TOOLS")
+                .run(ctx -> {
+                    AnthropicChatOptions options = (AnthropicChatOptions) ctx.getBean(ChatModel.class)
+                            .getDefaultOptions();
+                    assertThat(options.getCacheOptions().getStrategy())
+                            .isEqualTo(AnthropicCacheStrategy.SYSTEM_AND_TOOLS);
+                });
     }
 
     @Test
