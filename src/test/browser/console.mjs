@@ -158,6 +158,42 @@ await check('le bandeau hors ligne apparaît puis disparaît', async () => {
   await page.waitForFunction(() => document.querySelector('#offline').hidden, null, { timeout: 3000 });
 });
 
+await check('un tableau déjà rendu ne clignote pas au sondage de fond', async () => {
+  // Défaut repéré sur la grille des serveurs MCP de la vue Technique, mais dans render() lui-même
+  // (core.js), partagé par Processus, Décisions, Alertes, Audit et les topics Kafka : chaque
+  // sondage de fond effaçait l'hôte avec le témoin « Chargement… », plus étroit que le tableau
+  // qu'il remplace, avant de le reconstruire — un flash toutes les 15 secondes qui donnait
+  // l'impression que le bloc n'occupait plus toute la largeur disponible. Vérifié ici sur
+  // Processus plutôt que sur la vue Technique : ce job démarre l'agent avec
+  // `spring.ai.mcp.client.enabled=false`, sans serveur MCP à lister.
+  await page.goto(`${BASE}/#/processes`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#processes-table table.grid tbody tr');
+  const widthBefore = await page.$eval('#processes-table', (node) => node.getBoundingClientRect().width);
+
+  await page.evaluate(() => {
+    window.__flashed = false;
+    window.__observer = new MutationObserver(() => {
+      if (document.querySelector('#processes-table > .state.loading')) window.__flashed = true;
+    });
+    window.__observer.observe(document.querySelector('#processes-table'), { childList: true });
+  });
+
+  // `online` déclenche un sondage de fond immédiat (voir plus haut) : plus fiable qu'une attente de
+  // REFRESH_MS (15 s) réelles pour observer un cycle.
+  const refreshed = page.waitForResponse((response) => response.url().includes('/api/agent/supervision/overview'));
+  await context.setOffline(true);
+  await page.evaluate(() => dispatchEvent(new Event('offline')));
+  await context.setOffline(false);
+  await page.evaluate(() => dispatchEvent(new Event('online')));
+  await refreshed;
+  await page.waitForTimeout(100);
+
+  assert.equal(await page.evaluate(() => window.__flashed), false,
+    'le témoin de chargement ne doit pas remplacer un tableau déjà rendu');
+  const widthAfter = await page.$eval('#processes-table', (node) => node.getBoundingClientRect().width);
+  assert.equal(widthAfter, widthBefore, 'le bloc garde toute sa largeur pendant le sondage de fond');
+});
+
 await check('le tableau compact de la vue d’ensemble signale qu’il défile', async () => {
   // Défaut : la barre de défilement en survol (macOS, la plupart des Chromium) ne laissait aucune
   // trace tant qu'on n'avait pas touché le pavé tactile — la dernière colonne semblait coupée au

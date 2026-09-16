@@ -4,24 +4,19 @@
 // Vue technique : les serveurs MCP et la santé de l'instance. Elle existe pour que le tableau de
 // bord métier n'en soit pas saturé — les signaux bruts sont au second niveau, jamais au premier.
 
-import { $, api, el, empty, errorState, loading, report, stateTag } from './core.js';
+import { $, api, el, empty, render, report, stateTag } from './core.js';
 import * as kafka from './kafka.js';
 
 export async function servers() {
-  const host = $('#servers');
-  host.replaceChildren(loading());
-  try {
-    const list = await api('/api/agent/mcp/servers');
-    host.replaceChildren(list.length
-      ? el('div', 'servers-grid')
-      : empty('Aucune connexion MCP configurée.', 'Sans outil, l’agent ne peut qu’observer ce qu’on lui raconte.'));
-    if (list.length) {
-      const grid = host.firstChild;
-      list.forEach((server) => grid.append(card(server)));
+  await render($('#servers'), () => api('/api/agent/mcp/servers'), (list) => {
+    if (!list.length) {
+      return empty('Aucune connexion MCP configurée.',
+        'Sans outil, l’agent ne peut qu’observer ce qu’on lui raconte.');
     }
-  } catch (error) {
-    host.replaceChildren(errorState(error, servers));
-  }
+    const grid = el('div', 'servers-grid');
+    list.forEach((server) => grid.append(card(server)));
+    return grid;
+  });
 }
 
 function card(server) {
