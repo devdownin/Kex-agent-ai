@@ -4,7 +4,7 @@
 // Vue technique : les serveurs MCP et la santé de l'instance. Elle existe pour que le tableau de
 // bord métier n'en soit pas saturé — les signaux bruts sont au second niveau, jamais au premier.
 
-import { $, api, el, empty, render, report, stateTag } from './core.js';
+import { $, api, busy, el, empty, render, report, stateTag } from './core.js';
 import * as kafka from './kafka.js';
 import * as memory from './memory.js';
 
@@ -53,6 +53,8 @@ function card(server) {
   const actions = el('div', 'row-end');
   const resources = el('button', 'ghost', 'Ressources');
   resources.type = 'button';
+  // Répété une fois par serveur : sans libellé, un lecteur d'écran n'entend qu'« Ressources ».
+  resources.setAttribute('aria-label', `Ressources de ${server.connection}`);
   resources.addEventListener('click', () => listResources(node, server.connection));
   actions.append(resources);
   node.append(actions);
@@ -72,7 +74,7 @@ function invoke(host, connection, tool) {
 
   const run = el('button', 'primary', 'Invoquer');
   run.type = 'button';
-  run.addEventListener('click', async () => {
+  run.addEventListener('click', () => {
     let parsed;
     try {
       parsed = JSON.parse(args.value || '{}');
@@ -80,19 +82,18 @@ function invoke(host, connection, tool) {
       output.textContent = 'Arguments JSON invalides.';
       return;
     }
-    run.disabled = true;
     output.textContent = '…';
-    try {
-      const result = await api(
-        `/api/agent/mcp/servers/${encodeURIComponent(connection)}/tools/${encodeURIComponent(tool.name)}`,
-        { method: 'POST', body: { arguments: parsed } });
-      output.textContent = JSON.stringify(result, null, 2);
-    } catch (error) {
-      output.textContent = error.message;
-      report(error);
-    } finally {
-      run.disabled = false;
-    }
+    busy(run, async () => {
+      try {
+        const result = await api(
+          `/api/agent/mcp/servers/${encodeURIComponent(connection)}/tools/${encodeURIComponent(tool.name)}`,
+          { method: 'POST', body: { arguments: parsed } });
+        output.textContent = JSON.stringify(result, null, 2);
+      } catch (error) {
+        output.textContent = error.message;
+        report(error);
+      }
+    });
   });
 
   const row = el('div', 'row-end');
@@ -193,8 +194,11 @@ export async function view() {
   await Promise.all([servers(), kafka.topics(), memory.list(), health()]);
 }
 
+/**
+ * Un seul bouton pour la vue entière, comme partout ailleurs (Décisions, Audit, Configuration) :
+ * cette vue en portait un par panneau, soit trois pour un même geste, au-dessus d'un sondage de
+ * fond qui les rafraîchit déjà tous les uns après les autres.
+ */
 export function wire() {
-  $('#refresh-servers').addEventListener('click', servers);
-  kafka.wire();
-  memory.wire();
+  $('#refresh-tools').addEventListener('click', view);
 }

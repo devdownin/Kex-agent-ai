@@ -290,26 +290,22 @@
       <section class="panel">
         <div class="panel-head">
           <h1>Serveurs MCP</h1>
-          <button type="button" class="ghost" id="refresh-servers">Rafraîchir</button>
+          <!-- Un seul bouton pour les quatre panneaux de la vue, comme dans les autres vues. -->
+          <button type="button" class="ghost" id="refresh-tools"
+                  aria-label="Rafraîchir la vue technique" title="Rafraîchir la vue technique">Rafraîchir</button>
         </div>
         <p class="hint">La vue technique : ce que l'agent peut réellement observer et actionner. Le tableau de bord métier n'en est pas saturé.</p>
         <div class="servers" id="servers"></div>
       </section>
       <section class="panel">
-        <div class="panel-head">
-          <h1>Cluster Kafka</h1>
-          <button type="button" class="ghost" id="refresh-kafka">Rafraîchir</button>
-        </div>
+        <div class="panel-head"><h1>Cluster Kafka</h1></div>
         <p class="hint">Relevé par les outils du serveur MCP, jamais recalculé ici : les verdicts de
           retard sont ceux que l'outil rend, et une mesure absente s'affiche « non mesurée », pas zéro.</p>
         <div id="kafka-topics"></div>
       </section>
 
       <section class="panel">
-        <div class="panel-head">
-          <h1>Mémoire long-terme</h1>
-          <button type="button" class="ghost" id="refresh-memory">Rafraîchir</button>
-        </div>
+        <div class="panel-head"><h1>Mémoire long-terme</h1></div>
         <p class="hint">Ce que le modèle retient au-delà d'une conversation, via l'outil
           remember_fact. Lecture et suppression seulement : écrire n'est jamais un geste d'opérateur.</p>
         <div id="memory-list"></div>

@@ -108,6 +108,8 @@ export async function topics() {
       const actions = el('td');
       const inspect = el('button', 'ghost', 'Groupes');
       inspect.type = 'button';
+      // Répété une fois par ligne : sans libellé, un lecteur d'écran n'entend qu'« Groupes ».
+      inspect.setAttribute('aria-label', `Groupes du topic ${topic.name}`);
       inspect.addEventListener('click', () => openLag(topic.name));
       actions.append(inspect);
       line.append(actions);
@@ -191,4 +193,3 @@ function lagRow(label, value) {
   return row;
 }
 
-export const wire = () => $('#refresh-kafka').addEventListener('click', topics);

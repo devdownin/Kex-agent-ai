@@ -4,9 +4,9 @@
 // Les vues de supervision : observer → comprendre → décider → agir → vérifier.
 
 import {
-  $, ago, api, clockTime, confirmAction, definition, dismissDrawer, drawerOpen, duration, el, empty,
-  errorState, frag, loading, openDrawer, params, percent, registerDrawer, render, report, setParams,
-  sortable, stamp, stateMark, stateTag, toast,
+  $, ago, api, busy, clockTime, confirmAction, definition, dismissDrawer, drawerOpen, duration, el,
+  empty, errorState, frag, loading, openDrawer, params, percent, registerDrawer, render, report,
+  setParams, sortable, stamp, stateMark, stateTag, toast,
 } from './core.js';
 
 const BASE = '/api/agent/supervision';
@@ -328,6 +328,8 @@ function alertCard(alert) {
   card.append(confidenceBar(alert.confidence, alert.observations?.length));
   const open = el('button', 'ghost', 'Examiner');
   open.type = 'button';
+  // Répété une fois par carte : sans libellé, un lecteur d'écran n'entend qu'« Examiner ».
+  open.setAttribute('aria-label', `Examiner : ${alert.title}`);
   open.addEventListener('click', () => openAnomaly(alert));
   card.append(open);
   return card;
@@ -419,10 +421,12 @@ function approvalCard(decision) {
   const actions = el('div', 'row-end');
   const reject = el('button', 'ghost danger', 'Refuser');
   reject.type = 'button';
-  reject.addEventListener('click', () => resolveDecision(decision, false));
+  reject.setAttribute('aria-label', `Refuser : ${decision.action}`);
+  reject.addEventListener('click', () => busy(reject, () => resolveDecision(decision, false)));
   const approve = el('button', 'primary', 'Approuver');
   approve.type = 'button';
-  approve.addEventListener('click', () => resolveDecision(decision, true));
+  approve.setAttribute('aria-label', `Approuver : ${decision.action}`);
+  approve.addEventListener('click', () => busy(approve, () => resolveDecision(decision, true)));
   actions.append(reject, approve);
   card.append(actions);
   return card;
@@ -480,6 +484,7 @@ function decisionRow(decision) {
   card.append(el('p', 'muted', `${decision.processName} · confiance ${percent(decision.confidence)}`));
   const open = el('button', 'ghost', 'Détail');
   open.type = 'button';
+  open.setAttribute('aria-label', `Détail : ${decision.action}`);
   open.addEventListener('click', () => openDecision(decision.id));
   card.append(open);
   return card;
@@ -559,12 +564,14 @@ export async function alerts() {
         line.append(text);
         const examine = el('button', 'ghost', 'Examiner');
         examine.type = 'button';
+        examine.setAttribute('aria-label', `Examiner : ${alert.title}`);
         examine.addEventListener('click', () => openAnomaly(alert));
         line.append(examine);
         // Une alerte actionnable porte son action : la chercher ailleurs coûte un aller-retour.
         if (alert.pendingDecisionId) {
           const decide = el('button', 'primary', 'Décider');
           decide.type = 'button';
+          decide.setAttribute('aria-label', `Décider : ${alert.title}`);
           decide.addEventListener('click', () => openDecision(alert.pendingDecisionId));
           line.append(decide);
         }

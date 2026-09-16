@@ -53,8 +53,20 @@ const page = await context.newPage();
 const scriptErrors = [];
 page.on('pageerror', (error) => scriptErrors.push(String(error)));
 page.on('console', (message) => {
-  if (message.type() === 'error' && !message.text().includes('401')) scriptErrors.push(message.text());
+  if (message.type() !== 'error' || expected(message)) return;
+  scriptErrors.push(`${message.text()} — ${message.location().url}`);
 });
+
+/**
+ * Deux échecs de requête sont attendus et déjà traités par la console, donc pas des défauts :
+ * le `401` avant la saisie du jeton, et le `404` d'une métrique qu'aucun appel n'a encore créée —
+ * la vue Technique l'affiche « — », comme le veut la règle « une mesure absente n'est pas zéro ».
+ * Le navigateur les journalise quand même : les filtrer ici garde le reste du garde-fou utile.
+ */
+function expected(message) {
+  return message.text().includes('401')
+    || (message.text().includes('404') && message.location().url.includes('/actuator/metrics/'));
+}
 
 await page.goto(`${BASE}/#/settings`, { waitUntil: 'networkidle' });
 await page.waitForSelector('dialog[open]');
@@ -156,6 +168,45 @@ await check('le bandeau hors ligne apparaît puis disparaît', async () => {
   await context.setOffline(false);
   await page.evaluate(() => dispatchEvent(new Event('online')));
   await page.waitForFunction(() => document.querySelector('#offline').hidden, null, { timeout: 3000 });
+});
+
+await check('la vue technique n’a qu’un bouton de rafraîchissement', async () => {
+  // Défaut : chaque panneau ajouté à cette vue arrivait avec le sien — trois pour un même geste,
+  // au-dessus d'un sondage de fond qui les rafraîchit déjà tous. Les autres vues n'en ont qu'un.
+  await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+  const refreshers = await page.$$eval('#view-tools button',
+    (nodes) => nodes.filter((node) => node.textContent.trim() === 'Rafraîchir').length);
+
+  assert.equal(refreshers, 1);
+  // Et il rafraîchit la vue entière, pas le seul panneau dans lequel il est posé.
+  assert.match(await page.$eval('#refresh-tools', (node) => node.getAttribute('aria-label')),
+    /vue technique/);
+});
+
+await check('la carte d’un serveur MCP unique occupe toute la largeur du panneau', async () => {
+  // Défaut : `.servers-grid` posait `repeat(auto-fill, minmax(320px, 1fr))`. Avec un seul serveur
+  // connecté, auto-fill réserve quand même les colonnes vides à leur largeur minimale plutôt que
+  // de les effacer — la carte restait étroite dans un coin, à côté d'un vide. auto-fit corrige :
+  // sans MCP dans ce job (spring.ai.mcp.client.enabled=false), la réponse est simulée pour
+  // exercer ce rendu précis, seul cas de cette suite à le faire.
+  await page.route('**/api/agent/mcp/servers', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify([{
+      connection: 'kafka-explorer', serverName: 'kafka-explorer-mcp', version: '0.1.0',
+      protocolVersion: '2025-11-25', initialized: true,
+      tools: [{ name: 'kex_list_topics', description: 'Liste les topics.' }],
+    }]),
+  }));
+  await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#servers .server');
+
+  const widths = await page.evaluate(() => ({
+    grid: document.querySelector('#servers .servers-grid').getBoundingClientRect().width,
+    card: document.querySelector('#servers .server').getBoundingClientRect().width,
+  }));
+  assert.ok(widths.card > widths.grid - 40,
+    `la carte (${widths.card}px) doit remplir la grille (${widths.grid}px)`);
+  await page.unroute('**/api/agent/mcp/servers');
 });
 
 await check('un tableau déjà rendu ne clignote pas au sondage de fond', async () => {

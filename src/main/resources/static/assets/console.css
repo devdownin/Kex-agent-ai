@@ -522,7 +522,7 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 
 /* ── Cartes ──────────────────────────────────────────────────────────── */
 
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
 .cards.wide { grid-template-columns: minmax(0, 1fr); }
 
 .card {
@@ -687,7 +687,10 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 
 /* ── MCP ─────────────────────────────────────────────────────────────── */
 
-.servers-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+/* auto-fit, pas auto-fill : avec un seul serveur MCP connecté, auto-fill réserverait quand même
+   les colonnes vides à leur largeur minimale et laisserait la carte étroite à côté d'un vide,
+   plutôt que de la laisser s'étirer sur la largeur du panneau. */
+.servers-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
 .server { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; background: var(--bg); min-width: 0; }
 .server header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
 .server h3 { margin: 0; font: 600 14px var(--mono); }
@@ -702,7 +705,7 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 .invoke h4 { margin: 0 0 8px; font: 600 13px var(--mono); }
 .invoke textarea { font: 12px var(--mono); }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
 .tile { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 12px; background: var(--bg); }
 .tile .label { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
 .tile .value { font: 20px var(--mono); margin-top: 4px; overflow-wrap: anywhere; }
