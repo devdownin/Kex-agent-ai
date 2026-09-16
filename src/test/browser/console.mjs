@@ -158,26 +158,29 @@ await check('le bandeau hors ligne apparaît puis disparaît', async () => {
   await page.waitForFunction(() => document.querySelector('#offline').hidden, null, { timeout: 3000 });
 });
 
-await check('le bloc des serveurs MCP ne clignote pas au sondage de fond', async () => {
-  // Défaut : chaque sondage de fond effaçait #servers avec le témoin « Chargement… », plus étroit
-  // que la grille de cartes, avant de la reconstruire — un flash toutes les 15 secondes qui donnait
-  // l'impression que le bloc n'occupait plus toute la largeur disponible tant que la vue restait
-  // ouverte. render() ne doit plus poser ce témoin sur un hôte déjà rempli.
-  await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('#servers .servers-grid');
-  const widthBefore = await page.$eval('#servers', (node) => node.getBoundingClientRect().width);
+await check('un tableau déjà rendu ne clignote pas au sondage de fond', async () => {
+  // Défaut repéré sur la grille des serveurs MCP de la vue Technique, mais dans render() lui-même
+  // (core.js), partagé par Processus, Décisions, Alertes, Audit et les topics Kafka : chaque
+  // sondage de fond effaçait l'hôte avec le témoin « Chargement… », plus étroit que le tableau
+  // qu'il remplace, avant de le reconstruire — un flash toutes les 15 secondes qui donnait
+  // l'impression que le bloc n'occupait plus toute la largeur disponible. Vérifié ici sur
+  // Processus plutôt que sur la vue Technique : ce job démarre l'agent avec
+  // `spring.ai.mcp.client.enabled=false`, sans serveur MCP à lister.
+  await page.goto(`${BASE}/#/processes`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#processes-table table.grid tbody tr');
+  const widthBefore = await page.$eval('#processes-table', (node) => node.getBoundingClientRect().width);
 
   await page.evaluate(() => {
     window.__flashed = false;
     window.__observer = new MutationObserver(() => {
-      if (document.querySelector('#servers > .state.loading')) window.__flashed = true;
+      if (document.querySelector('#processes-table > .state.loading')) window.__flashed = true;
     });
-    window.__observer.observe(document.querySelector('#servers'), { childList: true });
+    window.__observer.observe(document.querySelector('#processes-table'), { childList: true });
   });
 
   // `online` déclenche un sondage de fond immédiat (voir plus haut) : plus fiable qu'une attente de
   // REFRESH_MS (15 s) réelles pour observer un cycle.
-  const refreshed = page.waitForResponse((response) => response.url().includes('/api/agent/mcp/servers'));
+  const refreshed = page.waitForResponse((response) => response.url().includes('/api/agent/supervision/overview'));
   await context.setOffline(true);
   await page.evaluate(() => dispatchEvent(new Event('offline')));
   await context.setOffline(false);
@@ -186,8 +189,8 @@ await check('le bloc des serveurs MCP ne clignote pas au sondage de fond', async
   await page.waitForTimeout(100);
 
   assert.equal(await page.evaluate(() => window.__flashed), false,
-    'le témoin de chargement ne doit pas remplacer une grille déjà rendue');
-  const widthAfter = await page.$eval('#servers', (node) => node.getBoundingClientRect().width);
+    'le témoin de chargement ne doit pas remplacer un tableau déjà rendu');
+  const widthAfter = await page.$eval('#processes-table', (node) => node.getBoundingClientRect().width);
   assert.equal(widthAfter, widthBefore, 'le bloc garde toute sa largeur pendant le sondage de fond');
 });
 
