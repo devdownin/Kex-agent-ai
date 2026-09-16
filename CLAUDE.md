@@ -148,4 +148,10 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   contenu (`background-attachment: local` par-dessus `scroll`) ne dépend d'aucun chrome de
   navigateur et tient même là où `::-webkit-scrollbar` est ignoré.
 
+- **Le sondage de fond ne réinitialise pas un bloc déjà rendu.** `render()` effaçait l'hôte avec le
+  témoin « Chargement… », plus étroit que le contenu qu'il remplace, avant chaque réponse — y
+  compris au quinzième sondage sur un tableau déjà affiché. Le résultat : un flash toutes les 15
+  secondes qui donnait l'impression que le bloc n'occupait plus toute la largeur disponible. Le
+  témoin ne s'affiche plus qu'au tout premier rendu, quand l'hôte est encore vide.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

@@ -824,6 +824,22 @@ deux dégradés : un halo fixé à l'écran (`background-attachment: scroll`) et
 déplace avec le contenu (`local`), posé au bord droit du tableau — arrivé en bout de défilement, le
 cache glisse par-dessus le halo et l'efface, sans une ligne de JavaScript pour l'observer.
 
+### Le sondage de fond ne réinitialise pas un bloc déjà rendu
+
+`render()`, dans `core.js`, factorise les trois états d'une section asynchrone — chargement,
+contenu, erreur — pour la plupart des vues qui s'auto-rafraîchissent (`processes`, `decisions`,
+`alerts`, `audit`, la vue Technique). Elle posait le témoin « Chargement… » sur l'hôte avant
+*chaque* appel, y compris les sondages de fond toutes les 15 secondes sur un bloc déjà affiché :
+ce témoin (`<p class="state loading">`) est plus étroit que le tableau ou la grille qu'il
+remplace un instant, d'où un flash régulier qui donnait l'impression que le bloc n'occupait plus
+toute la largeur disponible — repéré sur la grille des serveurs MCP de la vue Technique, mais
+présent partout où `render()` est appelée en fond.
+
+Le témoin ne s'affiche plus que lorsque l'hôte est encore vide (`!host.firstChild`), c'est-à-dire
+au tout premier rendu. Un sondage de fond sur un bloc déjà rendu laisse l'ancien contenu affiché
+jusqu'à ce que le nouveau soit prêt, puis les échange en un seul geste — sans état intermédiaire à
+montrer.
+
 ### Le logo est un portrait recadré, pas l'illustration entière
 
 L'image fournie compose un robot, un pictogramme de graphe et une bulle « AI » dans un seul carré —

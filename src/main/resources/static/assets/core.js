@@ -143,9 +143,16 @@ export function errorState(error, retry) {
   return node;
 }
 
-/** Rend une section asynchrone en traitant les trois états au même endroit, jamais un seul. */
+/**
+ * Rend une section asynchrone en traitant les trois états au même endroit, jamais un seul.
+ *
+ * Le sondage de fond rappelle `render()` sur un hôte déjà rempli : l'effacer avant la réponse
+ * remplacerait un tableau plein par « Chargement… », plus étroit que lui, toutes les 15 secondes —
+ * un flash qui donnait l'impression que le bloc n'occupait plus toute la largeur disponible.
+ * L'état de chargement ne s'affiche donc qu'au tout premier rendu, quand l'hôte est encore vide.
+ */
 export async function render(host, load, draw) {
-  host.replaceChildren(loading());
+  if (!host.firstChild) host.replaceChildren(loading());
   try {
     const data = await load();
     const drawn = draw(data);
