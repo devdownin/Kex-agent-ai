@@ -148,6 +148,15 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   contenu (`background-attachment: local` par-dessus `scroll`) ne dépend d'aucun chrome de
   navigateur et tient même là où `::-webkit-scrollbar` est ignoré.
 
+- **Un bouton qui part en requête se désactive le temps de l'appel.** Sans cela, un double-clic
+  envoie deux fois : la seconde requête se heurte au verrou d'idempotence (`409`) ou à une ressource
+  déjà supprimée (`404`), et l'écran rend un toast rouge pour une action qui a pourtant abouti — le
+  pire des retours, puisqu'il pousse à recommencer. `busy(...)` dans `core.js`.
+
+- **Une fonctionnalité éteinte n'est pas une panne.** Une route conditionnée par une propriété rend
+  `404` quand elle est désactivée : l'afficher en « Ressource inconnue » sous un bouton « Réessayer »
+  fait chercher un incident là où il n'y a qu'une propriété à changer.
+
 - **Le sondage de fond ne réinitialise pas un bloc déjà rendu.** `render()` effaçait l'hôte avec le
   témoin « Chargement… », plus étroit que le contenu qu'il remplace, avant chaque réponse — y
   compris au quinzième sondage sur un tableau déjà affiché. Le résultat : un flash toutes les 15

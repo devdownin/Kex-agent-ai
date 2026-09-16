@@ -315,6 +315,12 @@ cycle (`AgentService` → `ChatClient` → `MemoryTools` → `MemoryService` →
 corrigé. Le contrôleur, lui, n'entre dans la construction du `ChatClient` par aucun chemin : sa
 dépendance sur les deux services ne referme rien.
 
+Éteinte (`kex.agent.memory.enabled: false`), la route n'existe pas — et le panneau le dit :
+`memory.js` lit le `404` comme « désactivée », jamais comme une panne. Les confondre afficherait
+« Ressource inconnue » sous un bouton « Réessayer » qui ne réussira jamais, là où le motif réel tient
+en une propriété à changer. Même règle que la vue Kafka, qui nomme ce qui manque plutôt que d'échouer
+en silence.
+
 ### La fenêtre de conversation borne un nombre de messages, jamais leur taille
 
 `MessageWindowChatMemory` compte des messages. Quarante tours courts et quarante traces d'exception
@@ -893,6 +899,27 @@ décore jamais un état neutre.
 de la barre latérale (`viewBox="0 0 24 24"`, épaisseur de trait 1.7, coins ronds) plutôt que de
 charger une police d'icônes ou un CDN — même contrainte que le reste de la console : aucun
 outillage, aucune dépendance externe à un tiers pour une poignée de glyphes.
+
+### Trois règles pour les boutons qui agissent
+
+**Un bouton qui part en requête se désactive** (`busy(...)` dans `core.js`). Sans cela, un
+double-clic envoie deux fois : la seconde requête se heurte au verrou d'idempotence (`409`) ou à une
+ressource déjà supprimée (`404`), et l'écran rend **un toast rouge pour une action qui a pourtant
+abouti** — le pire des retours, puisqu'il pousse à recommencer. Les boutons liés à une saisie
+(`#send`, « Invoquer », « Exécuter maintenant ») le faisaient déjà chacun à leur façon ; les actions
+de carte — « Approuver », « Refuser », « Oublier » — ne le faisaient pas du tout.
+
+**Un bouton répété par ligne porte de quoi le distinguer.** « Oublier », « Groupes », « Examiner »,
+« Détail », « Ressources » reviennent une fois par ligne ou par carte : un lecteur d'écran n'entend
+sinon que le même mot autant de fois qu'il y a de lignes, sans jamais dire sur quoi il agirait.
+Chacun porte donc un `aria-label` qui nomme son sujet — le fait retenu, le topic, l'alerte, la
+décision, la connexion MCP.
+
+**Un bouton de rafraîchissement par vue, pas par panneau.** Toutes les vues n'en ont qu'un
+(Décisions, Audit, Configuration) ; la vue Technique en avait accumulé un par panneau, soit trois
+pour un même geste, au-dessus d'un sondage de fond qui les rafraîchit déjà tous les quinze secondes.
+Le bouton restant rafraîchit la vue entière et le dit dans son `aria-label`, faute de pouvoir le
+dire par sa position — il est posé dans l'en-tête du premier panneau, comme partout ailleurs.
 
 ### Un tableau qui défile le dit, sans compter sur le chrome du navigateur
 

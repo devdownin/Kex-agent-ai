@@ -130,6 +130,24 @@ export function empty(message, detail) {
   return node;
 }
 
+/**
+ * Désactive un bouton le temps de son action. Sans cela, un double-clic part deux fois : la seconde
+ * requête se heurte au verrou d'idempotence (409) ou à une ressource déjà supprimée (404), et
+ * l'écran rend un toast rouge pour une action qui a pourtant abouti.
+ *
+ * <p>Le bouton peut avoir disparu du DOM entre-temps — la liste se réaffiche après l'action : le
+ * réactiver sur un nœud détaché ne coûte rien et évite un test de présence à chaque appel.
+ */
+export async function busy(button, action) {
+  button.disabled = true;
+  try {
+    return await action();
+  }
+  finally {
+    button.disabled = false;
+  }
+}
+
 /** Un écran en erreur garde un moyen de repartir : sans bouton, il ne reste que le rechargement. */
 export function errorState(error, retry) {
   const node = el('div', 'state error');
