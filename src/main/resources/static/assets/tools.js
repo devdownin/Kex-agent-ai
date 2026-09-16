@@ -6,6 +6,7 @@
 
 import { $, api, el, empty, render, report, stateTag } from './core.js';
 import * as kafka from './kafka.js';
+import * as memory from './memory.js';
 
 export async function servers() {
   await render($('#servers'), () => api('/api/agent/mcp/servers'), (list) => {
@@ -189,10 +190,11 @@ export async function health() {
 }
 
 export async function view() {
-  await Promise.all([servers(), kafka.topics(), health()]);
+  await Promise.all([servers(), kafka.topics(), memory.list(), health()]);
 }
 
 export function wire() {
   $('#refresh-servers').addEventListener('click', servers);
   kafka.wire();
+  memory.wire();
 }

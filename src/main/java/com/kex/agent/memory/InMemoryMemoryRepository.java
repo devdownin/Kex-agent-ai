@@ -6,7 +6,9 @@ import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 
 /** Défaut : aucune infrastructure de plus que l'agent lui-même, donc mono-instance. */
 class InMemoryMemoryRepository implements MemoryRepository {
@@ -52,5 +54,17 @@ class InMemoryMemoryRepository implements MemoryRepository {
                 .filter(entry -> entry.supersededBy() == null)
                 .filter(entry -> !entry.createdAt().isBefore(since))
                 .toList();
+    }
+
+    @Override
+    public synchronized Optional<MemoryEntry> forget(String id) {
+        for (Iterator<MemoryEntry> it = entries.iterator(); it.hasNext();) {
+            MemoryEntry entry = it.next();
+            if (entry.id().equals(id)) {
+                it.remove();
+                return Optional.of(entry);
+            }
+        }
+        return Optional.empty();
     }
 }

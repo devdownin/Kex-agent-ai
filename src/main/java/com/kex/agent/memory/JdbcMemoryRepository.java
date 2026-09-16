@@ -5,7 +5,9 @@ package com.kex.agent.memory;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -65,5 +67,24 @@ class JdbcMemoryRepository implements MemoryRepository {
                         rs.getString("conversation_id"), rs.getTimestamp("created_at").toInstant(),
                         rs.getString("superseded_by")),
                 Timestamp.from(since));
+    }
+
+    @Override
+    public Optional<MemoryEntry> forget(String id) {
+        MemoryEntry entry;
+        try {
+            entry = jdbcTemplate.queryForObject("""
+                    SELECT id, content, conversation_id, created_at, superseded_by FROM kex_agent_memory
+                    WHERE id = ?""",
+                    (rs, rowNum) -> new MemoryEntry(rs.getString("id"), rs.getString("content"),
+                            rs.getString("conversation_id"), rs.getTimestamp("created_at").toInstant(),
+                            rs.getString("superseded_by")),
+                    id);
+        }
+        catch (EmptyResultDataAccessException ex) {
+            return Optional.empty();
+        }
+        jdbcTemplate.update("DELETE FROM kex_agent_memory WHERE id = ?", id);
+        return Optional.of(entry);
     }
 }

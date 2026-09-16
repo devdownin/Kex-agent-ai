@@ -295,6 +295,26 @@ personne ne sache pourquoi. Un `replaces` qui ne désigne aucun souvenir valable
 inventé, ou déjà remplacé — n'échoue pas mais le dit dans la réponse de l'outil : le nouveau fait
 est écrit, et le modèle apprend que la contradiction, elle, n'a pas été levée.
 
+#### Une lecture et une suppression, jamais une écriture, côté opérateur
+
+Un souvenir écrit à l'insu de personne, sans écran pour le voir ni le corriger, contredirait tout le
+reste du Control Center — observer, comprendre, vérifier. `GET /api/agent/memory` (`MemoryController`)
+rend donc ce que `list()` liste, et `DELETE /api/agent/memory/{id}` permet à un opérateur de retirer
+un souvenir que le modèle a mal jugé durable. Aucun outil n'expose l'écriture depuis cette API :
+retenir reste un choix du modèle, jamais un geste d'un opérateur qui écrirait dans le contexte
+d'une conversation qu'il ne mène pas.
+
+La suppression rejoint l'audit de supervision (`SupervisionService.auditAction(...)`), au même
+titre qu'une pause ou l'approbation d'une décision — un seul endroit répond à « qui a fait quoi »,
+plutôt qu'un journal propre à chaque fonctionnalité. Ce point d'entrée d'audit, et la suppression
+elle-même, vivent délibérément dans `MemoryController`, pas dans `MemoryService` : ce dernier
+alimente le `ChatClient` via `MemoryTools`, et `SupervisionService` dépend en retour d'`AgentService`
+donc du même `ChatClient` — lui faire porter une dépendance sur `SupervisionService` fermerait le
+cycle (`AgentService` → `ChatClient` → `MemoryTools` → `MemoryService` → `SupervisionService` →
+`AgentService`), découvert à l'exécution par un `UnsatisfiedDependencyException` avant d'être
+corrigé. Le contrôleur, lui, n'entre dans la construction du `ChatClient` par aucun chemin : sa
+dépendance sur les deux services ne referme rien.
+
 ### La fenêtre de conversation borne un nombre de messages, jamais leur taille
 
 `MessageWindowChatMemory` compte des messages. Quarante tours courts et quarante traces d'exception
@@ -942,8 +962,9 @@ n'entre dans la chaîne de build, la même contrainte que pour le reste de la co
 | `SupervisionServiceTest` (verrou, trace, disjoncteurs) | Une seconde approbation concurrente échoue avec `DecisionInProgressException` sans exécuter deux fois l'action ; `AuditEntry.traceId` reprend la trace en cours ou reste `null` hors d'une trace ; `AgentStatus.circuitBreakers` liste les disjoncteurs connus |
 | `JdbcAuditRepositoryTest` | Le SQL et le mappage d'une ligne d'audit, sur H2 |
 | `SharedSupervisionAuditTest` | Le profil `shared-memory` bascule bien l'audit sur `JdbcAuditRepository`, et une entrée écrite s'y relit |
-| `MemoryServiceTest` | La garde d'écriture : contenu vide ignoré, souvenir tronqué au-delà de `max-content-length`, le plus ancien évincé au-delà de `capacity`, un souvenir périmé n'est plus relu ; et la supersession : une correction sort le fait devenu faux, un `replaces` inconnu ou déjà remplacé le dit sans perdre le nouveau fait |
+| `MemoryServiceTest` | La garde d'écriture : contenu vide ignoré, souvenir tronqué au-delà de `max-content-length`, le plus ancien évincé au-delà de `capacity`, un souvenir périmé n'est plus relu ; la supersession : une correction sort le fait devenu faux, un `replaces` inconnu ou déjà remplacé le dit sans perdre le nouveau fait ; et la suppression : `forget` rend l'entrée supprimée, un identifiant inconnu lève `UnknownMemoryException` |
 | `MemoryToolsTest` | `remember_fact` et `recall_facts` se répondent l'un à l'autre, l'identifiant rendu permet de corriger un fait, l'appel fonctionne sans identité de conversation et se chronomètre quand un collecteur est présent |
 | `JdbcMemoryRepositoryTest` | Le SQL, le mappage d'une ligne, la borne de capacité et la supersession côté base, sur H2 |
 | `BoundedChatMemoryTest` | Un message relu est coupé au-delà de `max-message-characters`, la coupe est dite dans le texte, un message court reste intact, lecture et purge restent déléguées |
-| `SharedMemoryRepositoryTest` | Le profil `shared-memory` bascule bien la mémoire long-terme sur `JdbcMemoryRepository`, et un souvenir écrit s'y relit |
+| `MemoryControllerTest` | Contrat HTTP de la lecture et de la suppression : 204 sur suppression, 404 sur identifiant inconnu sans rien auditer, l'audit porte le contenu supprimé |
+| `SharedMemoryRepositoryTest` | Le profil `shared-memory` bascule bien la mémoire long-terme sur `JdbcMemoryRepository`, un souvenir écrit s'y relit, et une suppression par un opérateur rejoint l'audit de supervision sur la même base |

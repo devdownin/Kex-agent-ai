@@ -306,6 +306,16 @@
       </section>
 
       <section class="panel">
+        <div class="panel-head">
+          <h1>Mémoire long-terme</h1>
+          <button type="button" class="ghost" id="refresh-memory">Rafraîchir</button>
+        </div>
+        <p class="hint">Ce que le modèle retient au-delà d'une conversation, via l'outil
+          remember_fact. Lecture et suppression seulement : écrire n'est jamais un geste d'opérateur.</p>
+        <div id="memory-list"></div>
+      </section>
+
+      <section class="panel">
         <div class="panel-head"><h2>Santé de l'instance</h2></div>
         <div class="tiles" id="metric-tiles"></div>
         <pre class="dump" id="health-dump">—</pre>

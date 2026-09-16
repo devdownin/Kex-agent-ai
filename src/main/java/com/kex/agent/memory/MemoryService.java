@@ -14,6 +14,11 @@ import org.springframework.util.StringUtils;
  * service décide combien en rester (capacité, longueur, rétention). La compter sur la seule bonne
  * volonté du prompt système laisserait la panne la plus citée sur ce sujet — pas de garde, tout
  * devient permanent — dépendre d'un modèle qui change.
+ *
+ * <p>Ne dépend volontairement pas de {@code SupervisionService} : ce bean nourrit le
+ * {@code ChatClient} via {@link MemoryTools}, et {@code SupervisionService} dépend en retour
+ * d'{@code AgentService}, donc du même {@code ChatClient} — une dépendance ici fermerait le cycle.
+ * L'audit d'une suppression est donc écrit par {@link MemoryController}, hors de ce graphe.
  */
 class MemoryService {
 
@@ -56,5 +61,21 @@ class MemoryService {
         return repository.active(since).stream()
                 .map(entry -> new MemoryFact(entry.id(), entry.content()))
                 .toList();
+    }
+
+    /** Pour le Control Center : plus de champs que {@link #recall()}, rien pour le modèle. */
+    List<MemoryView> list() {
+        Instant since = clock.instant().minus(properties.retention());
+        return repository.active(since).stream()
+                .map(entry -> new MemoryView(entry.id(), entry.content(), entry.conversationId(), entry.createdAt()))
+                .toList();
+    }
+
+    /**
+     * Suppression par un opérateur, jamais par le modèle : aucun outil ne l'expose. L'appelant
+     * ({@link MemoryController}) écrit l'audit à partir de l'entrée rendue ici.
+     */
+    MemoryEntry forget(String id) {
+        return repository.forget(id).orElseThrow(() -> new UnknownMemoryException(id));
     }
 }

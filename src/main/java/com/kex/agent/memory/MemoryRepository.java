@@ -4,6 +4,7 @@ package com.kex.agent.memory;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Persistance des souvenirs écrits par le modèle. {@link InMemoryMemoryRepository} est le défaut,
@@ -25,4 +26,13 @@ interface MemoryRepository {
 
     /** Du plus récent au plus ancien : ni périmés par l'âge ({@code since}), ni remplacés. */
     List<MemoryEntry> active(Instant since);
+
+    /**
+     * Supprime un souvenir sur décision d'un opérateur — une suppression réelle, pas un marquage :
+     * contrairement à une correction du modèle, il n'y a ici aucun souvenir de remplacement à
+     * distinguer de l'ancien.
+     *
+     * @return l'entrée supprimée, vide si aucun souvenir ne portait cet identifiant
+     */
+    Optional<MemoryEntry> forget(String id);
 }

@@ -4,6 +4,7 @@ package com.kex.agent.memory;
 
 import java.util.Map;
 
+import com.kex.agent.supervision.SupervisionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +33,15 @@ class SharedMemoryRepositoryTest {
     @Autowired
     MemoryTools memoryTools;
 
+    @Autowired
+    MemoryService memoryService;
+
+    @Autowired
+    MemoryController memoryController;
+
+    @Autowired
+    SupervisionService supervision;
+
     @Test
     void utilise_le_depot_jdbc() {
         assertThat(memoryRepository).isInstanceOf(JdbcMemoryRepository.class);
@@ -45,5 +55,21 @@ class SharedMemoryRepositoryTest {
 
         assertThat(memoryTools.recallFacts(context)).extracting(MemoryFact::content)
                 .contains("fait persistant");
+    }
+
+    @Test
+    void une_suppression_par_un_operateur_rejoint_l_audit_de_supervision() {
+        memoryService.remember("fait à effacer via JDBC", null, "conv-1");
+        String id = memoryService.list().stream()
+                .filter(view -> view.content().equals("fait à effacer via JDBC"))
+                .findFirst().orElseThrow().id();
+
+        memoryController.forget(id, () -> "opérateur");
+
+        assertThat(memoryService.list()).extracting(MemoryView::id).doesNotContain(id);
+        assertThat(supervision.audit()).anySatisfy(entry -> {
+            assertThat(entry.actor()).isEqualTo("opérateur");
+            assertThat(entry.result()).isEqualTo("fait à effacer via JDBC");
+        });
     }
 }

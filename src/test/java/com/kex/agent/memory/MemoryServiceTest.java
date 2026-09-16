@@ -12,6 +12,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class MemoryServiceTest {
 
@@ -115,6 +116,38 @@ class MemoryServiceTest {
         assertThat(result)
                 .isEqualTo("Retenu, mais aucun souvenir valable ne porte cet identifiant : rien n'a été marqué périmé.");
         assertThat(contents(service)).containsExactly("version 3", "version 2");
+    }
+
+    @Test
+    void liste_avec_l_identite_de_conversation_et_la_date() {
+        MemoryService service = service(200, 500, Duration.ofDays(30));
+
+        service.remember("fait avec provenance", null, "conv-1");
+
+        assertThat(service.list()).singleElement().satisfies(view -> {
+            assertThat(view.content()).isEqualTo("fait avec provenance");
+            assertThat(view.conversationId()).isEqualTo("conv-1");
+            assertThat(view.createdAt()).isEqualTo(clock.instant());
+        });
+    }
+
+    @Test
+    void supprime_un_souvenir_et_rend_l_entree_supprimee() {
+        MemoryService service = service(200, 500, Duration.ofDays(30));
+        service.remember("fait à supprimer", null, "conv-1");
+        String id = service.list().getFirst().id();
+
+        MemoryEntry removed = service.forget(id);
+
+        assertThat(removed.content()).isEqualTo("fait à supprimer");
+        assertThat(service.list()).isEmpty();
+    }
+
+    @Test
+    void refuse_de_supprimer_un_identifiant_inconnu() {
+        MemoryService service = service(200, 500, Duration.ofDays(30));
+
+        assertThatThrownBy(() -> service.forget("inconnu")).isInstanceOf(UnknownMemoryException.class);
     }
 
     /** Horloge pilotable : la péremption se teste en avançant, pas en attendant. */
