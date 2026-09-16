@@ -41,8 +41,9 @@ class SharedMemoryRepositoryTest {
     void persiste_et_relit_un_souvenir() {
         ToolContext context = new ToolContext(Map.of());
 
-        memoryTools.rememberFact("fait persistant", context);
+        memoryTools.rememberFact("fait persistant", null, context);
 
-        assertThat(memoryTools.recallFacts(context)).contains("fait persistant");
+        assertThat(memoryTools.recallFacts(context)).extracting(MemoryFact::content)
+                .contains("fait persistant");
     }
 }

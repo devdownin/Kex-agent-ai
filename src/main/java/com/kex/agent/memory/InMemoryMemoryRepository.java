@@ -4,6 +4,7 @@ package com.kex.agent.memory;
 
 import java.time.Instant;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 
@@ -26,7 +27,30 @@ class InMemoryMemoryRepository implements MemoryRepository {
     }
 
     @Override
+    public synchronized boolean supersede(String id, String bySupersedingId) {
+        List<MemoryEntry> rebuilt = new ArrayList<>(entries.size());
+        boolean marked = false;
+        for (MemoryEntry entry : entries) {
+            // Un souvenir déjà remplacé ne se remarque pas : le premier remplaçant garde la chaîne.
+            if (!marked && entry.id().equals(id) && entry.supersededBy() == null) {
+                rebuilt.add(new MemoryEntry(entry.id(), entry.content(), entry.conversationId(),
+                        entry.createdAt(), bySupersedingId));
+                marked = true;
+            }
+            else {
+                rebuilt.add(entry);
+            }
+        }
+        entries.clear();
+        entries.addAll(rebuilt);
+        return marked;
+    }
+
+    @Override
     public synchronized List<MemoryEntry> active(Instant since) {
-        return entries.stream().filter(entry -> !entry.createdAt().isBefore(since)).toList();
+        return entries.stream()
+                .filter(entry -> entry.supersededBy() == null)
+                .filter(entry -> !entry.createdAt().isBefore(since))
+                .toList();
     }
 }

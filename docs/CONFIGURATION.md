@@ -46,6 +46,7 @@ arrive.
 |---|---|---|
 | `system-prompt` | prompt outillé | Prompt système par défaut |
 | `max-history-messages` | `40` | Fenêtre de mémoire, en messages par conversation |
+| `max-message-characters` | `4000` | Plafond de taille d'un message **relu** des tours suivants — la fenêtre ci-dessus ne borne qu'un nombre. `0` lève la borne |
 | `log-interactions` | `false` | Journalise prompts et réponses. Debug uniquement : données sensibles |
 | `api-key` | *(vide)* | Bearer de l'API sous le principal anonyme `kex-agent-api`. Vide = API fermée (`503`) |
 | `api-keys.<nom>` | *(vide)* | Bearers nommés, en plus ou à la place d'`api-key` : chaque nom devient le principal authentifié, donc l'acteur inscrit à l'audit de supervision |

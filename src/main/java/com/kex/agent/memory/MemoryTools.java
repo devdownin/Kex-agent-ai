@@ -30,15 +30,18 @@ public class MemoryTools {
             + "un détail propre à cet échange, ni une information déjà disponible ailleurs.")
     public String rememberFact(
             @ToolParam(description = "Le fait à retenir, formulé en une phrase autonome.") String content,
+            @ToolParam(required = false, description = "Identifiant, rendu par recall_facts, du "
+                    + "souvenir que ce fait corrige. À renseigner dès que le nouveau fait contredit "
+                    + "un souvenir existant, sans quoi les deux seront relus ensemble.") String replaces,
             ToolContext toolContext) {
         return ToolCallRecorder.timed(toolContext, "remember_fact",
-                () -> memory.remember(content, conversationId(toolContext)));
+                () -> memory.remember(content, replaces, conversationId(toolContext)));
     }
 
     @Tool(name = "recall_facts", description = "Relit les faits retenus lors de conversations "
-            + "précédentes. À appeler en début d'échange si un souvenir pourrait éviter de "
-            + "redemander une information déjà établie.")
-    public List<String> recallFacts(ToolContext toolContext) {
+            + "précédentes, avec leur identifiant. À appeler en début d'échange si un souvenir "
+            + "pourrait éviter de redemander une information déjà établie.")
+    public List<MemoryFact> recallFacts(ToolContext toolContext) {
         return ToolCallRecorder.timed(toolContext, "recall_facts", memory::recall);
     }
 

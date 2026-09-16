@@ -15,6 +15,14 @@ interface MemoryRepository {
     /** Ajoute l'entrée, puis évince la plus ancienne au-delà de la capacité configurée. */
     void add(MemoryEntry entry);
 
-    /** Du plus récent au plus ancien, entrées écrites depuis {@code since} seulement. */
+    /**
+     * Marque un souvenir comme remplacé par un autre.
+     *
+     * @return {@code false} si aucun souvenir valable ne porte cet identifiant — l'appelant le dit
+     *         plutôt que de laisser croire qu'une contradiction a été levée
+     */
+    boolean supersede(String id, String bySupersedingId);
+
+    /** Du plus récent au plus ancien : ni périmés par l'âge ({@code since}), ni remplacés. */
     List<MemoryEntry> active(Instant since);
 }

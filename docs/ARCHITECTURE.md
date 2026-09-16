@@ -280,6 +280,40 @@ Allumée par défaut (`kex.agent.memory.enabled: true`), à la différence de la
 elle n'exige aucune infrastructure de plus que l'agent lui-même, en mémoire du processus par défaut
 et sur la même table Postgres que l'audit et la mémoire de conversation sous `shared-memory`.
 
+#### Une correction remplace le fait devenu faux, elle ne s'ajoute pas à côté
+
+Retenir sans jamais rien périmer accumule les contradictions : « la connexion s'appelle
+kafka-explorer » et « la connexion s'appelle kafka-explorer-v2 » relues ensemble ne disent pas
+laquelle fait foi, et c'est le modèle qui tranche — au hasard. `recall_facts` rend donc un
+identifiant avec chaque fait, et `remember_fact` prend un `replaces` optionnel : le souvenir désigné
+est marqué `superseded_by`, ce qui le sort de `recall_facts` sans l'effacer.
+
+Le marquage est un acte explicite du modèle, pas une heuristique de ressemblance : sans modèle
+d'embeddings garanti sur le classpath, « ces deux phrases parlent-elles de la même chose » ne se
+décide qu'à coups de mots communs, et une supersession devinée effacerait un fait valable sans que
+personne ne sache pourquoi. Un `replaces` qui ne désigne aucun souvenir valable — identifiant
+inventé, ou déjà remplacé — n'échoue pas mais le dit dans la réponse de l'outil : le nouveau fait
+est écrit, et le modèle apprend que la contradiction, elle, n'a pas été levée.
+
+### La fenêtre de conversation borne un nombre de messages, jamais leur taille
+
+`MessageWindowChatMemory` compte des messages. Quarante tours courts et quarante traces d'exception
+collées dans le chat occupent la même fenêtre, pour deux ordres de grandeur d'écart dans le prompt
+effectivement envoyé — et payé — à chaque tour suivant. `BoundedChatMemory` décore la fenêtre et
+coupe à l'écriture ce qui dépasse `kex.agent.max-message-characters` (0 lève la borne).
+
+Deux choix s'y jouent. La coupe est **à l'écriture, pas à la lecture** : le tour en cours voit le
+message entier — c'est ce que l'appelant vient d'envoyer ou ce que le modèle vient de répondre — et
+seule sa relecture aux tours suivants est bornée. Et elle **se dit** : le texte coupé porte
+`[… N caractères coupés de l'historique …]`, parce qu'un contenu tronqué en silence se relit comme
+un contenu complet et ferait conclure le modèle sur une donnée amputée sans qu'il le sache.
+
+Le décorateur ne reconstruit que les messages utilisateur et assistant : ce sont les seuls que
+`MessageChatMemoryAdvisor` écrit réellement — vérifié dans son bytecode, `after()` ne persiste que
+les générations de la réponse et `before()` que le dernier message utilisateur. Les résultats
+d'outils MCP, eux, ne traversent jamais cette fenêtre : la boucle d'outils s'exécute sous le
+`ChatModel`, en dessous de l'advisor, et seul le texte final de l'assistant remonte jusqu'à lui.
+
 ### Le flux SSE porte son identité et ses erreurs
 
 `POST /chat/stream` rendait un flux de texte nu. Deux défauts qui n'en sont pas moins réels pour
@@ -908,7 +942,8 @@ n'entre dans la chaîne de build, la même contrainte que pour le reste de la co
 | `SupervisionServiceTest` (verrou, trace, disjoncteurs) | Une seconde approbation concurrente échoue avec `DecisionInProgressException` sans exécuter deux fois l'action ; `AuditEntry.traceId` reprend la trace en cours ou reste `null` hors d'une trace ; `AgentStatus.circuitBreakers` liste les disjoncteurs connus |
 | `JdbcAuditRepositoryTest` | Le SQL et le mappage d'une ligne d'audit, sur H2 |
 | `SharedSupervisionAuditTest` | Le profil `shared-memory` bascule bien l'audit sur `JdbcAuditRepository`, et une entrée écrite s'y relit |
-| `MemoryServiceTest` | La garde d'écriture : contenu vide ignoré, souvenir tronqué au-delà de `max-content-length`, le plus ancien évincé au-delà de `capacity`, un souvenir périmé n'est plus relu |
-| `MemoryToolsTest` | `remember_fact` et `recall_facts` se répondent l'un à l'autre, fonctionnent sans identité de conversation, et chronomètrent l'appel quand un collecteur est présent |
-| `JdbcMemoryRepositoryTest` | Le SQL, le mappage d'une ligne et la borne de capacité côté base, sur H2 |
+| `MemoryServiceTest` | La garde d'écriture : contenu vide ignoré, souvenir tronqué au-delà de `max-content-length`, le plus ancien évincé au-delà de `capacity`, un souvenir périmé n'est plus relu ; et la supersession : une correction sort le fait devenu faux, un `replaces` inconnu ou déjà remplacé le dit sans perdre le nouveau fait |
+| `MemoryToolsTest` | `remember_fact` et `recall_facts` se répondent l'un à l'autre, l'identifiant rendu permet de corriger un fait, l'appel fonctionne sans identité de conversation et se chronomètre quand un collecteur est présent |
+| `JdbcMemoryRepositoryTest` | Le SQL, le mappage d'une ligne, la borne de capacité et la supersession côté base, sur H2 |
+| `BoundedChatMemoryTest` | Un message relu est coupé au-delà de `max-message-characters`, la coupe est dite dans le texte, un message court reste intact, lecture et purge restent déléguées |
 | `SharedMemoryRepositoryTest` | Le profil `shared-memory` bascule bien la mémoire long-terme sur `JdbcMemoryRepository`, et un souvenir écrit s'y relit |

@@ -27,16 +27,18 @@ class JdbcMemoryRepository implements MemoryRepository {
                   id VARCHAR(64) PRIMARY KEY,
                   content VARCHAR(2000) NOT NULL,
                   conversation_id VARCHAR(64),
-                  created_at TIMESTAMP NOT NULL
+                  created_at TIMESTAMP NOT NULL,
+                  superseded_by VARCHAR(64)
                 )""");
     }
 
     @Override
     public void add(MemoryEntry entry) {
         jdbcTemplate.update("""
-                INSERT INTO kex_agent_memory (id, content, conversation_id, created_at)
-                VALUES (?, ?, ?, ?)""",
-                entry.id(), entry.content(), entry.conversationId(), Timestamp.from(entry.createdAt()));
+                INSERT INTO kex_agent_memory (id, content, conversation_id, created_at, superseded_by)
+                VALUES (?, ?, ?, ?, ?)""",
+                entry.id(), entry.content(), entry.conversationId(), Timestamp.from(entry.createdAt()),
+                entry.supersededBy());
         // Une rétention filtrée à la lecture seule ne borne jamais la table : une instance qui
         // tourne des mois accumulerait des lignes qu'aucune fenêtre de lecture ne referait petites.
         jdbcTemplate.update("""
@@ -46,12 +48,22 @@ class JdbcMemoryRepository implements MemoryRepository {
     }
 
     @Override
+    public boolean supersede(String id, String bySupersedingId) {
+        // `superseded_by IS NULL` dans le WHERE : un souvenir déjà remplacé ne se remarque pas, et
+        // l'appelant doit pouvoir distinguer « marqué » de « identifiant inconnu ou déjà périmé ».
+        return jdbcTemplate.update("""
+                UPDATE kex_agent_memory SET superseded_by = ?
+                WHERE id = ? AND superseded_by IS NULL""", bySupersedingId, id) > 0;
+    }
+
+    @Override
     public List<MemoryEntry> active(Instant since) {
         return jdbcTemplate.query("""
-                SELECT id, content, conversation_id, created_at FROM kex_agent_memory
-                WHERE created_at >= ? ORDER BY created_at DESC""",
+                SELECT id, content, conversation_id, created_at, superseded_by FROM kex_agent_memory
+                WHERE created_at >= ? AND superseded_by IS NULL ORDER BY created_at DESC""",
                 (rs, rowNum) -> new MemoryEntry(rs.getString("id"), rs.getString("content"),
-                        rs.getString("conversation_id"), rs.getTimestamp("created_at").toInstant()),
+                        rs.getString("conversation_id"), rs.getTimestamp("created_at").toInstant(),
+                        rs.getString("superseded_by")),
                 Timestamp.from(since));
     }
 }

@@ -71,10 +71,13 @@ class AgentConfig {
 
     @Bean
     ChatMemory chatMemory(ChatMemoryRepository repository, AgentProperties properties) {
-        return MessageWindowChatMemory.builder()
+        ChatMemory window = MessageWindowChatMemory.builder()
                 .chatMemoryRepository(repository)
                 .maxMessages(properties.maxHistoryMessages())
                 .build();
+        return properties.maxMessageCharacters() > 0
+                ? new BoundedChatMemory(window, properties.maxMessageCharacters())
+                : window;
     }
 
     /**

@@ -7,6 +7,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.util.StringUtils;
+
 /**
  * La garde d'écriture tient ici, pas dans le prompt : le modèle choisit d'appeler l'outil, ce
  * service décide combien en rester (capacité, longueur, rétention). La compter sur la seule bonne
@@ -25,7 +27,12 @@ class MemoryService {
         this.clock = clock;
     }
 
-    String remember(String content, String conversationId) {
+    /**
+     * @param replaces identifiant du souvenir devenu faux, {@code null} pour un fait nouveau. Sans
+     *                 ce remplacement explicite, une correction s'ajouterait à côté du fait qu'elle
+     *                 contredit et les deux seraient relus ensemble.
+     */
+    String remember(String content, String replaces, String conversationId) {
         String trimmed = content == null ? "" : content.strip();
         if (trimmed.isEmpty()) {
             return "Rien à retenir : contenu vide.";
@@ -33,12 +40,21 @@ class MemoryService {
         String bounded = trimmed.length() > properties.maxContentLength()
                 ? trimmed.substring(0, properties.maxContentLength())
                 : trimmed;
-        repository.add(new MemoryEntry(UUID.randomUUID().toString(), bounded, conversationId, clock.instant()));
-        return "Retenu.";
+        String id = UUID.randomUUID().toString();
+        repository.add(new MemoryEntry(id, bounded, conversationId, clock.instant(), null));
+
+        if (!StringUtils.hasText(replaces)) {
+            return "Retenu.";
+        }
+        return repository.supersede(replaces.strip(), id)
+                ? "Retenu, et le souvenir remplacé est marqué périmé."
+                : "Retenu, mais aucun souvenir valable ne porte cet identifiant : rien n'a été marqué périmé.";
     }
 
-    List<String> recall() {
+    List<MemoryFact> recall() {
         Instant since = clock.instant().minus(properties.retention());
-        return repository.active(since).stream().map(MemoryEntry::content).toList();
+        return repository.active(since).stream()
+                .map(entry -> new MemoryFact(entry.id(), entry.content()))
+                .toList();
     }
 }
