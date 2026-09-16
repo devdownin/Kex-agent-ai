@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.kex.agent.mcp.McpToolCatalog;
+import com.kex.agent.memory.MemoryTools;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryRegistry;
 import io.micrometer.observation.ObservationRegistry;
@@ -70,10 +71,13 @@ class AgentConfig {
 
     @Bean
     ChatMemory chatMemory(ChatMemoryRepository repository, AgentProperties properties) {
-        return MessageWindowChatMemory.builder()
+        ChatMemory window = MessageWindowChatMemory.builder()
                 .chatMemoryRepository(repository)
                 .maxMessages(properties.maxHistoryMessages())
                 .build();
+        return properties.maxMessageCharacters() > 0
+                ? new BoundedChatMemory(window, properties.maxMessageCharacters())
+                : window;
     }
 
     /**
@@ -84,6 +88,7 @@ class AgentConfig {
     ChatClient agentChatClient(ChatClient.Builder builder,
                                ChatMemory chatMemory,
                                ObjectProvider<ToolCallbackProvider> toolCallbackProviders,
+                               ObjectProvider<MemoryTools> memoryTools,
                                ObjectProvider<Advisor> declaredAdvisors,
                                AgentProperties properties) {
 
@@ -101,6 +106,8 @@ class AgentConfig {
                 .defaultToolCallbacks(toolCallbackProviders.stream()
                         .map(RecordingToolCallbackProvider::new)
                         .toArray(ToolCallbackProvider[]::new))
+                // ObjectProvider : absent quand kex.agent.memory.enabled=false, pas d'outil à ajouter.
+                .defaultTools(memoryTools.stream().toArray())
                 .defaultAdvisors(advisors)
                 .build();
     }

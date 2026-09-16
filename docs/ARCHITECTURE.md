@@ -249,6 +249,91 @@ d'avoir le starter JDBC sur le classpath fait échouer le démarrage sans base
 `application.yml`, et le profil **annule** cette liste — une liste de propriétés n'est pas fusionnée
 entre sources, la source la plus prioritaire gagne en entier.
 
+### Mémoire long-terme : un outil que le modèle choisit d'appeler, jamais une capture automatique
+
+`MessageWindowChatMemory` oublie par troncature : passé `max-history-messages`, un fait dit plus tôt
+sort de la fenêtre sans qu'aucune conversation future ne puisse le retrouver. `remember_fact` et
+`recall_facts` (`com.kex.agent.memory`) comblent ce manque, mais pas en élargissant la fenêtre — la
+panne la plus citée sur la mémoire des agents est l'absence de garde d'écriture : sans elle, chaque
+observation devient permanente et la relecture finit par ne renvoyer que du bruit.
+
+La garde tient à deux niveaux. Le modèle décide *quoi* écrire — le prompt système lui dit de ne
+retenir qu'un fait opérationnel durable, jamais un détail propre à l'échange en cours ni une
+information déjà disponible ailleurs. `MemoryService` décide *combien* en rester, indépendamment de
+ce que le modèle respecte ou non l'instruction : un souvenir plus long que
+`kex.agent.memory.max-content-length` est tronqué, le plus ancien au-delà de `capacity` est évincé
+à l'écriture, et un souvenir plus vieux que `retention` n'est plus rendu par `recall_facts` — sans
+être supprimé, comme un `AuditEntry` qui sort d'une fenêtre de lecture sans disparaître de la table.
+
+Ces deux outils sont **locaux**, pas issus d'un serveur MCP : ils passent par
+`ChatClient.Builder.defaultTools(Object...)`, pas par `defaultToolCallbacks(...)`, et donc jamais
+par `RecordingToolCallbackProvider` — ce qui est correct : leur résultat est notre propre lecture
+d'une base, pas le texte d'un tiers, et le baliser `<tool_result untrusted>` affirmerait une méfiance
+qui n'a pas lieu d'être. Chronométrage et visibilité dans `AgentAnswer.toolCalls()` restent malgré
+tout partagés avec les outils MCP : `ToolCallRecorder.timed(...)` factorise ce que
+`RecordingToolCallbackProvider` faisait déjà, pour que les deux chemins ne dérivent pas l'un de
+l'autre. L'identité de la conversation qui a écrit un souvenir voyage par le même mécanisme que le
+collecteur d'appels — une clé `kex.`-préfixée dans le `ToolContext`, filtrée avant d'atteindre un
+serveur MCP par le même `ToolContextToMcpMetaConverter`.
+
+Allumée par défaut (`kex.agent.memory.enabled: true`), à la différence de la base de connaissance :
+elle n'exige aucune infrastructure de plus que l'agent lui-même, en mémoire du processus par défaut
+et sur la même table Postgres que l'audit et la mémoire de conversation sous `shared-memory`.
+
+#### Une correction remplace le fait devenu faux, elle ne s'ajoute pas à côté
+
+Retenir sans jamais rien périmer accumule les contradictions : « la connexion s'appelle
+kafka-explorer » et « la connexion s'appelle kafka-explorer-v2 » relues ensemble ne disent pas
+laquelle fait foi, et c'est le modèle qui tranche — au hasard. `recall_facts` rend donc un
+identifiant avec chaque fait, et `remember_fact` prend un `replaces` optionnel : le souvenir désigné
+est marqué `superseded_by`, ce qui le sort de `recall_facts` sans l'effacer.
+
+Le marquage est un acte explicite du modèle, pas une heuristique de ressemblance : sans modèle
+d'embeddings garanti sur le classpath, « ces deux phrases parlent-elles de la même chose » ne se
+décide qu'à coups de mots communs, et une supersession devinée effacerait un fait valable sans que
+personne ne sache pourquoi. Un `replaces` qui ne désigne aucun souvenir valable — identifiant
+inventé, ou déjà remplacé — n'échoue pas mais le dit dans la réponse de l'outil : le nouveau fait
+est écrit, et le modèle apprend que la contradiction, elle, n'a pas été levée.
+
+#### Une lecture et une suppression, jamais une écriture, côté opérateur
+
+Un souvenir écrit à l'insu de personne, sans écran pour le voir ni le corriger, contredirait tout le
+reste du Control Center — observer, comprendre, vérifier. `GET /api/agent/memory` (`MemoryController`)
+rend donc ce que `list()` liste, et `DELETE /api/agent/memory/{id}` permet à un opérateur de retirer
+un souvenir que le modèle a mal jugé durable. Aucun outil n'expose l'écriture depuis cette API :
+retenir reste un choix du modèle, jamais un geste d'un opérateur qui écrirait dans le contexte
+d'une conversation qu'il ne mène pas.
+
+La suppression rejoint l'audit de supervision (`SupervisionService.auditAction(...)`), au même
+titre qu'une pause ou l'approbation d'une décision — un seul endroit répond à « qui a fait quoi »,
+plutôt qu'un journal propre à chaque fonctionnalité. Ce point d'entrée d'audit, et la suppression
+elle-même, vivent délibérément dans `MemoryController`, pas dans `MemoryService` : ce dernier
+alimente le `ChatClient` via `MemoryTools`, et `SupervisionService` dépend en retour d'`AgentService`
+donc du même `ChatClient` — lui faire porter une dépendance sur `SupervisionService` fermerait le
+cycle (`AgentService` → `ChatClient` → `MemoryTools` → `MemoryService` → `SupervisionService` →
+`AgentService`), découvert à l'exécution par un `UnsatisfiedDependencyException` avant d'être
+corrigé. Le contrôleur, lui, n'entre dans la construction du `ChatClient` par aucun chemin : sa
+dépendance sur les deux services ne referme rien.
+
+### La fenêtre de conversation borne un nombre de messages, jamais leur taille
+
+`MessageWindowChatMemory` compte des messages. Quarante tours courts et quarante traces d'exception
+collées dans le chat occupent la même fenêtre, pour deux ordres de grandeur d'écart dans le prompt
+effectivement envoyé — et payé — à chaque tour suivant. `BoundedChatMemory` décore la fenêtre et
+coupe à l'écriture ce qui dépasse `kex.agent.max-message-characters` (0 lève la borne).
+
+Deux choix s'y jouent. La coupe est **à l'écriture, pas à la lecture** : le tour en cours voit le
+message entier — c'est ce que l'appelant vient d'envoyer ou ce que le modèle vient de répondre — et
+seule sa relecture aux tours suivants est bornée. Et elle **se dit** : le texte coupé porte
+`[… N caractères coupés de l'historique …]`, parce qu'un contenu tronqué en silence se relit comme
+un contenu complet et ferait conclure le modèle sur une donnée amputée sans qu'il le sache.
+
+Le décorateur ne reconstruit que les messages utilisateur et assistant : ce sont les seuls que
+`MessageChatMemoryAdvisor` écrit réellement — vérifié dans son bytecode, `after()` ne persiste que
+les générations de la réponse et `before()` que le dernier message utilisateur. Les résultats
+d'outils MCP, eux, ne traversent jamais cette fenêtre : la boucle d'outils s'exécute sous le
+`ChatModel`, en dessous de l'advisor, et seul le texte final de l'assistant remonte jusqu'à lui.
+
 ### Le flux SSE porte son identité et ses erreurs
 
 `POST /chat/stream` rendait un flux de texte nu. Deux défauts qui n'en sont pas moins réels pour
@@ -877,3 +962,9 @@ n'entre dans la chaîne de build, la même contrainte que pour le reste de la co
 | `SupervisionServiceTest` (verrou, trace, disjoncteurs) | Une seconde approbation concurrente échoue avec `DecisionInProgressException` sans exécuter deux fois l'action ; `AuditEntry.traceId` reprend la trace en cours ou reste `null` hors d'une trace ; `AgentStatus.circuitBreakers` liste les disjoncteurs connus |
 | `JdbcAuditRepositoryTest` | Le SQL et le mappage d'une ligne d'audit, sur H2 |
 | `SharedSupervisionAuditTest` | Le profil `shared-memory` bascule bien l'audit sur `JdbcAuditRepository`, et une entrée écrite s'y relit |
+| `MemoryServiceTest` | La garde d'écriture : contenu vide ignoré, souvenir tronqué au-delà de `max-content-length`, le plus ancien évincé au-delà de `capacity`, un souvenir périmé n'est plus relu ; la supersession : une correction sort le fait devenu faux, un `replaces` inconnu ou déjà remplacé le dit sans perdre le nouveau fait ; et la suppression : `forget` rend l'entrée supprimée, un identifiant inconnu lève `UnknownMemoryException` |
+| `MemoryToolsTest` | `remember_fact` et `recall_facts` se répondent l'un à l'autre, l'identifiant rendu permet de corriger un fait, l'appel fonctionne sans identité de conversation et se chronomètre quand un collecteur est présent |
+| `JdbcMemoryRepositoryTest` | Le SQL, le mappage d'une ligne, la borne de capacité et la supersession côté base, sur H2 |
+| `BoundedChatMemoryTest` | Un message relu est coupé au-delà de `max-message-characters`, la coupe est dite dans le texte, un message court reste intact, lecture et purge restent déléguées |
+| `MemoryControllerTest` | Contrat HTTP de la lecture et de la suppression : 204 sur suppression, 404 sur identifiant inconnu sans rien auditer, l'audit porte le contenu supprimé |
+| `SharedMemoryRepositoryTest` | Le profil `shared-memory` bascule bien la mémoire long-terme sur `JdbcMemoryRepository`, un souvenir écrit s'y relit, et une suppression par un opérateur rejoint l'audit de supervision sur la même base |

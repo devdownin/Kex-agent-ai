@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
+package com.kex.agent.memory;
+
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Optional;
+
+/** Défaut : aucune infrastructure de plus que l'agent lui-même, donc mono-instance. */
+class InMemoryMemoryRepository implements MemoryRepository {
+
+    private final Deque<MemoryEntry> entries = new ArrayDeque<>();
+    private final int capacity;
+
+    InMemoryMemoryRepository(int capacity) {
+        this.capacity = Math.max(1, capacity);
+    }
+
+    @Override
+    public synchronized void add(MemoryEntry entry) {
+        entries.addFirst(entry);
+        if (entries.size() > capacity) {
+            entries.removeLast();
+        }
+    }
+
+    @Override
+    public synchronized boolean supersede(String id, String bySupersedingId) {
+        List<MemoryEntry> rebuilt = new ArrayList<>(entries.size());
+        boolean marked = false;
+        for (MemoryEntry entry : entries) {
+            // Un souvenir déjà remplacé ne se remarque pas : le premier remplaçant garde la chaîne.
+            if (!marked && entry.id().equals(id) && entry.supersededBy() == null) {
+                rebuilt.add(new MemoryEntry(entry.id(), entry.content(), entry.conversationId(),
+                        entry.createdAt(), bySupersedingId));
+                marked = true;
+            }
+            else {
+                rebuilt.add(entry);
+            }
+        }
+        entries.clear();
+        entries.addAll(rebuilt);
+        return marked;
+    }
+
+    @Override
+    public synchronized List<MemoryEntry> active(Instant since) {
+        return entries.stream()
+                .filter(entry -> entry.supersededBy() == null)
+                .filter(entry -> !entry.createdAt().isBefore(since))
+                .toList();
+    }
+
+    @Override
+    public synchronized Optional<MemoryEntry> forget(String id) {
+        for (Iterator<MemoryEntry> it = entries.iterator(); it.hasNext();) {
+            MemoryEntry entry = it.next();
+            if (entry.id().equals(id)) {
+                it.remove();
+                return Optional.of(entry);
+            }
+        }
+        return Optional.empty();
+    }
+}

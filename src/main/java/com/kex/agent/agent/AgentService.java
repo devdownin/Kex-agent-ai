@@ -25,6 +25,13 @@ import reactor.core.publisher.Sinks;
 @Service
 public class AgentService {
 
+    /**
+     * Clé dans le {@code ToolContext} portant l'identité de conversation, lue par les outils
+     * locaux (mémoire) qui doivent savoir de quel échange provient un souvenir. Le préfixe
+     * {@code kex.} est filtré avant l'envoi au serveur MCP, comme {@link ToolCallRecorder#CONTEXT_KEY}.
+     */
+    public static final String CONVERSATION_ID_CONTEXT_KEY = "kex.conversation-id";
+
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;
     private final Duration timeout;
@@ -91,7 +98,7 @@ public class AgentService {
     private ChatClient.ChatClientRequestSpec request(String id, String message, ToolCallRecorder recorder) {
         return chatClient.prompt()
                 .user(message)
-                .toolContext(Map.of(ToolCallRecorder.CONTEXT_KEY, recorder))
+                .toolContext(Map.of(ToolCallRecorder.CONTEXT_KEY, recorder, CONVERSATION_ID_CONTEXT_KEY, id))
                 .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, id));
     }
 

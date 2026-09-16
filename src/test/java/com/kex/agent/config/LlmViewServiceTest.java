@@ -26,7 +26,7 @@ class LlmViewServiceTest {
     }
 
     private LlmView describe(boolean logInteractions) {
-        AgentProperties agent = new AgentProperties("prompt système", 40, logInteractions,
+        AgentProperties agent = new AgentProperties("prompt système", 40, 4000, logInteractions,
                 "secret-api", Map.of(), Duration.ofSeconds(120));
         return new LlmViewService(environment, agent, new KnowledgeProperties(false, 4, 0.6, ""))
                 .describe();

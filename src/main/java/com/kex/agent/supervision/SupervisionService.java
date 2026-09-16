@@ -356,6 +356,15 @@ public class SupervisionService {
         return status();
     }
 
+    /**
+     * Point d'entrée d'audit pour un acte humain qui ne relève pas d'un processus supervisé — la
+     * suppression d'un souvenir long-terme, par exemple. Un seul audit pour tout ce qu'un opérateur
+     * fait, plutôt qu'un par fonctionnalité : c'est la pièce de conformité, elle ne se fragmente pas.
+     */
+    public void auditAction(String actor, String action, String result) {
+        record(actor, action, null, null, null, result);
+    }
+
     public SupervisionPolicy updatePolicy(PolicyUpdate update, String actor) {
         SupervisionPolicy updated = policy.updateAndGet(current -> new SupervisionPolicy(
                 "policy-v" + policyRevision.incrementAndGet(),

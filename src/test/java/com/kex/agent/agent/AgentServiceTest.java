@@ -52,7 +52,7 @@ class AgentServiceTest {
     ChatClient.StreamResponseSpec streamSpec;
 
     private static AgentProperties properties(Duration timeout) {
-        return new AgentProperties("prompt", 40, false, "", Map.of(), timeout);
+        return new AgentProperties("prompt", 40, 4000, false, "", Map.of(), timeout);
     }
 
     private AgentService agentService() {

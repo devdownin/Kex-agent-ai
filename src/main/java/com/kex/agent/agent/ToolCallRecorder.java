@@ -5,7 +5,9 @@ package com.kex.agent.agent;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Supplier;
 
+import org.springframework.ai.chat.model.ToolContext;
 import reactor.core.publisher.Sinks;
 
 /**
@@ -43,6 +45,29 @@ public final class ToolCallRecorder {
 
     public static ToolCallRecorder from(Object candidate) {
         return candidate instanceof ToolCallRecorder recorder ? recorder : null;
+    }
+
+    /**
+     * Chronomètre et enregistre un appel d'outil dans le collecteur porté par {@code toolContext},
+     * quand il y en a un. Partagé entre le wrapper des outils MCP et les outils locaux (mémoire) :
+     * sans lui, deux implémentations du même chronométrage dériveraient l'une de l'autre.
+     */
+    public static <T> T timed(ToolContext toolContext, String tool, Supplier<T> call) {
+        ToolCallRecorder recorder = toolContext == null ? null
+                : from(toolContext.getContext().get(CONTEXT_KEY));
+        if (recorder == null) {
+            return call.get();
+        }
+        long start = System.nanoTime();
+        boolean failed = true;
+        try {
+            T result = call.get();
+            failed = false;
+            return result;
+        }
+        finally {
+            recorder.record(tool, (System.nanoTime() - start) / 1_000_000, failed);
+        }
     }
 
     @Override
