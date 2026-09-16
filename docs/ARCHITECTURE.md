@@ -921,6 +921,20 @@ pour un même geste, au-dessus d'un sondage de fond qui les rafraîchit déjà t
 Le bouton restant rafraîchit la vue entière et le dit dans son `aria-label`, faute de pouvoir le
 dire par sa position — il est posé dans l'en-tête du premier panneau, comme partout ailleurs.
 
+### Une grille de cartes s'étire, elle ne laisse pas un vide à côté d'une carte seule
+
+`.servers-grid`, `.cards` et `.tiles` posaient `grid-template-columns:
+repeat(auto-fill, minmax(Npx, 1fr))`. `auto-fill` calcule combien de colonnes tiennent dans la
+largeur disponible et les réserve toutes, qu'elles portent une carte ou non : avec un seul serveur
+MCP connecté, la carte occupe la première colonne à sa largeur minimale et le reste de la grille
+reste vide — visuellement, une carte étroite dans un coin plutôt qu'étirée sur le panneau.
+`auto-fit` calcule les mêmes colonnes mais réduit à zéro celles qui ne portent aucune carte, et le
+`1fr` de `minmax()` redistribue l'espace ainsi libéré aux cartes réelles. Les deux se comportent
+identiquement dès que les cartes remplissent une rangée ; ils ne divergent que dans le cas justement
+le plus visible en usage réel — un agent qui n'a encore qu'un seul serveur MCP branché, l'exemple
+même de l'installation par défaut. `.split` et `.kpis-grid` avaient déjà `auto-fit` ; les trois
+autres grilles de cartes suivent maintenant la même règle.
+
 ### Un tableau qui défile le dit, sans compter sur le chrome du navigateur
 
 `.scroll-x` défilait déjà horizontalement — `overflow-x: auto` suffit — mais rien à l'écran ne le

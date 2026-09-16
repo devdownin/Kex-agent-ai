@@ -183,6 +183,32 @@ await check('la vue technique n’a qu’un bouton de rafraîchissement', async 
     /vue technique/);
 });
 
+await check('la carte d’un serveur MCP unique occupe toute la largeur du panneau', async () => {
+  // Défaut : `.servers-grid` posait `repeat(auto-fill, minmax(320px, 1fr))`. Avec un seul serveur
+  // connecté, auto-fill réserve quand même les colonnes vides à leur largeur minimale plutôt que
+  // de les effacer — la carte restait étroite dans un coin, à côté d'un vide. auto-fit corrige :
+  // sans MCP dans ce job (spring.ai.mcp.client.enabled=false), la réponse est simulée pour
+  // exercer ce rendu précis, seul cas de cette suite à le faire.
+  await page.route('**/api/agent/mcp/servers', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify([{
+      connection: 'kafka-explorer', serverName: 'kafka-explorer-mcp', version: '0.1.0',
+      protocolVersion: '2025-11-25', initialized: true,
+      tools: [{ name: 'kex_list_topics', description: 'Liste les topics.' }],
+    }]),
+  }));
+  await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#servers .server');
+
+  const widths = await page.evaluate(() => ({
+    grid: document.querySelector('#servers .servers-grid').getBoundingClientRect().width,
+    card: document.querySelector('#servers .server').getBoundingClientRect().width,
+  }));
+  assert.ok(widths.card > widths.grid - 40,
+    `la carte (${widths.card}px) doit remplir la grille (${widths.grid}px)`);
+  await page.unroute('**/api/agent/mcp/servers');
+});
+
 await check('un tableau déjà rendu ne clignote pas au sondage de fond', async () => {
   // Défaut repéré sur la grille des serveurs MCP de la vue Technique, mais dans render() lui-même
   // (core.js), partagé par Processus, Décisions, Alertes, Audit et les topics Kafka : chaque

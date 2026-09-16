@@ -157,6 +157,12 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   `404` quand elle est désactivée : l'afficher en « Ressource inconnue » sous un bouton « Réessayer »
   fait chercher un incident là où il n'y a qu'une propriété à changer.
 
+- **Une grille de cartes prend `auto-fit`, pas `auto-fill`.** `auto-fill` réserve toutes les
+  colonnes qui tiennent dans la largeur, même vides : avec un seul serveur MCP connecté — le cas de
+  l'installation par défaut — la carte restait étroite dans un coin à côté d'un vide. `auto-fit`
+  réduit les colonnes vides à zéro et laisse le `1fr` de `minmax()` redistribuer l'espace aux cartes
+  réelles ; les deux ne divergent que quand les cartes ne remplissent pas une rangée entière.
+
 - **Le sondage de fond ne réinitialise pas un bloc déjà rendu.** `render()` effaçait l'hôte avec le
   témoin « Chargement… », plus étroit que le contenu qu'il remplace, avant chaque réponse — y
   compris au quinzième sondage sur un tableau déjà affiché. Le résultat : un flash toutes les 15
