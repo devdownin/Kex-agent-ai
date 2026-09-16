@@ -255,6 +255,19 @@ Le bouton « Authorize » de Swagger UI attend la valeur de `kex.agent.api-key`.
 Aucun secret, aucun accès réseau : le profil `test` fournit une clé factice et désactive le client
 MCP, et le test d'intégration monte son propre serveur.
 
+### Évals de jugement du modèle
+
+Exclus de `./mvnw verify` (`@Tag("eval")`) : ils appellent un vrai fournisseur, donc payants et
+non déterministes. À rejouer à la main après un changement de modèle ou de prompt de supervision :
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... ./mvnw test -Dtest=ModelJudgmentEvalTest -DexcludedGroups=
+```
+
+Sans `ANTHROPIC_API_KEY`, le test se déclare simplement désactivé plutôt que d'échouer
+(`@EnabledIfEnvironmentVariable`). Voir « Un éval, pas un test, pour le jugement du modèle » dans
+ARCHITECTURE.md.
+
 <a id="publier-l-image"></a>
 
 ## Publier l'image

@@ -319,6 +319,10 @@
         <configuration>
           <!-- Mockito s'auto-attache sinon, ce que les futurs JDK refuseront. -->
           <argLine>@{jacocoArgLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
+          <!-- Les évals de jugement du modèle (@Tag("eval")) appellent un vrai fournisseur, donc
+               payant et non déterministe : aucune CI ne doit les joindre. À exécuter à la main
+               avec -DexcludedGroups= pour lever l'exclusion. -->
+          <excludedGroups>eval</excludedGroups>
         </configuration>
       </plugin>
     </plugins>

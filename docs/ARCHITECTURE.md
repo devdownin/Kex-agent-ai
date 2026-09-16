@@ -170,6 +170,25 @@ creuse plusieurs topics peut à lui seul approcher le plafond par minute, puisqu
 `spring.ai.tools.limits.max-total-tool-calls` autorise vingt allers-retours outil dans un seul
 échange.
 
+### Le prompt système et les outils sont mis en cache côté Anthropic
+
+`spring.ai.anthropic.chat.options.cache-options.strategy: SYSTEM_AND_TOOLS`. `tools/list` est
+rejoué à chaque requête pour prendre en compte un serveur MCP qui publierait de nouveaux outils
+sans redémarrage — mais le contenu envoyé au modèle (prompt système, définitions d'outils) ne
+change pas d'un tour à l'autre d'un même échange, ni souvent d'un échange à l'autre. Sans point de
+cache, ce contenu est refacturé en entier à chaque appel, alors qu'une boucle d'outils peut en
+compter jusqu'à vingt dans un seul échange.
+
+Spring AI porte cette configuration nativement (`AnthropicCacheOptions`, vérifié dans
+`spring-ai-anthropic` avant de la retenir plutôt que codée à la main) ; `LlmProviderTest` verrouille
+que le préfixe de propriété est le bon — un préfixe mal orthographié se lierait sans erreur et
+laisserait simplement le cache inactif, sans qu'aucun signal ne le dise. En dessous du seuil
+minimal côté Anthropic, la pose du point de cache est ignorée sans erreur non plus : l'activer ne
+coûte rien sur un prompt système isolé trop court pour être éligible seul.
+
+Spécifique à Anthropic : OpenRouter n'a pas cette option ici, la mise en cache y dépend de la
+passerelle et du modèle choisis, pas d'une propriété de ce projet.
+
 ### L'état de l'agent n'est pas celui du dernier cycle
 
 La pastille en tête d'écran répondait à « le dernier cycle s'est-il bien passé ? », pas à « cet
@@ -491,6 +510,31 @@ modèle, le motif d'arrêt est ce que l'outil a réellement rendu.
 Comme un relevé partiel donne `UNKNOWN`, il fait basculer l'agent en `DEGRADED` par le chemin qui
 existait déjà — un processus dont on ne sait rien ne ressemble pas à un processus sain.
 
+### Un éval, pas un test, pour le jugement du modèle
+
+`CycleAnalysisTest` verrouille ce que le code fait d'une réponse *déjà* produite — l'asymétrie de
+couverture ci-dessus, entre autres. Rien ne verrouillait que le modèle produise cette réponse-là,
+faute à quoi le code n'a rien à corriger : un changement de modèle ou une reformulation du prompt
+qui lui ferait recopier `complete: true` sur un relevé qu'il sait pourtant incomplet passerait la
+suite de tests sans un mot, puisque `CycleAnalysisTest` ne fabrique que des réponses déjà écrites
+à la main.
+
+`ModelJudgmentEvalTest` appelle donc un vrai fournisseur — payant, non déterministe, ce
+qu'aucune CI ne doit joindre par principe (voir `SupervisionCycleIntegrationTest`, qui simule le
+modèle pour cette même raison). `@Tag("eval")`, exclu de `./mvnw verify` (`excludedGroups` dans
+`pom.xml`) ; `@EnabledIfEnvironmentVariable` le fait taire proprement sans clé plutôt que
+d'échouer. Il rejoue le risque documenté plus haut avec un `FakeMcpServer` scripté pour l'occasion
+(`withToolsList` / `withToolCallResult`, additions rétrocompatibles) : un relevé de lag Kafka
+arrêté avant la fin sur le topic qui concerne justement le processus surveillé, et l'assertion
+porte sur `ProcessSnapshot.coverage()` — ce que le modèle a réellement recopié — pas sur l'état
+final, que le code sait de toute façon corriger si le modèle a bien rendu la couverture.
+
+À rejouer à la main après un changement de modèle ou de prompt système de supervision :
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... ./mvnw test -Dtest=ModelJudgmentEvalTest -DexcludedGroups=
+```
+
 ### La vue technique traduit, elle ne recalcule pas
 
 `kafka/` appelle `kex_list_topics` et `kex_consumer_lag` et traduit leur réponse. Toute la
@@ -723,3 +767,5 @@ n'entre dans la chaîne de build, la même contrainte que pour le reste de la co
 | `McpTraceContextCustomizerTest` | Propagation du contexte de trace courant sur les appels MCP, rien hors d'une trace en cours |
 | `ApiKeyAuthFilterTest` | Principal nommé par jeton, jeton historique, jeton inconnu ou en-tête absent |
 | `ApiKeyPrincipalTest` | Deux opérateurs nommés distincts dans l'audit de supervision |
+| `LlmProviderTest` (cache) | Le préfixe de propriété du cache Anthropic est le bon, jusqu'au `ChatModel` réellement construit |
+| `ModelJudgmentEvalTest` *(`@Tag("eval")`, hors `verify`)* | Le modèle configuré recopie une couverture qu'il sait incomplète plutôt que de conclure à tort — un vrai appel au fournisseur, à la main |
