@@ -3,6 +3,7 @@
 package com.kex.agent.config;
 
 import java.time.Duration;
+import java.util.Map;
 
 import com.kex.agent.knowledge.KnowledgeProperties;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,7 @@ class LlmViewServiceTest {
 
     private LlmView describe(boolean logInteractions) {
         AgentProperties agent = new AgentProperties("prompt système", 40, logInteractions,
-                "secret-api", Duration.ofSeconds(120));
+                "secret-api", Map.of(), Duration.ofSeconds(120));
         return new LlmViewService(environment, agent, new KnowledgeProperties(false, 4, 0.6, ""))
                 .describe();
     }

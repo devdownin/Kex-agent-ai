@@ -23,6 +23,7 @@ import com.kex.agent.mcp.McpToolResult;
 import com.kex.agent.mcp.UnknownMcpServerException;
 import com.kex.agent.mcp.UnsupportedMcpCapabilityException;
 import com.openai.errors.OpenAIException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.modelcontextprotocol.spec.McpError;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -184,5 +185,16 @@ class AgentController {
     ProblemDetail modelProviderFailure(RuntimeException ex) {
         log.warn("Le fournisseur du modèle a refusé ou n'a pas pu traiter l'appel", ex);
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
+    }
+
+    /**
+     * Le disjoncteur `agent-model` a ouvert après une série d'échecs amont : échouer tout de suite
+     * plutôt que de laisser chaque appel attendre son propre plafond de temps pour redécouvrir la
+     * même panne.
+     */
+    @ExceptionHandler(CallNotPermittedException.class)
+    ProblemDetail modelCircuitOpen(CallNotPermittedException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "Le modèle a échoué à plusieurs reprises récemment ; nouvel essai dans quelques instants");
     }
 }

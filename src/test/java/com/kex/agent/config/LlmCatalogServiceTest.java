@@ -4,6 +4,7 @@ package com.kex.agent.config;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Map;
 
 import com.kex.agent.knowledge.KnowledgeProperties;
 import org.junit.jupiter.api.AfterEach;
@@ -56,7 +57,7 @@ class LlmCatalogServiceTest {
     }
 
     private static AgentProperties agent() {
-        return new AgentProperties("prompt", 40, false, "secret", Duration.ofSeconds(120));
+        return new AgentProperties("prompt", 40, false, "secret", Map.of(), Duration.ofSeconds(120));
     }
 
     @Test

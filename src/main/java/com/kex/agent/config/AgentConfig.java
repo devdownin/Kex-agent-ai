@@ -6,7 +6,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.kex.agent.mcp.McpToolCatalog;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.retry.RetryRegistry;
 import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.propagation.Propagator;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import org.springframework.ai.chat.client.ChatClient;
@@ -30,11 +34,24 @@ class AgentConfig {
         return new McpBearerTokenCustomizer(properties.bearerTokens());
     }
 
+    /**
+     * Un second bean {@link McpSyncHttpClientRequestCustomizer} : l'autoconfiguration de Spring AI
+     * les compose tous par {@code ObjectProvider.orderedStream()}, il n'y a pas de bean unique à
+     * remplacer.
+     */
+    @Bean
+    McpSyncHttpClientRequestCustomizer mcpTraceContextCustomizer(Tracer tracer, Propagator propagator) {
+        return new McpTraceContextCustomizer(tracer, propagator);
+    }
+
     /** ObjectProvider : le contexte doit démarrer même sans serveur MCP configuré. */
     @Bean
     McpToolCatalog mcpToolCatalog(ObjectProvider<List<McpSyncClient>> mcpSyncClients,
-                                  ObservationRegistry observationRegistry) {
-        return new McpToolCatalog(mcpSyncClients.getIfAvailable(List::of), observationRegistry);
+                                  ObservationRegistry observationRegistry,
+                                  CircuitBreakerRegistry circuitBreakerRegistry,
+                                  RetryRegistry retryRegistry) {
+        return new McpToolCatalog(mcpSyncClients.getIfAvailable(List::of), observationRegistry,
+                circuitBreakerRegistry, retryRegistry);
     }
 
     /**

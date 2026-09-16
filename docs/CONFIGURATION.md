@@ -35,6 +35,8 @@ arrive.
 | `EXPLORER_IMAGE_NAMESPACE` | `compagnonsdudev` | Ou `ghcr.io/devdownin` |
 | `EXPLORER_MCP_READONLY` | `true` | Laisser à `true` sauf besoin explicite d'écriture |
 | `POSTGRES_PASSWORD` | `kex` | Surcouche `compose/shared-memory.yml` |
+| `KEX_AGENT_TRACING_SAMPLING` | `0` | Probabilité d'échantillonnage des traces. `0` : aucun export tant qu'aucun collecteur n'est déclaré |
+| `KEX_AGENT_OTLP_ENDPOINT` | `http://localhost:4318/v1/traces` | Collecteur OTLP, ignoré tant que l'échantillonnage reste à `0` |
 
 ## Propriétés applicatives
 
@@ -45,11 +47,28 @@ arrive.
 | `system-prompt` | prompt outillé | Prompt système par défaut |
 | `max-history-messages` | `40` | Fenêtre de mémoire, en messages par conversation |
 | `log-interactions` | `false` | Journalise prompts et réponses. Debug uniquement : données sensibles |
-| `api-key` | *(vide)* | Bearer de l'API. Vide = API fermée (`503`) |
+| `api-key` | *(vide)* | Bearer de l'API sous le principal anonyme `kex-agent-api`. Vide = API fermée (`503`) |
+| `api-keys.<nom>` | *(vide)* | Bearers nommés, en plus ou à la place d'`api-key` : chaque nom devient le principal authentifié, donc l'acteur inscrit à l'audit de supervision |
 | `request-timeout` | `120s` | Attente maximale d'un échange, tours d'outils compris |
 | `rate-limit.enabled` | `true` | Limite de débit sur `/api/agent/chat` et `/chat/stream` |
 | `rate-limit.requests-per-minute` | `60` | Débit soutenu. Limite **d'instance**, pas par appelant |
 | `rate-limit.burst` | `20` | Pointe tolérée au-delà du débit soutenu |
+
+### `kex.resilience.*`
+
+Disjoncteur et réessai des intégrations externes (serveurs MCP, fournisseur du modèle) — voir
+ARCHITECTURE.md. Les exceptions qui comptent comme échec ou déclenchent un réessai sont fixées en
+code par instance (`mcp-tool`, `agent-model`), pas ici.
+
+| Propriété | Défaut | Rôle |
+|---|---|---|
+| `sliding-window-size` | `10` | Appels glissants sur lesquels le taux d'échec est calculé |
+| `minimum-number-of-calls` | `5` | En deçà, le disjoncteur reste fermé quoi qu'il arrive |
+| `failure-rate-threshold` | `50` | Taux d'échec (%) au-delà duquel le disjoncteur ouvre |
+| `wait-duration-in-open-state` | `30s` | Attente avant de retenter un appel, disjoncteur ouvert |
+| `permitted-calls-in-half-open-state` | `3` | Appels d'essai pour décider si le disjoncteur referme |
+| `retry-max-attempts` | `3` | Tentatives totales pour un serveur MCP explicitement injoignable |
+| `retry-wait-duration` | `500ms` | Attente entre deux tentatives, doublée à chaque fois |
 
 ### `kex.mcp.bearer-tokens[]`
 

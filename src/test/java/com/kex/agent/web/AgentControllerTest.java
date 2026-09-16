@@ -24,6 +24,8 @@ import com.kex.agent.mcp.McpToolResult;
 import com.kex.agent.mcp.UnknownMcpServerException;
 import com.kex.agent.mcp.UnsupportedMcpCapabilityException;
 import com.openai.errors.OpenAIException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -280,6 +282,22 @@ class AgentControllerTest {
                 .content("""
                         {"conversationId":"conv-1","message":"bonjour","schema":{"type":"object"}}"""))
                 .hasStatus(502);
+    }
+
+    /**
+     * Le disjoncteur a ouvert : échouer tout de suite en 503 plutôt que de laisser l'appelant
+     * attendre le plafond de temps pour redécouvrir une panne déjà constatée.
+     */
+    @Test
+    void retourne_503_quand_le_disjoncteur_du_modele_est_ouvert() {
+        willThrow(CallNotPermittedException.createCallNotPermittedException(CircuitBreaker.ofDefaults("agent-model")))
+                .given(agentService).ask("conv-1", "bonjour");
+
+        assertThat(mvc.post().uri("/api/agent/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"conversationId":"conv-1","message":"bonjour"}"""))
+                .hasStatus(503);
     }
 
     @Test

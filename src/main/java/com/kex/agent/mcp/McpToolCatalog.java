@@ -5,7 +5,13 @@ package com.kex.agent.mcp;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryRegistry;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -27,10 +33,15 @@ public class McpToolCatalog {
 
     private final List<McpSyncClient> clients;
     private final ObservationRegistry observationRegistry;
+    private final CircuitBreaker circuitBreaker;
+    private final Retry retry;
 
-    public McpToolCatalog(List<McpSyncClient> clients, ObservationRegistry observationRegistry) {
+    public McpToolCatalog(List<McpSyncClient> clients, ObservationRegistry observationRegistry,
+                          CircuitBreakerRegistry circuitBreakerRegistry, RetryRegistry retryRegistry) {
         this.clients = clients;
         this.observationRegistry = observationRegistry;
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("mcp-tool");
+        this.retry = retryRegistry.retry("mcp-tool");
     }
 
     // Un appel réseau/stdio par serveur : ne pas exposer sans cache sur un endpoint chaud.
@@ -42,12 +53,17 @@ public class McpToolCatalog {
     /**
      * Invocation directe, sans passage par le modèle : le contrôle d'accès n'est porté que par
      * l'appelant, contrairement au flux ChatClient où le LLM choisit l'outil.
+     *
+     * <p>Le réessai ne rejoue qu'une indisponibilité explicite du serveur ({@link
+     * McpServerUnavailableException}), jamais une erreur de protocole (outil inconnu, argument
+     * refusé) qui resterait fausse rejouée. Le disjoncteur, lui, compte tout échec : au-delà du
+     * seuil, l'appel échoue tout de suite plutôt que d'attendre le plafond de temps à chaque essai.
      */
     public McpToolResult call(String connection, String tool, Map<String, Object> arguments) {
         // Ce chemin ne passe pas par Spring AI, donc pas par ses observations : sans ce timer,
         // la latence et les échecs de l'appel direct ne seraient mesurés nulle part. Connexions et
         // noms d'outils sont bornés, la cardinalité le reste aussi.
-        return Observation.createNotStarted("kex.mcp.tool.call", observationRegistry)
+        Supplier<McpToolResult> invocation = () -> Observation.createNotStarted("kex.mcp.tool.call", observationRegistry)
                 .lowCardinalityKeyValue("connection", connection)
                 .lowCardinalityKeyValue("tool", tool)
                 .observe(() -> {
@@ -56,6 +72,14 @@ public class McpToolCatalog {
                     return new McpToolResult(connection, tool, Boolean.TRUE.equals(result.isError()),
                             textOf(result.content()), result.structuredContent());
                 });
+        Supplier<McpToolResult> resilient = CircuitBreaker.decorateSupplier(circuitBreaker,
+                Retry.decorateSupplier(retry, invocation));
+        try {
+            return resilient.get();
+        }
+        catch (CallNotPermittedException ex) {
+            throw new McpServerUnavailableException(connection, ex);
+        }
     }
 
     /** Ressources exposées par un serveur : vide si le serveur ne déclare pas la capacité. */

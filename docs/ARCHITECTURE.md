@@ -285,6 +285,58 @@ Les deux chemins ne sont pas équivalents, et c'est assumé :
   orphelin coûte une pile et non un thread noyau. `spring.threads.virtual.enabled` est activé pour
   cette raison.
 
+### Disjoncteur et réessai sur les intégrations externes
+
+`kex.resilience`. Sans eux, un serveur MCP *lent* — pas en panne — consommait le plafond ci-dessus
+à chaque appel avant de finalement échouer, et un fournisseur de modèle qui refuse en boucle
+laissait chaque nouvelle requête redécouvrir la même panne au prix d'une attente pleine.
+
+Pas le starter `resilience4j-spring-boot3` : sa propre autoconfiguration vérifie la version de
+Spring Boot au démarrage et refuse explicitement Spring Boot 4 (`IncompatibleSpringBootVersionException`,
+constaté en l'ajoutant). `ResilienceConfig` construit donc `CircuitBreakerRegistry` et
+`RetryRegistry` à la main, à partir des seuls modules nus (`resilience4j-circuitbreaker`,
+`-retry`, `-micrometer`), et `McpToolCatalog` / `AgentService` y puisent le disjoncteur et le
+réessai qui les concernent par leur nom plutôt que par annotation.
+
+Deux disjoncteurs, pas un seul : `mcp-tool` et `agent-model` ne partagent pas les mêmes pannes, et
+un serveur MCP capricieux n'a pas à dégrader la disponibilité du modèle, ni l'inverse. Celui du
+modèle ne compte que les exceptions des SDK Anthropic/OpenAI et notre propre plafond de temps —
+une erreur de validation (schéma vide, connexion inconnue) n'est pas une panne du fournisseur et
+ne doit pas ouvrir le disjoncteur pour un défaut de l'appelant.
+
+Le réessai, lui, n'existe que côté MCP, et seulement sur `McpServerUnavailableException` —
+l'indisponibilité *explicite* d'un serveur. Une erreur de protocole (outil inconnu, argument
+refusé) resterait fausse rejouée. Il n'y en a pas côté modèle : un échange qui a déjà exécuté
+plusieurs tours d'outils le rejouerait en entier au moindre échec, doublant les appels MCP déjà
+faits. Le disjoncteur du modèle protège donc `ask`/`askStructured`, pas `stream` : ce dernier rend
+déjà chaque échec en `event: error` sans jamais bloquer un appelant sur le plafond de temps, la
+même raison qui l'exempte du plafond bloquant plus haut.
+
+Un disjoncteur ouvert rend `503` (`CallNotPermittedException`, capté à côté des exceptions MCP et
+fournisseur) plutôt que de laisser l'appelant redécouvrir la panne en silence jusqu'au timeout.
+
+### Traçage distribué, opt-in
+
+`management.tracing.sampling.probability` à `0` par défaut. Spring Boot 4 a éclaté
+l'autoconfiguration du traçage — un seul bloc dans `spring-boot-starter-actuator` jusqu'en Boot 3 —
+en trois modules séparés (constaté en les ajoutant un par un) : `spring-boot-micrometer-tracing`
+crée un `Tracer`, mais un `NoopTracer` de repli tant que
+`spring-boot-micrometer-tracing-opentelemetry` n'est pas là pour le brancher sur le SDK OpenTelemetry
+réel ; sans lui, `Propagator` ne se résout même pas.
+
+Un cycle traverse contrôleur, `ChatClient`, plusieurs appels MCP et le modèle : sans traçage, seules
+des métriques agrégées les relient, jamais une trace corrélée d'une requête précise. Le
+`Tracer` existe toujours, même sans collecteur en face — c'est ce qui pose l'identifiant de trace
+dans chaque ligne de journal (`CONSOLE_LOG_PATTERN` le fait sans configuration dès qu'un `Tracer`
+est présent). Rien n'est *exporté*, en revanche, tant que `KEX_AGENT_OTLP_ENDPOINT` ou la
+probabilité d'échantillonnage ne sont pas réglés explicitement : une installation sans collecteur
+OTLP ne doit pas dépenser de cycles à tenter de parler à personne.
+
+`McpTraceContextCustomizer` — un second bean `McpSyncHttpClientRequestCustomizer`, à côté de celui
+qui pose le bearer — propage le contexte de trace courant (`traceparent` W3C par défaut) sur les
+appels HTTP vers les serveurs MCP. Sans lui, un serveur MCP lui-même instrumenté ouvrirait une
+trace détachée de celle qui a déclenché l'appel.
+
 ### L'endpoint d'appel direct
 
 <a id="the-direct-tool-endpoint"></a>
@@ -317,6 +369,21 @@ court-circuitait en 503, ce qui bloquait aussi `/actuator/health` déclaré en `
 sondes de conteneur tombaient. Le test `ApiSecurityUnconfiguredTest` l'a attrapé, et c'est
 maintenant la forme du code qui l'empêche : le filtre authentifie, l'entry point refuse, et il n'est
 invoqué que pour une route réellement protégée.
+
+### Plusieurs clés API nommées
+
+`kex.agent.api-key` reste le bearer historique, sous le principal anonyme `kex-agent-api` — il ne
+distingue jamais qui a agi, seulement qu'un appelant connaissait le secret partagé. `kex.agent.api-keys`
+ajoute des jetons nommés : chaque nom devient le principal authentifié, donc l'acteur réellement
+inscrit à l'audit de supervision (`AuditEntry.actor`, `Decision.resolvedBy`), là où un jeton unique
+ne le pouvait pas.
+
+`ApiKeyAuthFilter` compare le bearer présenté à chaque jeton connu, en temps constant
+(`MessageDigest.isEqual`) pour chacun — un nombre de clés qui reste celui d'une poignée d'opérateurs,
+pas un annuaire à l'échelle d'un système d'authentification. Les deux sources fusionnent dans
+`SecurityConfig.tokensByName` : `api-key` seul reste le comportement historique inchangé, et
+`/api/**` ne s'ouvre que si l'une des deux porte au moins un jeton — même posture que le jeton
+unique d'avant : rien de configuré, `503`.
 
 ### Un échec du fournisseur du modèle ne recopie pas notre propre 401
 
@@ -507,9 +574,11 @@ Derrière un load balancer, chaque réplique tiendrait le sien et l'audit serait
 assumé et écrit ici plutôt que masqué : la persistance partagée est une décision d'exploitation,
 au même titre que le profil `shared-memory` pour la mémoire de conversation.
 
-L'acteur inscrit à l'audit est le principal authentifié. Le bearer étant unique et partagé, il
-désigne le jeton, pas une personne : tracer une identité que le système ne connaît pas serait une
-fiction, et l'audit n'en vaudrait rien.
+L'acteur inscrit à l'audit est le principal authentifié. Avec le seul `kex.agent.api-key`
+historique, il désigne le jeton, pas une personne : tracer une identité que le système ne connaît
+pas serait une fiction, et l'audit n'en vaudrait rien. `kex.agent.api-keys` nomme les jetons —
+chaque nom devient alors le principal, donc l'acteur réellement inscrit. Voir « Plusieurs clés API
+nommées » plus bas.
 
 ### Une demande de validation expire
 
@@ -649,3 +718,8 @@ n'entre dans la chaîne de build, la même contrainte que pour le reste de la co
 | `SupervisionServiceTest` | Autonomie, seuil de confiance, expiration, pause, cycle en échec, péremption des données |
 | `CycleAnalysisTest` | Ce qui arrive quand le modèle rend autre chose que le schéma demandé, et l'asymétrie de la couverture : un `OK` partiel devient `UNKNOWN`, une erreur partielle reste une erreur |
 | `SupervisionControllerTest` | Contrat HTTP du Control Center, dont 409 sur conflit d'état et 404 sur décision inconnue |
+| `McpToolCatalogTest` (résilience) | Réessai sur un serveur MCP explicitement injoignable, puis fail-fast une fois le disjoncteur ouvert |
+| `AgentServiceTest` / `AgentControllerTest` (disjoncteur) | Le disjoncteur `agent-model` ouvre après plusieurs pannes du fournisseur ; `CallNotPermittedException` rend `503` |
+| `McpTraceContextCustomizerTest` | Propagation du contexte de trace courant sur les appels MCP, rien hors d'une trace en cours |
+| `ApiKeyAuthFilterTest` | Principal nommé par jeton, jeton historique, jeton inconnu ou en-tête absent |
+| `ApiKeyPrincipalTest` | Deux opérateurs nommés distincts dans l'audit de supervision |

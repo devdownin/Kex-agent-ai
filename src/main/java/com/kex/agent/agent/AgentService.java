@@ -12,6 +12,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
 import com.kex.agent.config.AgentProperties;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.stereotype.Service;
@@ -26,17 +28,27 @@ public class AgentService {
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;
     private final Duration timeout;
+    private final CircuitBreaker modelCircuitBreaker;
 
-    AgentService(ChatClient chatClient, ChatMemory chatMemory, AgentProperties properties) {
+    AgentService(ChatClient chatClient, ChatMemory chatMemory, AgentProperties properties,
+                CircuitBreakerRegistry circuitBreakerRegistry) {
         this.chatClient = chatClient;
         this.chatMemory = chatMemory;
         this.timeout = properties.requestTimeout();
+        this.modelCircuitBreaker = circuitBreakerRegistry.circuitBreaker("agent-model");
     }
 
+    /**
+     * Le disjoncteur borne les appels bloquants, pas {@link #stream}, dont chaque échec se rend
+     * déjà en {@code event: error} sans jamais bloquer un appelant sur le plafond de temps. Pas de
+     * réessai ici, contrairement aux appels MCP : un échange qui a déjà exécuté plusieurs tours
+     * d'outils le rejouerait en entier, doublant les appels MCP faits jusque-là.
+     */
     public AgentAnswer ask(String conversationId, String message) {
         String id = resolve(conversationId);
         ToolCallRecorder recorder = new ToolCallRecorder();
-        String content = bounded(() -> request(id, message, recorder).call().content());
+        String content = bounded(CircuitBreaker.decorateSupplier(modelCircuitBreaker,
+                () -> request(id, message, recorder).call().content()));
         return new AgentAnswer(id, content, recorder.calls());
     }
 
@@ -47,9 +59,8 @@ public class AgentService {
         }
         String id = resolve(conversationId);
         ToolCallRecorder recorder = new ToolCallRecorder();
-        Map<String, Object> content = bounded(() -> request(id, message, recorder)
-                .call()
-                .entity(new JsonSchemaOutputConverter(schema)));
+        Map<String, Object> content = bounded(CircuitBreaker.decorateSupplier(modelCircuitBreaker,
+                () -> request(id, message, recorder).call().entity(new JsonSchemaOutputConverter(schema))));
         return new AgentStructuredAnswer(id, content, recorder.calls());
     }
 

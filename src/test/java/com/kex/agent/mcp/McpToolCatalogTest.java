@@ -2,9 +2,14 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.mcp;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.retry.RetryConfig;
+import io.github.resilience4j.retry.RetryRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -19,7 +24,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,7 +39,12 @@ class McpToolCatalogTest {
     private McpToolCatalog catalog(boolean initialized) {
         given(client.getClientInfo()).willReturn(new McpSchema.Implementation("kex-agent - kafka-explorer", "0.1.0"));
         given(client.isInitialized()).willReturn(initialized);
-        return new McpToolCatalog(List.of(client), ObservationRegistry.NOOP);
+        // Une seule tentative : la résilience a ses propres tests plus bas, ceux-ci portent sur le
+        // comportement fonctionnel et ne doivent pas se mettre à réessayer ou à attendre pour rien.
+        RetryRegistry retryRegistry = RetryRegistry.ofDefaults();
+        retryRegistry.retry("mcp-tool", RetryConfig.custom().maxAttempts(1).build());
+        return new McpToolCatalog(List.of(client), ObservationRegistry.NOOP,
+                CircuitBreakerRegistry.ofDefaults(), retryRegistry);
     }
 
     private void withResources() {
@@ -178,5 +190,62 @@ class McpToolCatalogTest {
                 .extracting(McpServerInfo::tools)
                 .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST)
                 .isEmpty();
+    }
+
+    @Test
+    void retente_un_serveur_injoignable_avant_d_abandonner() {
+        given(client.getClientInfo()).willReturn(new McpSchema.Implementation("kex-agent - kafka-explorer", "0.1.0"));
+        given(client.isInitialized()).willReturn(false);
+        // Injoignable une fois, puis de retour : c'est exactement le blip transitoire que le
+        // réessai existe pour absorber, contrairement à une erreur de protocole qui resterait
+        // fausse rejouée.
+        given(client.initialize())
+                .willThrow(new IllegalStateException("connection refused"))
+                .willReturn((McpSchema.InitializeResult) null);
+        given(client.callTool(any(McpSchema.CallToolRequest.class))).willReturn(new McpSchema.CallToolResult(
+                List.of(new McpSchema.TextContent("ok")), false, null, null));
+
+        RetryRegistry retryRegistry = RetryRegistry.ofDefaults();
+        retryRegistry.retry("mcp-tool", RetryConfig.custom()
+                .maxAttempts(2)
+                .waitDuration(Duration.ofMillis(1))
+                .retryExceptions(McpServerUnavailableException.class)
+                .build());
+        McpToolCatalog catalog = new McpToolCatalog(List.of(client), ObservationRegistry.NOOP,
+                CircuitBreakerRegistry.ofDefaults(), retryRegistry);
+
+        McpToolResult result = catalog.call("kafka-explorer", "kex_list_topics", Map.of());
+
+        assertThat(result.error()).isFalse();
+        verify(client, times(2)).initialize();
+    }
+
+    @Test
+    void echoue_vite_quand_le_disjoncteur_est_ouvert() {
+        given(client.getClientInfo()).willReturn(new McpSchema.Implementation("kex-agent - kafka-explorer", "0.1.0"));
+        given(client.isInitialized()).willReturn(false);
+        given(client.initialize()).willThrow(new IllegalStateException("connection refused"));
+
+        CircuitBreakerRegistry circuitBreakerRegistry = CircuitBreakerRegistry.ofDefaults();
+        circuitBreakerRegistry.circuitBreaker("mcp-tool", CircuitBreakerConfig.custom()
+                .slidingWindowSize(2)
+                .minimumNumberOfCalls(2)
+                .failureRateThreshold(50)
+                .waitDurationInOpenState(Duration.ofMinutes(1))
+                .build());
+        RetryRegistry retryRegistry = RetryRegistry.ofDefaults();
+        retryRegistry.retry("mcp-tool", RetryConfig.custom().maxAttempts(1).build());
+        McpToolCatalog catalog = new McpToolCatalog(List.of(client), ObservationRegistry.NOOP,
+                circuitBreakerRegistry, retryRegistry);
+
+        assertThatThrownBy(() -> catalog.call("kafka-explorer", "kex_list_topics", Map.of()))
+                .isInstanceOf(McpServerUnavailableException.class);
+        assertThatThrownBy(() -> catalog.call("kafka-explorer", "kex_list_topics", Map.of()))
+                .isInstanceOf(McpServerUnavailableException.class);
+
+        clearInvocations(client);
+        assertThatThrownBy(() -> catalog.call("kafka-explorer", "kex_list_topics", Map.of()))
+                .isInstanceOf(McpServerUnavailableException.class);
+        verify(client, never()).initialize();
     }
 }
