@@ -10,6 +10,7 @@ import com.kex.agent.memory.MemoryTools;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryRegistry;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;
@@ -51,9 +52,10 @@ class AgentConfig {
     McpToolCatalog mcpToolCatalog(ObjectProvider<List<McpSyncClient>> mcpSyncClients,
                                   ObservationRegistry observationRegistry,
                                   CircuitBreakerRegistry circuitBreakerRegistry,
-                                  RetryRegistry retryRegistry) {
+                                  RetryRegistry retryRegistry,
+                                  MeterRegistry meterRegistry) {
         return new McpToolCatalog(mcpSyncClients.getIfAvailable(List::of), observationRegistry,
-                circuitBreakerRegistry, retryRegistry);
+                circuitBreakerRegistry, retryRegistry, meterRegistry);
     }
 
     /**
@@ -103,8 +105,9 @@ class AgentConfig {
             advisors.add(new SimpleLoggerAdvisor());
         }
 
-        // Même disjoncteur que McpToolCatalog.call (voir ResilienceConfig) : ces callbacks viennent
-        // du même McpSyncClient, une panne du serveur doit compter et faire échouer vite ici aussi.
+        // Disjoncteur partagé entre connexions, pas un par serveur comme McpToolCatalog.call : le
+        // callback que Spring AI construit ici (SyncMcpToolCallback) n'expose pas la connexion dont
+        // il vient, donc pas moyen de router vers le disjoncteur propre à ce serveur à cet endroit.
         CircuitBreaker mcpCircuitBreaker = circuitBreakerRegistry.circuitBreaker("mcp-tool");
         return builder
                 .defaultSystem(properties.systemPrompt())

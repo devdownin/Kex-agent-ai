@@ -20,6 +20,7 @@ import com.kex.agent.mcp.McpServerInfo;
 import com.kex.agent.mcp.McpServerUnavailableException;
 import com.kex.agent.mcp.McpToolCatalog;
 import com.kex.agent.mcp.McpToolInfo;
+import com.kex.agent.mcp.McpToolMetric;
 import com.kex.agent.mcp.McpToolResult;
 import com.kex.agent.mcp.UnknownMcpServerException;
 import com.kex.agent.mcp.UnsupportedMcpCapabilityException;
@@ -93,8 +94,8 @@ class AgentControllerTest {
     @Test
     void liste_les_serveurs_mcp() {
         given(toolCatalog.servers()).willReturn(List.of(
-                new McpServerInfo("kafka-explorer", "kafka-explorer-mcp", "0.1.0", "2025-06-18", true,
-                        List.of(new McpToolInfo("kex_list_topics", "Liste les topics")))));
+                new McpServerInfo("kafka-explorer", "kafka-explorer-mcp", "0.1.0", "2025-06-18", true, "CLOSED",
+                        List.of(new McpToolInfo("kex_list_topics", "Liste les topics", Map.of("type", "object"))))));
 
         var response = mvc.get().uri("/api/agent/mcp/servers");
 
@@ -102,6 +103,18 @@ class AgentControllerTest {
         assertThat(response).bodyJson().extractingPath("$[0].connection").isEqualTo("kafka-explorer");
         assertThat(response).bodyJson().extractingPath("$[0].serverName").isEqualTo("kafka-explorer-mcp");
         assertThat(response).bodyJson().extractingPath("$[0].tools[0].name").isEqualTo("kex_list_topics");
+    }
+
+    @Test
+    void liste_les_metriques_par_outil() {
+        given(toolCatalog.metrics()).willReturn(List.of(
+                new McpToolMetric("kafka-explorer", "kex_list_topics", 3, 12.5)));
+
+        var response = mvc.get().uri("/api/agent/mcp/metrics");
+
+        assertThat(response).hasStatusOk();
+        assertThat(response).bodyJson().extractingPath("$[0].tool").isEqualTo("kex_list_topics");
+        assertThat(response).bodyJson().extractingPath("$[0].callCount").isEqualTo(3);
     }
 
     @Test

@@ -2,16 +2,23 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.mcp;
 
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryRegistry;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -23,31 +30,51 @@ import org.slf4j.LoggerFactory;
  * Introspection et invocation directe des serveurs MCP connectés. Les clients sont initialisés
  * paresseusement ({@code spring.ai.mcp.client.initialized=false}) pour que l'agent démarre même
  * si un serveur distant est indisponible : chaque accès retente l'initialisation des clients
- * encore muets.
+ * encore muets, et {@link McpHealthCheckScheduler} le fait aussi périodiquement, sans attendre
+ * qu'une requête entrante s'en charge.
  */
 public class McpToolCatalog {
 
     private static final Logger log = LoggerFactory.getLogger(McpToolCatalog.class);
 
     private static final String CLIENT_NAME_SEPARATOR = " - ";
+    private static final String CIRCUIT_BREAKER_PREFIX = "mcp-tool-";
 
     private final List<McpSyncClient> clients;
     private final ObservationRegistry observationRegistry;
-    private final CircuitBreaker circuitBreaker;
+    private final MeterRegistry meterRegistry;
+    private final Map<String, CircuitBreaker> circuitBreakers;
     private final Retry retry;
 
     public McpToolCatalog(List<McpSyncClient> clients, ObservationRegistry observationRegistry,
-                          CircuitBreakerRegistry circuitBreakerRegistry, RetryRegistry retryRegistry) {
+                          CircuitBreakerRegistry circuitBreakerRegistry, RetryRegistry retryRegistry,
+                          MeterRegistry meterRegistry) {
         this.clients = clients;
         this.observationRegistry = observationRegistry;
-        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("mcp-tool");
+        this.meterRegistry = meterRegistry;
         this.retry = retryRegistry.retry("mcp-tool");
+
+        // Un disjoncteur par connexion, pas un seul partagé : un serveur MCP en panne ne doit pas
+        // faire échouer vite les appels vers les autres. Nommé et enregistré dès la construction,
+        // pas au premier appel, pour apparaître dans /actuator/prometheus et le statut de l'agent
+        // même sans trafic. Le chemin piloté par le modèle (RecordingToolCallbackProvider) reste
+        // sur le disjoncteur partagé "mcp-tool" : SyncMcpToolCallback n'expose pas la connexion
+        // dont il vient, donc pas moyen de router vers le bon disjoncteur à cet endroit-là.
+        this.circuitBreakers = new HashMap<>();
+        clients.forEach(client -> {
+            String connection = connectionName(client);
+            circuitBreakers.put(connection, circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_PREFIX + connection));
+            Gauge.builder("kex.mcp.server.up", client, McpToolCatalog::upValue)
+                    .description("1 si le client MCP est initialisé, 0 sinon")
+                    .tag("connection", connection)
+                    .register(meterRegistry);
+        });
     }
 
     // Un appel réseau/stdio par serveur : ne pas exposer sans cache sur un endpoint chaud.
     public List<McpServerInfo> servers() {
         initializePending();
-        return clients.stream().map(McpToolCatalog::describe).toList();
+        return clients.stream().map(this::describe).toList();
     }
 
     /**
@@ -60,6 +87,7 @@ public class McpToolCatalog {
      * seuil, l'appel échoue tout de suite plutôt que d'attendre le plafond de temps à chaque essai.
      */
     public McpToolResult call(String connection, String tool, Map<String, Object> arguments) {
+        CircuitBreaker circuitBreaker = circuitBreakerFor(connection);
         // Ce chemin ne passe pas par Spring AI, donc pas par ses observations : sans ce timer,
         // la latence et les échecs de l'appel direct ne seraient mesurés nulle part. Connexions et
         // noms d'outils sont bornés, la cardinalité le reste aussi.
@@ -104,6 +132,43 @@ public class McpToolCatalog {
                 .toList();
     }
 
+    /**
+     * Coût et latence par connexion et par outil, agrégés toutes issues confondues (succès et
+     * échec) — le détail par issue n'apporte rien de plus à la console qu'un chiffre à lire vite.
+     */
+    public List<McpToolMetric> metrics() {
+        Map<List<String>, List<Timer>> byConnectionAndTool = meterRegistry.find("kex.mcp.tool.call").timers().stream()
+                .collect(Collectors.groupingBy(timer -> List.of(tagOrUnknown(timer, "connection"),
+                        tagOrUnknown(timer, "tool"))));
+        return byConnectionAndTool.entrySet().stream()
+                .map(entry -> {
+                    long count = entry.getValue().stream().mapToLong(Timer::count).sum();
+                    double totalMs = entry.getValue().stream()
+                            .mapToDouble(timer -> timer.totalTime(TimeUnit.MILLISECONDS)).sum();
+                    return new McpToolMetric(entry.getKey().get(0), entry.getKey().get(1), count,
+                            count == 0 ? null : totalMs / count);
+                })
+                .sorted(Comparator.comparing(McpToolMetric::connection).thenComparing(McpToolMetric::tool))
+                .toList();
+    }
+
+    private static String tagOrUnknown(Timer timer, String tag) {
+        String value = timer.getId().getTag(tag);
+        return value == null ? "unknown" : value;
+    }
+
+    private static double upValue(McpSyncClient client) {
+        return client.isInitialized() ? 1.0 : 0.0;
+    }
+
+    private CircuitBreaker circuitBreakerFor(String connection) {
+        CircuitBreaker breaker = circuitBreakers.get(connection);
+        if (breaker == null) {
+            throw new UnknownMcpServerException(connection);
+        }
+        return breaker;
+    }
+
     private McpSyncClient client(String connection) {
         McpSyncClient client = find(connection).orElseThrow(() -> new UnknownMcpServerException(connection));
         if (!client.isInitialized()) {
@@ -123,8 +188,12 @@ public class McpToolCatalog {
                 .findFirst();
     }
 
-    /** Le SDK gère l'initialisation concurrente : pas de verrou côté appelant. */
-    private void initializePending() {
+    /**
+     * Le SDK gère l'initialisation concurrente : pas de verrou côté appelant. Package-private :
+     * {@link McpHealthCheckScheduler} la rejoue périodiquement, sans attendre qu'un appel entrant
+     * s'en charge à sa place.
+     */
+    void initializePending() {
         clients.stream().filter(client -> !client.isInitialized()).forEach(client -> {
             try {
                 client.initialize();
@@ -135,14 +204,17 @@ public class McpToolCatalog {
         });
     }
 
-    private static McpServerInfo describe(McpSyncClient client) {
+    private McpServerInfo describe(McpSyncClient client) {
         McpSchema.Implementation info = client.getServerInfo();
         McpSchema.InitializeResult initialization = client.getCurrentInitializationResult();
-        return new McpServerInfo(connectionName(client),
+        String connection = connectionName(client);
+        CircuitBreaker breaker = circuitBreakers.get(connection);
+        return new McpServerInfo(connection,
                 info != null ? info.name() : null,
                 info != null ? info.version() : null,
                 initialization != null ? initialization.protocolVersion() : null,
                 client.isInitialized(),
+                breaker == null ? null : breaker.getState().name(),
                 listTools(client));
     }
 
@@ -162,7 +234,7 @@ public class McpToolCatalog {
         }
         try {
             return client.listTools().tools().stream()
-                    .map(tool -> new McpToolInfo(tool.name(), tool.description()))
+                    .map(tool -> new McpToolInfo(tool.name(), tool.description(), tool.inputSchema()))
                     .toList();
         }
         catch (RuntimeException ex) {

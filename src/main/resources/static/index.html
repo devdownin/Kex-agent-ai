@@ -182,6 +182,17 @@
               premier jour : ce sont des tendances récentes.</p>
             <div id="performance"></div>
           </section>
+
+          <section class="panel">
+            <div class="panel-head"><h2>Notifications</h2></div>
+            <p class="hint">Vérifie <code>kex.agent.supervision.notify.webhook-url</code> sans
+              attendre qu'une anomalie réelle le découvre en échec — la seule capacité dont le
+              système cible est une personne.</p>
+            <div class="row-end">
+              <button type="button" class="ghost" id="test-webhook">Tester le webhook</button>
+            </div>
+            <div id="webhook-test-result"></div>
+          </section>
         </div>
       </div>
     </section>
@@ -295,6 +306,8 @@
                   aria-label="Rafraîchir la vue technique" title="Rafraîchir la vue technique">Rafraîchir</button>
         </div>
         <p class="hint">La vue technique : ce que l'agent peut réellement observer et actionner. Le tableau de bord métier n'en est pas saturé.</p>
+        <label class="sr-only" for="tools-search">Rechercher un serveur ou un outil</label>
+        <input type="search" id="tools-search" placeholder="Rechercher un serveur ou un outil">
         <div class="servers" id="servers"></div>
       </section>
       <section class="panel">

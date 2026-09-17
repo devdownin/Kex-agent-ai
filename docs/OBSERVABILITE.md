@@ -60,9 +60,14 @@ Tenu en mémoire, par instance, comme le seau de `rate-limit`.
 |---|---|---|
 | `spring_ai_tool_call_seconds` | Les outils choisis par le modèle, via Spring AI | `tool_name`, `error` |
 | `kex_mcp_tool_call_seconds` | `POST /mcp/servers/{connection}/tools/{tool}`, l'appel direct | `connection`, `tool`, `error` |
+| `kex_mcp_server_up` | 1 si le client MCP de cette connexion est initialisé, 0 sinon | `connection` |
 
 Le second existe parce que le chemin direct ne passe pas par Spring AI : sans lui, la latence et les
 échecs de cet endpoint ne seraient mesurés nulle part.
+
+`GET /api/agent/mcp/metrics` agrège le même compteur par connexion et par outil (nombre d'appels,
+durée moyenne) pour la console — plus lisible qu'un scrape Prometheus pour un opérateur qui regarde
+le Control Center plutôt que Grafana.
 
 ### HTTP et JVM
 
@@ -73,13 +78,20 @@ fournies par Spring Boot.
 
 | Métrique | Origine | Étiquettes utiles |
 |---|---|---|
-| `resilience4j_circuitbreaker_state` | `mcp-tool`, `agent-model` | `name`, `state` (`closed`/`open`/`half_open`) |
+| `resilience4j_circuitbreaker_state` | `mcp-tool-<connexion>` par serveur MCP, `mcp-tool` (chemin piloté par le modèle), `agent-model` | `name`, `state` (`closed`/`open`/`half_open`) |
 | `resilience4j_circuitbreaker_calls_seconds` | idem | `name`, `kind` (`successful`/`failed`/`not_permitted`) |
 | `resilience4j_retry_calls` | `mcp-tool` seulement | `name`, `kind` (`successful_without_retry`/`successful_with_retry`/`failed_with_retry`) |
 
 Un disjoncteur ouvert (`resilience4j_circuitbreaker_state{state="open"} == 1`) dit qu'une
 intégration échoue déjà assez pour que l'agent ait cessé de la solliciter — plus précis et plus
 rapide que d'attendre la remontée des `503`/`502` HTTP.
+
+L'appel direct (`POST /mcp/servers/{connection}/tools/{tool}`) a un disjoncteur par connexion
+(`mcp-tool-<connexion>`) : un serveur MCP en panne n'échoue vite que ses propres appels, pas ceux
+des autres. Le chemin piloté par le modèle reste sur le disjoncteur partagé `mcp-tool` — Spring AI
+construit son propre callback (`SyncMcpToolCallback`) sans exposer la connexion dont il vient, donc
+pas moyen de router vers le bon disjoncteur à cet endroit-là. `McpServerInfo.circuitBreakerState`
+et la pastille de la vue technique ne portent donc que l'état du disjoncteur de l'appel direct.
 
 Même état, sans Prometheus : `GET /api/agent/supervision/status` (`circuitBreakers`) et la fiche
 Agent du Control Center l'affichent directement, une pastille par disjoncteur.

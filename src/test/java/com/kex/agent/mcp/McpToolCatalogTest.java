@@ -10,6 +10,8 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryConfig;
 import io.github.resilience4j.retry.RetryRegistry;
+import io.micrometer.core.instrument.observation.DefaultMeterObservationHandler;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -36,6 +38,9 @@ class McpToolCatalogTest {
     @Mock
     McpSyncClient client;
 
+    @Mock
+    McpSyncClient other;
+
     private McpToolCatalog catalog(boolean initialized) {
         given(client.getClientInfo()).willReturn(new McpSchema.Implementation("kex-agent - kafka-explorer", "0.1.0"));
         given(client.isInitialized()).willReturn(initialized);
@@ -44,7 +49,7 @@ class McpToolCatalogTest {
         RetryRegistry retryRegistry = RetryRegistry.ofDefaults();
         retryRegistry.retry("mcp-tool", RetryConfig.custom().maxAttempts(1).build());
         return new McpToolCatalog(List.of(client), ObservationRegistry.NOOP,
-                CircuitBreakerRegistry.ofDefaults(), retryRegistry);
+                CircuitBreakerRegistry.ofDefaults(), retryRegistry, new SimpleMeterRegistry());
     }
 
     private void withResources() {
@@ -68,7 +73,9 @@ class McpToolCatalogTest {
             assertThat(server.connection()).isEqualTo("kafka-explorer");
             assertThat(server.serverName()).isEqualTo("kafka-explorer-mcp");
             assertThat(server.initialized()).isTrue();
-            assertThat(server.tools()).containsExactly(new McpToolInfo("kex_list_topics", "Liste les topics"));
+            assertThat(server.tools()).containsExactly(
+                    new McpToolInfo("kex_list_topics", "Liste les topics", Map.of("type", "object")));
+            assertThat(server.circuitBreakerState()).isEqualTo("CLOSED");
         });
     }
 
@@ -212,7 +219,7 @@ class McpToolCatalogTest {
                 .retryExceptions(McpServerUnavailableException.class)
                 .build());
         McpToolCatalog catalog = new McpToolCatalog(List.of(client), ObservationRegistry.NOOP,
-                CircuitBreakerRegistry.ofDefaults(), retryRegistry);
+                CircuitBreakerRegistry.ofDefaults(), retryRegistry, new SimpleMeterRegistry());
 
         McpToolResult result = catalog.call("kafka-explorer", "kex_list_topics", Map.of());
 
@@ -227,7 +234,9 @@ class McpToolCatalogTest {
         given(client.initialize()).willThrow(new IllegalStateException("connection refused"));
 
         CircuitBreakerRegistry circuitBreakerRegistry = CircuitBreakerRegistry.ofDefaults();
-        circuitBreakerRegistry.circuitBreaker("mcp-tool", CircuitBreakerConfig.custom()
+        // Pré-enregistré sous le nom que le catalogue donnera lui-même à sa construction
+        // ("mcp-tool-" + connexion) : la config par défaut n'ouvrirait qu'après davantage d'appels.
+        circuitBreakerRegistry.circuitBreaker("mcp-tool-kafka-explorer", CircuitBreakerConfig.custom()
                 .slidingWindowSize(2)
                 .minimumNumberOfCalls(2)
                 .failureRateThreshold(50)
@@ -236,7 +245,7 @@ class McpToolCatalogTest {
         RetryRegistry retryRegistry = RetryRegistry.ofDefaults();
         retryRegistry.retry("mcp-tool", RetryConfig.custom().maxAttempts(1).build());
         McpToolCatalog catalog = new McpToolCatalog(List.of(client), ObservationRegistry.NOOP,
-                circuitBreakerRegistry, retryRegistry);
+                circuitBreakerRegistry, retryRegistry, new SimpleMeterRegistry());
 
         assertThatThrownBy(() -> catalog.call("kafka-explorer", "kex_list_topics", Map.of()))
                 .isInstanceOf(McpServerUnavailableException.class);
@@ -247,5 +256,75 @@ class McpToolCatalogTest {
         assertThatThrownBy(() -> catalog.call("kafka-explorer", "kex_list_topics", Map.of()))
                 .isInstanceOf(McpServerUnavailableException.class);
         verify(client, never()).initialize();
+    }
+
+    @Test
+    void isole_le_disjoncteur_par_connexion() {
+        given(client.getClientInfo()).willReturn(new McpSchema.Implementation("kex-agent - kafka-explorer", "0.1.0"));
+        given(client.isInitialized()).willReturn(false);
+        given(client.initialize()).willThrow(new IllegalStateException("connection refused"));
+
+        given(other.getClientInfo()).willReturn(new McpSchema.Implementation("kex-agent - autre", "0.1.0"));
+        given(other.isInitialized()).willReturn(true);
+        given(other.callTool(any(McpSchema.CallToolRequest.class))).willReturn(new McpSchema.CallToolResult(
+                List.of(new McpSchema.TextContent("ok")), false, null, null));
+
+        CircuitBreakerRegistry circuitBreakerRegistry = CircuitBreakerRegistry.ofDefaults();
+        circuitBreakerRegistry.circuitBreaker("mcp-tool-kafka-explorer", CircuitBreakerConfig.custom()
+                .slidingWindowSize(2)
+                .minimumNumberOfCalls(2)
+                .failureRateThreshold(50)
+                .waitDurationInOpenState(Duration.ofMinutes(1))
+                .build());
+        RetryRegistry retryRegistry = RetryRegistry.ofDefaults();
+        retryRegistry.retry("mcp-tool", RetryConfig.custom().maxAttempts(1).build());
+        McpToolCatalog catalog = new McpToolCatalog(List.of(client, other), ObservationRegistry.NOOP,
+                circuitBreakerRegistry, retryRegistry, new SimpleMeterRegistry());
+
+        // Ouvre le disjoncteur de "kafka-explorer".
+        assertThatThrownBy(() -> catalog.call("kafka-explorer", "kex_list_topics", Map.of()))
+                .isInstanceOf(McpServerUnavailableException.class);
+        assertThatThrownBy(() -> catalog.call("kafka-explorer", "kex_list_topics", Map.of()))
+                .isInstanceOf(McpServerUnavailableException.class);
+
+        // Une panne sur "kafka-explorer" ne doit pas faire échouer vite les appels vers "autre".
+        McpToolResult result = catalog.call("autre", "kex_list_topics", Map.of());
+        assertThat(result.error()).isFalse();
+    }
+
+    @Test
+    void publie_une_jauge_de_disponibilite_par_connexion() {
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        given(client.getClientInfo()).willReturn(new McpSchema.Implementation("kex-agent - kafka-explorer", "0.1.0"));
+        given(client.isInitialized()).willReturn(true);
+
+        new McpToolCatalog(List.of(client), ObservationRegistry.NOOP, CircuitBreakerRegistry.ofDefaults(),
+                RetryRegistry.ofDefaults(), meterRegistry);
+
+        assertThat(meterRegistry.get("kex.mcp.server.up").tag("connection", "kafka-explorer").gauge().value())
+                .isEqualTo(1.0);
+    }
+
+    @Test
+    void agrege_les_metriques_par_connexion_et_par_outil() {
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        ObservationRegistry observationRegistry = ObservationRegistry.create();
+        observationRegistry.observationConfig().observationHandler(new DefaultMeterObservationHandler(meterRegistry));
+        given(client.getClientInfo()).willReturn(new McpSchema.Implementation("kex-agent - kafka-explorer", "0.1.0"));
+        given(client.isInitialized()).willReturn(true);
+        given(client.callTool(any(McpSchema.CallToolRequest.class))).willReturn(new McpSchema.CallToolResult(
+                List.of(new McpSchema.TextContent("ok")), false, null, null));
+
+        McpToolCatalog catalog = new McpToolCatalog(List.of(client), observationRegistry,
+                CircuitBreakerRegistry.ofDefaults(), RetryRegistry.ofDefaults(), meterRegistry);
+        catalog.call("kafka-explorer", "kex_list_topics", Map.of());
+        catalog.call("kafka-explorer", "kex_list_topics", Map.of());
+
+        assertThat(catalog.metrics()).singleElement().satisfies(metric -> {
+            assertThat(metric.connection()).isEqualTo("kafka-explorer");
+            assertThat(metric.tool()).isEqualTo("kex_list_topics");
+            assertThat(metric.callCount()).isEqualTo(2);
+            assertThat(metric.averageDurationMs()).isNotNull();
+        });
     }
 }

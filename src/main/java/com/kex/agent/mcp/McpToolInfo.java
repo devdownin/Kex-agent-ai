@@ -2,5 +2,8 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.mcp;
 
-public record McpToolInfo(String name, String description) {
+import java.util.Map;
+
+/** @param inputSchema schéma JSON des arguments, tel que déclaré par le serveur — jamais réinterprété ici */
+public record McpToolInfo(String name, String description, Map<String, Object> inputSchema) {
 }

@@ -4,6 +4,7 @@ package com.kex.agent.supervision;
 
 import java.security.Principal;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -35,9 +36,11 @@ import org.springframework.web.bind.annotation.RestController;
 class SupervisionController {
 
     private final SupervisionService supervision;
+    private final WebhookNotifier notifier;
 
-    SupervisionController(SupervisionService supervision) {
+    SupervisionController(SupervisionService supervision, WebhookNotifier notifier) {
         this.supervision = supervision;
+        this.notifier = notifier;
     }
 
     @GetMapping("/overview")
@@ -128,6 +131,21 @@ class SupervisionController {
     @PostMapping("/resume")
     AgentStatus resume(Principal principal) {
         return supervision.resume(actor(principal));
+    }
+
+    /**
+     * Vérifie {@code kex.agent.supervision.notify.webhook-url} sans attendre qu'un cycle NOTIFY
+     * réel le découvre en échec — la seule capacité dont le système cible est une personne, donc la
+     * seule que rien d'autre ne peut exercer avant qu'une vraie anomalie ne s'y prête.
+     */
+    @PostMapping("/notify/test")
+    WebhookTestResult testNotification(Principal principal) {
+        String actor = actor(principal);
+        Optional<String> failure = notifier.send("Test depuis Kex Agent AI",
+                "Déclenché manuellement par " + actor + " pour vérifier la configuration du webhook.");
+        supervision.auditAction(actor, "Test du webhook de notification",
+                failure.isEmpty() ? "Envoyé" : "Échec : " + failure.get());
+        return new WebhookTestResult(failure.isEmpty(), failure.orElse(null));
     }
 
     private static String actor(Principal principal) {

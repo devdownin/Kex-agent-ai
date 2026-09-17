@@ -20,6 +20,7 @@ import com.kex.agent.mcp.McpResourceInfo;
 import com.kex.agent.mcp.McpServerInfo;
 import com.kex.agent.mcp.McpServerUnavailableException;
 import com.kex.agent.mcp.McpToolCatalog;
+import com.kex.agent.mcp.McpToolMetric;
 import com.kex.agent.mcp.McpToolResult;
 import com.kex.agent.mcp.UnknownMcpServerException;
 import com.kex.agent.mcp.UnsupportedMcpCapabilityException;
@@ -135,6 +136,12 @@ class AgentController {
     @GetMapping("/mcp/servers")
     List<McpServerInfo> servers() {
         return toolCatalog.servers();
+    }
+
+    /** Coût et latence de l'appel direct par connexion et par outil — voir OBSERVABILITE.md. */
+    @GetMapping("/mcp/metrics")
+    List<McpToolMetric> mcpMetrics() {
+        return toolCatalog.metrics();
     }
 
     /**

@@ -302,6 +302,36 @@ export function stateTag(state, label) {
   return tag;
 }
 
+/* ── Disjoncteurs ──────────────────────────────────────────────────────── */
+
+// Partagé entre la supervision (disjoncteurs de l'agent) et les serveurs MCP (un par connexion) :
+// un disjoncteur n'est pas un des états de ProcessState/DecisionStatus/AgentState, sa propre petite
+// table plutôt que de forcer une correspondance qui n'a pas de sens ailleurs.
+const CIRCUIT_STATES = {
+  CLOSED: 'OK',
+  HALF_OPEN: 'WARNING',
+  OPEN: 'ERROR',
+  FORCED_OPEN: 'ERROR',
+  DISABLED: 'UNKNOWN',
+  METRICS_ONLY: 'UNKNOWN',
+};
+
+/** Pastille pour un état de disjoncteur brut ({@code CLOSED}/{@code OPEN}/...), ou l'inconnu. */
+export function circuitStateTag(state, label) {
+  return stateTag(CIRCUIT_STATES[state] || 'UNKNOWN', label ?? state ?? 'Inconnu');
+}
+
+export function circuitBreakersValue(circuitBreakers) {
+  if (!circuitBreakers || !circuitBreakers.length) {
+    return el('span', 'muted', 'Aucun');
+  }
+  const wrap = el('span', 'tag-group');
+  circuitBreakers.forEach((breaker) => {
+    wrap.append(circuitStateTag(breaker.state, `${breaker.name} : ${breaker.state}`));
+  });
+  return wrap;
+}
+
 /* ── Paramètres d'écran dans l'URL ─────────────────────────────────────── */
 
 // L'état d'un écran voyage dans son adresse : « regarde ce que l'agent a fait entre 14 h et 15 h »

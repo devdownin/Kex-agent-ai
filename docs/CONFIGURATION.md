@@ -82,7 +82,9 @@ qu'un cycle puisse partir sans qu'un humain clique :
 
 Disjoncteur et réessai des intégrations externes (serveurs MCP, fournisseur du modèle) — voir
 ARCHITECTURE.md. Les exceptions qui comptent comme échec ou déclenchent un réessai sont fixées en
-code par instance (`mcp-tool`, `agent-model`), pas ici.
+code par instance (`mcp-tool-<connexion>` par serveur MCP pour l'appel direct, `mcp-tool` pour le
+chemin piloté par le modèle, `agent-model`), pas ici — ces réglages s'appliquent à toutes les
+instances créées sous ces noms.
 
 | Propriété | Défaut | Rôle |
 |---|---|---|
@@ -101,7 +103,24 @@ code par instance (`mcp-tool`, `agent-model`), pas ici.
 | `url-prefix` | Préfixe d'URL auquel le jeton s'applique |
 | `token` | Valeur du bearer. Une entrée sans jeton est ignorée |
 
-Le filtrage par préfixe évite qu'un jeton parte vers un serveur MCP autre que le sien.
+Le filtrage par préfixe évite qu'un jeton parte vers un serveur MCP autre que le sien. Un préfixe
+sans jeton (le défaut pour Kafka Explorer, qui ne demande aucune authentification) est ignoré en
+silence. Un jeton déclaré sans préfixe, en revanche, ne s'appliquera jamais à aucune requête et est
+ignoré avec un avertissement au démarrage (`WARN McpBearerTokenCustomizer`) — sans lui, cette
+entrée-là se découvrait par le 401 du serveur distant, sans qu'aucun journal ne rapproche l'un de
+l'autre.
+
+### `kex.mcp.health-check`
+
+| Propriété | Défaut | Rôle |
+|---|---|---|
+| `enabled` | `true` | Retente périodiquement l'initialisation des clients MCP encore muets |
+| `interval` | `1m` | Délai entre deux tentatives |
+
+Sans lui, un serveur MCP revenu après une panne ne redevient joignable qu'au prochain appel — la
+prochaine ouverture de la vue technique, ou le prochain outil que le modèle choisit d'invoquer.
+Chaque réplique retente ses propres clients, sans verrou : contrairement au cycle de supervision, ce
+n'est pas une action partagée qui partirait en double.
 
 ### Spring AI
 
