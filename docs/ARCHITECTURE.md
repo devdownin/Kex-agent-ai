@@ -269,8 +269,9 @@ refusés sans appel réseau, export CSV qui déclenche un téléchargement, sél
 approuve chaque décision cochée, tendance tracée dès deux cycles connus, diff avant/après sur une
 mise à jour de politique, reprise d'une conversation depuis l'historique local, un incident corrélé
 affiché en bannière, une fenêtre de maintenance déclarée puis proposée à la levée, un exemple
-pré-rempli pour un outil à paramètres contre un objet vide pour un outil qui n'en attend aucun, et
-aucune erreur de script sur le parcours.
+pré-rempli pour un outil à paramètres contre un objet vide pour un outil qui n'en attend aucun, un
+résultat d'appel d'outil qui survit au sondage de fond tant que son panneau reste ouvert et reprend
+dès qu'on le referme, et aucune erreur de script sur le parcours.
 
 Playwright n'est pas une dépendance du projet : le job de CI l'installe hors de l'arborescence et
 son chemin arrive par `PLAYWRIGHT_MODULE`. Un `package.json` à la racine ferait vivre une seconde
@@ -1230,6 +1231,26 @@ toujours quand ils existent, sinon le premier `enum`, sinon une valeur type par 
 paramètre (`properties` vide ou absent) garde `{}` : il n'y a rien à y deviner. Cette valeur reste
 un point de départ à corriger, jamais une garantie — `schemaErrors` continue de vérifier ce qui part
 réellement au clic sur Invoquer, exemple pré-rempli ou saisie manuelle traités à l'identique.
+
+### Un panneau d'invocation ouvert suspend le sondage de fond de sa grille, pas l'inverse
+
+Le résultat d'un appel direct d'outil MCP disparaissait entre 9 et 19 secondes après l'appel, selon
+le moment où il tombait dans le cycle de 15 secondes de `REFRESH_MS` (`console.js`) : `servers()`
+(`tools.js`) reconstruit `#servers` en entier à chaque sondage de fond comme à chaque clic sur
+Rafraîchir, panneau d'invocation ouvert ou non — la grille n'a aucune idée qu'un opérateur est en
+train de lire un résultat qu'elle s'apprête à effacer. `paused()`, dans `console.js`, ne le savait
+pas non plus : il ne suspend le sondage global que sur un tiroir ou une boîte de dialogue ouverts,
+jamais sur ce panneau, une simple `<section>` insérée dans la carte de son serveur plutôt qu'un
+composant que la coque connaît.
+
+`servers()` se retire désormais du jeu tant qu'un `.invoke` traîne dans `#servers`, plutôt que
+d'apprendre à `paused()` un troisième cas particulier : suspendre tout le sondage de fond de
+l'application pour un panneau propre à un seul écran en aurait fait un mécanisme bien plus large que
+le défaut qu'il corrige, et rien ne garantit qu'il se referme jamais — la vue Technique reste cachée
+tant qu'on ne l'affiche pas, mais son contenu ne se vide pas pour autant en changeant d'écran. Un
+panneau qui ne se refermait jamais aurait donc figé cette seule grille pour de bon ; un bouton
+Fermer, posé sur les deux panneaux que `tools.js` ouvre (invocation et ressources), rend cette sortie
+explicite plutôt que de compter sur le hasard d'un futur clic sur un autre outil.
 
 ### Une tendance a besoin d'au moins deux points, jamais d'une droite inventée
 

@@ -317,17 +317,22 @@ await check('un outil qui attend des paramètres propose un exemple pré-rempli,
         connection: 'kafka-explorer', serverName: 'kafka-explorer-mcp', version: '0.1.0',
         protocolVersion: '2025-11-25', initialized: true, circuitBreakerState: 'CLOSED',
         tools: [{
-          name: 'kex_list_topics', description: 'Liste les topics.',
+          name: 'kex_topics_prefill', description: 'Liste les topics.',
           inputSchema: {
             type: 'object', required: ['topic'],
             properties: { topic: { type: 'string' }, limit: { type: 'integer', default: 50 } },
           },
         }, {
-          name: 'kex_ping', description: 'Sans paramètre.', inputSchema: { type: 'object', properties: {} },
+          name: 'kex_ping_prefill', description: 'Sans paramètre.', inputSchema: { type: 'object', properties: {} },
         }],
       }]),
     }));
     await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+    // Un nom d'outil propre à ce cas, jamais réutilisé ailleurs dans la suite : `page.goto` vers un
+    // hash déjà courant ne redéclenche pas le routage (pas de `hashchange` sur un fragment inchangé),
+    // et sans ce repère la grille encore affichée par le cas précédent — pas la donnée qu'on vient de
+    // mocker ici — serait ce que le clic suivant atteint.
+    await page.waitForSelector('.tool-list .name:has-text("kex_ping_prefill")');
     // Un sélecteur re-résolu à chaque clic, jamais un handle gardé d'un appel à l'autre : le sondage
     // de fond peut re-rendre la grille entre les deux et détacher un handle capturé trop tôt.
     await page.click('#servers .server ul.tool-list li:nth-child(1) button');
@@ -336,7 +341,63 @@ await check('un outil qui attend des paramètres propose un exemple pré-rempli,
     await page.click('#servers .server ul.tool-list li:nth-child(2) button');
     const empty = await page.$eval('.invoke textarea', (node) => node.value);
     assert.equal(empty, '{}', 'un outil sans paramètre garde un objet vide, rien à y deviner');
+    // Un panneau laissé ouvert suspend désormais le sondage de fond (voir le cas suivant) : le
+    // refermer ici évite qu'il ne fige aussi la grille pour la prochaine vérification.
+    await page.click('.invoke header button');
     await page.unroute('**/api/agent/mcp/servers');
+  });
+
+await check('un résultat affiché survit au sondage de fond, jusqu’à ce qu’on referme le panneau',
+  async () => {
+    // Défaut : la grille des serveurs MCP se reconstruisait entièrement à chaque sondage de fond
+    // (15 s) comme à chaque clic sur Rafraîchir, panneau d'invocation ouvert ou non — un résultat
+    // qu'on venait d'obtenir disparaissait sous les yeux, entre 9 et 19 s après l'appel selon le
+    // moment où il tombait dans le cycle.
+    let serverFetches = 0;
+    await page.route('**/api/agent/mcp/servers', (route) => {
+      serverFetches += 1;
+      route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify([{
+          connection: 'kafka-explorer', serverName: 'kafka-explorer-mcp', version: '0.1.0',
+          protocolVersion: '2025-11-25', initialized: true, circuitBreakerState: 'CLOSED',
+          tools: [{
+            name: 'kex_ping_bgrefresh', description: 'Sans paramètre.',
+            inputSchema: { type: 'object', properties: {} },
+          }],
+        }]),
+      });
+    });
+    await page.route('**/api/agent/mcp/servers/*/tools/*', (route) => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }),
+    }));
+
+    await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+    // Nom propre à ce cas — voir le commentaire du cas précédent sur `page.goto` vers un hash déjà
+    // courant.
+    await page.waitForSelector('.tool-list .name:has-text("kex_ping_bgrefresh")');
+    await page.click('#servers .server ul.tool-list button');
+    await page.click('.invoke button.primary');
+    await page.waitForFunction(() => document.querySelector('.invoke .dump.result')?.textContent.includes('ok'));
+    const fetchesWithPanelOpen = serverFetches;
+
+    // Même déclencheur que le cas du témoin de chargement plus haut : `online` relance un sondage
+    // de fond sans attendre les 15 s réelles de REFRESH_MS.
+    await page.evaluate(() => dispatchEvent(new Event('online')));
+    await page.waitForTimeout(200);
+    assert.equal(serverFetches, fetchesWithPanelOpen,
+      'un panneau ouvert doit suspendre le rafraîchissement de la grille, pas seulement son affichage');
+    const output = await page.$eval('.invoke .dump.result', (node) => node.textContent);
+    assert.match(output, /"ok": true/, 'le résultat doit rester affiché tel quel');
+
+    const refreshed = page.waitForResponse((response) => response.url().endsWith('/api/agent/mcp/servers'));
+    await page.click('.invoke header button');
+    await page.evaluate(() => dispatchEvent(new Event('online')));
+    await refreshed;
+    assert.ok(serverFetches > fetchesWithPanelOpen, 'refermer le panneau doit laisser reprendre le sondage');
+
+    await page.unroute('**/api/agent/mcp/servers');
+    await page.unroute('**/api/agent/mcp/servers/*/tools/*');
   });
 
 await check('les arguments qui ne respectent pas le schéma d’un outil sont refusés sans appel réseau',
@@ -347,7 +408,7 @@ await check('les arguments qui ne respectent pas le schéma d’un outil sont re
         connection: 'kafka-explorer', serverName: 'kafka-explorer-mcp', version: '0.1.0',
         protocolVersion: '2025-11-25', initialized: true, circuitBreakerState: 'CLOSED',
         tools: [{
-          name: 'kex_list_topics', description: 'Liste les topics.',
+          name: 'kex_topics_reject', description: 'Liste les topics.',
           inputSchema: { type: 'object', required: ['topic'], properties: { topic: { type: 'string' } } },
         }],
       }]),
@@ -358,6 +419,8 @@ await check('les arguments qui ne respectent pas le schéma d’un outil sont re
       route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
     await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+    // Nom propre à ce cas — voir le commentaire plus haut sur `page.goto` vers un hash déjà courant.
+    await page.waitForSelector('.tool-list .name:has-text("kex_topics_reject")');
     await page.click('#servers .server ul.tool-list button');
     // Le champ est désormais pré-rempli d'un exemple valide : le vider pour tester le rejet lui-même.
     await page.fill('.invoke textarea', '{}');
@@ -365,6 +428,7 @@ await check('les arguments qui ne respectent pas le schéma d’un outil sont re
     const output = await page.$eval('.invoke .dump.result', (node) => node.textContent);
     assert.match(output, /Arguments invalides/);
     assert.equal(called, false, 'la validation locale doit empêcher tout appel réseau');
+    await page.click('.invoke header button');
     await page.unroute('**/api/agent/mcp/servers');
     await page.unroute('**/api/agent/mcp/servers/*/tools/*');
   });

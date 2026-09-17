@@ -17,6 +17,10 @@ let lastServers = [];
 let lastMetrics = [];
 
 export async function servers() {
+  // Un panneau d'invocation ouvert porte un résultat en train d'être lu — celui du sondage de fond
+  // comme celui d'un clic sur Rafraîchir : le reconstruire depuis zéro le perdrait sans qu'aucune
+  // donnée nouvelle ne le justifie. Il reprend au prochain appel une fois le panneau refermé.
+  if ($('#servers').querySelector('.invoke')) return;
   await render($('#servers'), async () => {
     const [list, metrics] = await Promise.all([
       api('/api/agent/mcp/servers'),
@@ -106,10 +110,24 @@ function card(server) {
   return node;
 }
 
+/**
+ * Le sondage de fond laisse désormais un panneau ouvert tranquille (voir `servers()`) : sans ce
+ * bouton, la seule façon de le refermer serait d'en rouvrir un autre, ce qui suspendrait le
+ * rafraîchissement de la grille jusque-là sans le moindre signe visible de pourquoi.
+ */
+function closeButton(panel) {
+  const close = el('button', 'ghost', 'Fermer');
+  close.type = 'button';
+  close.addEventListener('click', () => panel.remove());
+  return close;
+}
+
 function invoke(host, connection, tool) {
   host.querySelector('.invoke')?.remove();
   const panel = el('section', 'invoke');
-  panel.append(el('h4', null, tool.name));
+  const head = el('header');
+  head.append(el('h4', null, tool.name), closeButton(panel));
+  panel.append(head);
   // Le schéma vient du serveur, jamais réinterprété : il dit ce que l'outil attend, pas ce qu'on
   // devine en tapant "{}" et en lisant l'erreur qui revient.
   if (tool.inputSchema && Object.keys(tool.inputSchema).length) {
@@ -173,7 +191,9 @@ function invoke(host, connection, tool) {
 async function listResources(host, connection) {
   host.querySelector('.invoke')?.remove();
   const panel = el('section', 'invoke');
-  panel.append(el('h4', null, 'Ressources'));
+  const head = el('header');
+  head.append(el('h4', null, 'Ressources'), closeButton(panel));
+  panel.append(head);
   const output = el('pre', 'dump', '…');
   panel.append(output);
   host.append(panel);
