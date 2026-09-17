@@ -339,7 +339,7 @@ input, textarea, select {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  padding: 8px 10px;
+  padding: 9px 12px;
 }
 textarea { resize: vertical; }
 input[type="range"] { padding: 0; }
@@ -351,7 +351,7 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 .row-end { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .row-end button { margin: 0; }
 
-fieldset { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 12px; margin: 8px 0 0; }
+fieldset { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 16px; margin: 10px 0 0; }
 legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; padding: 0 4px; }
 
 .choice { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; font-size: 13px; color: var(--ink); }
@@ -521,11 +521,11 @@ table.grid th {
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--ink-3);
-  padding: 8px 10px;
+  padding: 9px 12px;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
-table.grid td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+table.grid td { padding: 11px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; transition: background-color .12s ease; }
 /* Les chiffres s'alignent en colonne : à chasse variable, 111 paraît plus court que 999. */
 table.grid td.mono, table.grid td .mono, .definition dd .mono { font-variant-numeric: tabular-nums; }
 /* Un bouton, pas un `th` cliquable : le tri doit s'atteindre au clavier comme à la souris. */
@@ -545,6 +545,11 @@ table.grid th button.sort::after { content: "\2195"; opacity: .35; }
 table.grid th[aria-sort] button.sort::after { opacity: 1; }
 table.grid tr.clickable { cursor: pointer; }
 table.grid tr.clickable:hover td { background: var(--surface-2); }
+/* La même pastille de survol que les listes-cartes ailleurs dans la console, sans réécrire le
+   tableau en cartes : arrondir seulement les deux coins extrêmes de la ligne suffit à donner
+   l'impression d'une rangée détachée plutôt que d'un simple changement de fond de cellule. */
+table.grid tr.clickable:hover td:first-child { border-top-left-radius: var(--radius-sm); border-bottom-left-radius: var(--radius-sm); }
+table.grid tr.clickable:hover td:last-child { border-top-right-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
 
 .filters { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip-toggle { padding: 5px 11px; border-radius: 999px; font-size: 12px; }
@@ -608,7 +613,7 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 10px;
+  padding: 8px 12px;
   background: var(--surface-2);
   border-radius: var(--radius-sm);
   font-size: 13px;
@@ -712,11 +717,11 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 16px 18px;
   border-bottom: 1px solid var(--line);
 }
-.drawer-head h2 { margin: 0; font-size: 15px; }
-.drawer-body { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.drawer-head h2 { margin: 0; font-size: 16px; font-weight: 700; }
+.drawer-body { flex: 1; overflow: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
 .drawer-sub {
   margin: 12px 0 2px;
   font-size: 11px;
@@ -730,8 +735,8 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 /* auto-fit, pas auto-fill : avec un seul serveur MCP connecté, auto-fill réserverait quand même
    les colonnes vides à leur largeur minimale et laisserait la carte étroite à côté d'un vide,
    plutôt que de la laisser s'étirer sur la largeur du panneau. */
-.servers-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
-.server { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; background: var(--bg); min-width: 0; }
+.servers-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.server { border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; background: var(--bg); min-width: 0; }
 .server header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
 .server h3 { margin: 0; font: 600 14px var(--mono); }
 
@@ -746,7 +751,7 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 .invoke textarea { font: 12px var(--mono); }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
-.tile { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 12px; background: var(--bg); }
+.tile { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 14px; background: var(--bg); }
 .tile .label { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
 .tile .value { font: 20px var(--mono); margin-top: 4px; overflow-wrap: anywhere; }
 
@@ -785,8 +790,10 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
   color: var(--ink-2);
 }
 /* Sans lui, un appel d'outil en échec ne se distinguait d'un appel réussi que par la couleur de
-   sa puce — rien dans le journal ni dans les chips du fil n'écrit « échec » en toutes lettres. */
-.chip.failed { color: var(--danger); border-color: var(--danger); }
+   sa puce — rien dans le journal ni dans les chips du fil n'écrit « échec » en toutes lettres.
+   Le fond reprend la même teinte douce que les KPI, les cartes et les bannières en échec :
+   un seul langage de couleur d'état dans toute la console. */
+.chip.failed { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }
 .chip.failed::before { content: "✕"; }
 
 .caret::after { content: "▍"; animation: blink 1s steps(2, start) infinite; color: var(--accent); }
@@ -857,7 +864,7 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
 }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
-.toast.error { border-left-color: var(--danger); }
+.toast.error { border-left-color: var(--danger); background: var(--danger-soft); }
 /* Même règle que `.state.error` : le rouge seul ne distinguait pas un échec d'une simple
    confirmation dans la pile de notifications. */
 .toast.error::before { content: "✕ "; font-family: var(--mono); font-weight: 600; color: var(--danger); }
