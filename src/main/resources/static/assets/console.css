@@ -27,12 +27,13 @@
   --danger-soft: #fbe4e2;
   --pending: #6d28d9;
   --pending-soft: #ece4fb;
-  --radius: 10px;
-  --radius-sm: 6px;
+  --radius: 16px;
+  --radius-sm: 10px;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --rail: 232px;
   --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 8px 24px rgb(16 24 40 / 5%);
+  --shadow-hover: 0 6px 18px rgb(16 24 40 / 10%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -58,6 +59,7 @@
     --pending: #c4b5fd;
     --pending-soft: #211a34;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 30%);
+    --shadow-hover: 0 8px 22px rgb(0 0 0 / 38%);
   }
 }
 
@@ -83,6 +85,7 @@
   --pending: #c4b5fd;
   --pending-soft: #211a34;
   --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 30%);
+  --shadow-hover: 0 8px 22px rgb(0 0 0 / 38%);
 }
 
 * { box-sizing: border-box; }
@@ -151,17 +154,30 @@ body {
 .brand-text small { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 
 .rail nav { display: flex; flex-direction: column; gap: 2px; }
-.rail nav hr { border: 0; border-top: 1px solid var(--line-soft); margin: 8px 6px; }
+.rail nav hr { border: 0; border-top: 1px solid var(--line-soft); margin: 12px 6px; }
+
+/* Un court libellé au-dessus de chaque groupe (déjà séparé par un <hr>) : la nav se scanne par
+   intention — vue d'ensemble, agent, système — plutôt qu'en une seule liste plate de huit liens. */
+.nav-section {
+  padding: 0 10px;
+  margin: 2px 0 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-3);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 10px;
+  padding: 9px 12px;
   border-radius: var(--radius-sm);
   color: var(--ink-2);
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
+  transition: background-color .12s ease;
 }
 .nav-item:hover { background: var(--surface-2); color: var(--ink); }
 .nav-item[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
@@ -216,12 +232,12 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 12px;
+  padding: 7px 14px;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface-2);
-  font: 600 11px/1 var(--sans);
-  letter-spacing: .06em;
+  font: 700 11px/1 var(--sans);
+  letter-spacing: .04em;
   color: var(--ink-2);
 }
 .status-mark { font-family: var(--mono); font-size: 12px; }
@@ -255,7 +271,7 @@ main:focus { outline: none; }
   border-left: 3px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 16px;
+  padding: 20px;
   min-width: 0;
 }
 /* Même accent que les KPI et les cartes, posé sur le panneau lui-même quand il porte une
@@ -269,25 +285,30 @@ main:focus { outline: none; }
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .panel-head h1, .panel-head h2 { margin: 0; }
 /* Un seul poids partout mettait la fiche d'un processus et le titre de l'écran qui la contient
    sur le même plan. `h1` porte l'écran, `h2` un sous-panneau : la hiérarchie se lit avant de lire. */
-.panel-head h1 { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
-.panel-head h2 { font-size: 14px; font-weight: 600; }
+.panel-head h1 { font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
+.panel-head h2 { font-size: 15px; font-weight: 700; }
 .panel-actions { display: flex; align-items: center; gap: 8px; }
 
 .split { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
 
+/* Pilule plutôt que coin carré : au même rayon que les cartes, un bouton rectangulaire aurait
+   détonné à côté d'elles. La distinction entre actions passe par le remplissage (`.primary`),
+   jamais par la forme. */
 button, .ghost {
   font: inherit;
-  border-radius: var(--radius-sm);
+  font-weight: 600;
+  border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--ink);
-  padding: 7px 12px;
+  padding: 8px 16px;
   cursor: pointer;
+  transition: border-color .12s ease, box-shadow .12s ease;
 }
 button:hover:not(:disabled), a.ghost:hover { border-color: var(--ink-3); }
 button:disabled { opacity: .5; cursor: not-allowed; }
@@ -299,10 +320,10 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 16%);
 }
-.primary:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 2px 6px rgb(0 0 0 / 16%); }
+.primary:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 6px 16px rgb(0 0 0 / 20%); }
 .danger { color: var(--danger); }
 
 :where(button, a, input, textarea, select, summary, tr.clickable):focus-visible {
@@ -318,7 +339,7 @@ input, textarea, select {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  padding: 8px 10px;
+  padding: 9px 12px;
 }
 textarea { resize: vertical; }
 input[type="range"] { padding: 0; }
@@ -330,7 +351,7 @@ input[type="radio"], input[type="checkbox"] { width: auto; }
 .row-end { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .row-end button { margin: 0; }
 
-fieldset { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 12px; margin: 8px 0 0; }
+fieldset { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 16px; margin: 10px 0 0; }
 legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; padding: 0 4px; }
 
 .choice { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; font-size: 13px; color: var(--ink); }
@@ -433,8 +454,8 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
 .kpi {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 16px;
+  gap: 4px;
+  padding: 18px 20px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-left: 3px solid var(--line);
@@ -442,14 +463,22 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
   box-shadow: var(--shadow);
   text-decoration: none;
   color: inherit;
+  transition: box-shadow .12s ease, transform .12s ease, border-color .12s ease;
 }
-.kpi:hover { border-color: var(--ink-3); }
-.kpi[data-state="WARNING"] { border-left-color: var(--warn); }
-.kpi[data-state="ERROR"] { border-left-color: var(--danger); }
-.kpi[data-state="PENDING"] { border-left-color: var(--pending); }
-.kpi-label { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+.kpi:hover { border-color: var(--ink-3); box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+/* Le liseré annonçait déjà l'état ; le fond du bloc le reprend maintenant en douceur — jamais
+   la seule couleur pleine, qui friserait l'alerte pour un simple avertissement. Un KPI sans état
+   déclaré (`OK`, ou rien à signaler) garde le fond neutre : lui inventer une teinte affirmerait
+   une mesure qui n'a pas été prise. */
+.kpi[data-state="WARNING"] { border-left-color: var(--warn); background: var(--warn-soft); }
+.kpi[data-state="ERROR"] { border-left-color: var(--danger); background: var(--danger-soft); }
+.kpi[data-state="PENDING"] { border-left-color: var(--pending); background: var(--pending-soft); }
+.kpi-label { font-size: 11px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+.kpi[data-state="WARNING"] .kpi-label { color: var(--warn); }
+.kpi[data-state="ERROR"] .kpi-label { color: var(--danger); }
+.kpi[data-state="PENDING"] .kpi-label { color: var(--pending); }
 .kpi-value-line { display: flex; align-items: baseline; gap: 6px; }
-.kpi-value { font: 700 28px/1.1 var(--mono); letter-spacing: -.02em; }
+.kpi-value { font: 700 30px/1.1 var(--mono); letter-spacing: -.02em; }
 .kpi-mark { font-family: var(--mono); font-size: 15px; }
 .kpi[data-state="WARNING"] .kpi-mark { color: var(--warn); }
 .kpi[data-state="ERROR"] .kpi-mark { color: var(--danger); }
@@ -492,11 +521,11 @@ table.grid th {
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--ink-3);
-  padding: 8px 10px;
+  padding: 9px 12px;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
-table.grid td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+table.grid td { padding: 11px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; transition: background-color .12s ease; }
 /* Les chiffres s'alignent en colonne : à chasse variable, 111 paraît plus court que 999. */
 table.grid td.mono, table.grid td .mono, .definition dd .mono { font-variant-numeric: tabular-nums; }
 /* Un bouton, pas un `th` cliquable : le tri doit s'atteindre au clavier comme à la souris. */
@@ -516,6 +545,11 @@ table.grid th button.sort::after { content: "\2195"; opacity: .35; }
 table.grid th[aria-sort] button.sort::after { opacity: 1; }
 table.grid tr.clickable { cursor: pointer; }
 table.grid tr.clickable:hover td { background: var(--surface-2); }
+/* La même pastille de survol que les listes-cartes ailleurs dans la console, sans réécrire le
+   tableau en cartes : arrondir seulement les deux coins extrêmes de la ligne suffit à donner
+   l'impression d'une rangée détachée plutôt que d'un simple changement de fond de cellule. */
+table.grid tr.clickable:hover td:first-child { border-top-left-radius: var(--radius-sm); border-bottom-left-radius: var(--radius-sm); }
+table.grid tr.clickable:hover td:last-child { border-top-right-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
 
 .filters { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip-toggle { padding: 5px 11px; border-radius: 999px; font-size: 12px; }
@@ -530,16 +564,17 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 14px;
+  padding: 16px;
   background: var(--bg);
   border: 1px solid var(--line-soft);
   border-left: 3px solid var(--line);
   border-radius: var(--radius-sm);
+  transition: box-shadow .12s ease;
 }
-.card[data-state="WARNING"] { border-left-color: var(--warn); }
-.card[data-state="ERROR"] { border-left-color: var(--danger); }
-.card[data-state="OK"] { border-left-color: var(--ok); }
-.card[data-state="PENDING"] { border-left-color: var(--pending); }
+.card[data-state="WARNING"] { border-left-color: var(--warn); background: var(--warn-soft); }
+.card[data-state="ERROR"] { border-left-color: var(--danger); background: var(--danger-soft); }
+.card[data-state="OK"] { border-left-color: var(--ok); background: var(--ok-soft); }
+.card[data-state="PENDING"] { border-left-color: var(--pending); background: var(--pending-soft); }
 .card header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .card header h3 { margin: 0; font-size: 14px; flex: 1; min-width: 0; }
 .card header .time { font: 12px var(--mono); color: var(--ink-3); }
@@ -578,7 +613,7 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 10px;
+  padding: 8px 12px;
   background: var(--surface-2);
   border-radius: var(--radius-sm);
   font-size: 13px;
@@ -682,11 +717,11 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 16px 18px;
   border-bottom: 1px solid var(--line);
 }
-.drawer-head h2 { margin: 0; font-size: 15px; }
-.drawer-body { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.drawer-head h2 { margin: 0; font-size: 16px; font-weight: 700; }
+.drawer-body { flex: 1; overflow: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
 .drawer-sub {
   margin: 12px 0 2px;
   font-size: 11px;
@@ -700,8 +735,8 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 /* auto-fit, pas auto-fill : avec un seul serveur MCP connecté, auto-fill réserverait quand même
    les colonnes vides à leur largeur minimale et laisserait la carte étroite à côté d'un vide,
    plutôt que de la laisser s'étirer sur la largeur du panneau. */
-.servers-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
-.server { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; background: var(--bg); min-width: 0; }
+.servers-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.server { border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; background: var(--bg); min-width: 0; }
 .server header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
 .server h3 { margin: 0; font: 600 14px var(--mono); }
 
@@ -717,7 +752,7 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 .invoke textarea { font: 12px var(--mono); }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
-.tile { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 12px; background: var(--bg); }
+.tile { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 14px; background: var(--bg); }
 .tile .label { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
 .tile .value { font: 20px var(--mono); margin-top: 4px; overflow-wrap: anywhere; }
 
@@ -756,8 +791,10 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
   color: var(--ink-2);
 }
 /* Sans lui, un appel d'outil en échec ne se distinguait d'un appel réussi que par la couleur de
-   sa puce — rien dans le journal ni dans les chips du fil n'écrit « échec » en toutes lettres. */
-.chip.failed { color: var(--danger); border-color: var(--danger); }
+   sa puce — rien dans le journal ni dans les chips du fil n'écrit « échec » en toutes lettres.
+   Le fond reprend la même teinte douce que les KPI, les cartes et les bannières en échec :
+   un seul langage de couleur d'état dans toute la console. */
+.chip.failed { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }
 .chip.failed::before { content: "✕"; }
 
 .caret::after { content: "▍"; animation: blink 1s steps(2, start) infinite; color: var(--accent); }
@@ -828,7 +865,7 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
 }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
-.toast.error { border-left-color: var(--danger); }
+.toast.error { border-left-color: var(--danger); background: var(--danger-soft); }
 /* Même règle que `.state.error` : le rouge seul ne distinguait pas un échec d'une simple
    confirmation dans la pile de notifications. */
 .toast.error::before { content: "✕ "; font-family: var(--mono); font-weight: 600; color: var(--danger); }
@@ -855,7 +892,7 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
     gap: 10px;
   }
   .rail nav { flex-direction: row; overflow-x: auto; scrollbar-width: none; }
-  .rail nav hr { display: none; }
+  .rail nav hr, .nav-section { display: none; }
   .nav-item { white-space: nowrap; }
   .brand, .rail-foot { display: none; }
   .topbar { position: sticky; top: 0; z-index: 20; }
