@@ -11,9 +11,14 @@ import java.util.List;
  *
  * @param alerts anomalies dédupliquées et priorisées, pas les relevés bruts : deux cycles qui
  *               voient le même symptôme signalent un incident, pas deux
+ * @param maintenance fenêtres de maintenance actives : les processus qu'elles couvrent n'ont
+ *               produit ni alerte ni décision au dernier cycle, même en anomalie réelle
+ * @param incidents concomitance d'anomalies sur plusieurs processus au même cycle — un signal
+ *               grossier de cause commune, pas une causalité établie, vide la plupart du temps
  */
 public record Overview(AgentStatus agent, int processesMonitored, int processesOk, int processesWarning,
                        int processesError, int processesUnknown, int anomaliesDetected,
                        int pendingApprovals, List<ProcessSnapshot> processes, List<Alert> alerts,
-                       List<Decision> pending, CycleReport lastCycle) {
+                       List<Decision> pending, CycleReport lastCycle, List<MaintenanceWindow> maintenance,
+                       List<CorrelatedIncident> incidents) {
 }

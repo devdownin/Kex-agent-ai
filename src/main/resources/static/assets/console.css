@@ -353,6 +353,7 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
   color: var(--warn);
   font-weight: 600;
 }
+.banner.danger { background: var(--danger-soft); color: var(--danger); }
 
 .advanced { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
 .advanced summary { cursor: pointer; font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }

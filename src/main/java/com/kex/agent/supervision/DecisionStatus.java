@@ -22,5 +22,13 @@ public enum DecisionStatus {
      */
     EXPIRED,
 
-    BLOCKED
+    BLOCKED,
+
+    /**
+     * Aurait dû s'exécuter (autonomie suffisante, confiance atteinte) mais aucun outil MCP n'est lié
+     * à la capacité — {@code kex.agent.supervision.simulate-unbound-actions} l'a laissée poursuivre
+     * jusqu'ici plutôt que de la faire échouer. Distinct de {@code FAILED} : un outil bien lié qui
+     * refuse l'appel est un vrai échec, une capacité jamais câblée n'en est pas un.
+     */
+    SIMULATED
 }

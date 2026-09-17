@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -96,6 +98,25 @@ class SupervisionController {
         return supervision.pending();
     }
 
+    /** Un déploiement connu n'a pas à se lire comme un incident — voir {@link MaintenanceWindow}. */
+    @PostMapping("/processes/{process}/maintenance")
+    MaintenanceWindow declareMaintenance(@PathVariable String process,
+                                        @Valid @RequestBody MaintenanceRequest request, Principal principal) {
+        return supervision.declareMaintenance(process, request.duration(), request.reason(), actor(principal));
+    }
+
+    @DeleteMapping("/processes/{process}/maintenance")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void endMaintenance(@PathVariable String process, Principal principal) {
+        supervision.endMaintenance(process, actor(principal));
+    }
+
+    /** Tendance d'un processus précis à travers les derniers cycles. */
+    @GetMapping("/processes/{process}/history")
+    List<ProcessHistoryPoint> processHistory(@PathVariable String process) {
+        return supervision.processHistory(process);
+    }
+
     @PostMapping("/decisions/{decision}/approve")
     Decision approve(@PathVariable String decision, Principal principal) {
         return supervision.approve(decision, actor(principal));
@@ -161,6 +182,11 @@ class SupervisionController {
 
     @ExceptionHandler(UnknownDecisionException.class)
     ProblemDetail unknownDecision(UnknownDecisionException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @ExceptionHandler(UnknownProcessException.class)
+    ProblemDetail unknownProcess(UnknownProcessException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 }

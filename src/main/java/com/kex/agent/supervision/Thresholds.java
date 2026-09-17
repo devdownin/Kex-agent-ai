@@ -23,4 +23,21 @@ public record Thresholds(
 
         /** Fenêtre sur laquelle une tendance est jugée : en deçà, un pic isolé passe pour une dérive. */
         @DefaultValue("15m") Duration observationWindow) {
+
+    /**
+     * Un processus à faible trafic et un à fort débit partagent sinon les mêmes seuils, trop
+     * sensibles pour l'un ou trop laxistes pour l'autre. Chaque champ de {@code override} remplace
+     * le sien ; un champ omis (donc {@code null}) laisse le seuil global tel quel.
+     */
+    Thresholds withOverrides(ThresholdOverrides override) {
+        if (override == null) {
+            return this;
+        }
+        return new Thresholds(
+                override.consumerLag() != null ? override.consumerLag() : consumerLag(),
+                override.errorRatePercent() != null ? override.errorRatePercent() : errorRatePercent(),
+                override.processingTime() != null ? override.processingTime() : processingTime(),
+                override.blockedMessages() != null ? override.blockedMessages() : blockedMessages(),
+                override.observationWindow() != null ? override.observationWindow() : observationWindow());
+    }
 }

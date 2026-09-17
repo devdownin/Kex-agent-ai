@@ -82,10 +82,21 @@ public class SupervisionService {
     private final History<CycleReport> cycles;
     private final History<Anomaly> anomalies;
     private final History<Decision> decisions;
+    private final History<SnapshotSet> snapshotHistory;
     private final Map<String, Decision> decisionsById = new ConcurrentHashMap<>();
+
+    /**
+     * Fenêtres de maintenance déclarées, par processus. En mémoire du processus, comme la pause de
+     * l'agent : une intention passagère, pas un état à répliquer entre instances.
+     */
+    private final Map<String, MaintenanceWindow> maintenance = new ConcurrentHashMap<>();
 
     private volatile List<ProcessSnapshot> snapshots = List.of();
     private volatile boolean paused;
+
+    /** Un relevé de processus daté, conservé pour {@link #processHistory} — voir {@link History}. */
+    private record SnapshotSet(String cycleId, Instant at, List<ProcessSnapshot> snapshots) {
+    }
 
     SupervisionService(AgentService agentService, McpToolCatalog toolCatalog,
                        SupervisionProperties properties, Clock clock, ModelAvailability model,
@@ -105,6 +116,7 @@ public class SupervisionService {
         this.cycles = new History<>(properties.historySize());
         this.anomalies = new History<>(properties.historySize());
         this.decisions = new History<>(properties.historySize());
+        this.snapshotHistory = new History<>(properties.historySize());
         this.policy.set(new SupervisionPolicy("policy-v1", properties.mode(),
                 Map.copyOf(properties.autonomy()), properties.confidenceThreshold(),
                 Map.copyOf(properties.confidenceThresholds()), properties.thresholds()));
@@ -173,7 +185,8 @@ public class SupervisionService {
             alerts.add(new Alert(entry.getKey(), latest.processId(), latest.processName(), latest.title(),
                     worst(occurrences), occurrences.size(), occurrences.getLast().detectedAt(),
                     latest.detectedAt(), latest.observations(), latest.analysis(), latest.probableCause(),
-                    latest.confidence(), latest.recommendation(), latest.capability(), pendingId));
+                    latest.confidence(), latest.recommendation(), latest.capability(), pendingId,
+                    latest.knowledgeReference()));
         }
 
         // Une erreur passe devant un avertissement, un symptôme qui se répète devant un isolé.
@@ -221,6 +234,7 @@ public class SupervisionService {
                 (int) taken.stream().filter(d -> d.status() == DecisionStatus.FAILED).count(),
                 (int) taken.stream().filter(d -> d.status() == DecisionStatus.BLOCKED).count(),
                 (int) taken.stream().filter(d -> d.status() == DecisionStatus.EXPIRED).count(),
+                (int) taken.stream().filter(d -> d.status() == DecisionStatus.SIMULATED).count(),
                 average(taken.stream()
                         .filter(d -> d.resolvedAt() != null)
                         .map(d -> Duration.between(d.decidedAt(), d.resolvedAt()).toMillis())));
@@ -349,7 +363,97 @@ public class SupervisionService {
         return new Overview(status(), current.size(),
                 count(counts, ProcessState.OK), count(counts, ProcessState.WARNING),
                 count(counts, ProcessState.ERROR), count(counts, ProcessState.UNKNOWN),
-                open.size(), pending().size(), current, open, pending(), cycles.first());
+                open.size(), pending().size(), current, open, pending(), cycles.first(),
+                activeMaintenanceWindows(), incidents());
+    }
+
+    /* ── Maintenance ───────────────────────────────────────────────────── */
+
+    /**
+     * Un déploiement connu ne doit pas se lire comme un incident : les anomalies du processus
+     * couvert n'entrent ni dans les alertes ni dans les décisions tant que la fenêtre tient, sans
+     * pour autant fausser son état réel — {@link #cycle} continue de le relever normalement.
+     */
+    public MaintenanceWindow declareMaintenance(String processId, Duration duration, String reason,
+                                                String actor) {
+        MonitoredProcess process = findProcess(processId);
+        Instant until = clock.instant().plus(duration);
+        MaintenanceWindow window = new MaintenanceWindow(processId, process.name(), until, reason, actor);
+        maintenance.put(processId, window);
+        record(actor, "Maintenance déclarée : " + process.name(), processId, null, reason,
+                "Jusqu'à " + until);
+        return window;
+    }
+
+    public void endMaintenance(String processId, String actor) {
+        MonitoredProcess process = findProcess(processId);
+        MaintenanceWindow removed = maintenance.remove(processId);
+        if (removed != null) {
+            record(actor, "Maintenance levée : " + process.name(), processId, null, null, "Levée avant terme");
+        }
+    }
+
+    /** Nettoie les fenêtres expirées au passage : lues, jamais accumulées indéfiniment. */
+    private List<MaintenanceWindow> activeMaintenanceWindows() {
+        Instant now = clock.instant();
+        maintenance.values().removeIf(window -> !now.isBefore(window.until()));
+        return List.copyOf(maintenance.values());
+    }
+
+    private boolean isUnderMaintenance(String processId, Instant now) {
+        MaintenanceWindow window = maintenance.get(processId);
+        return window != null && now.isBefore(window.until());
+    }
+
+    private MonitoredProcess findProcess(String processId) {
+        return properties.processes().stream()
+                .filter(process -> process.id().equals(processId))
+                .findFirst()
+                .orElseThrow(() -> new UnknownProcessException(processId));
+    }
+
+    /* ── Incidents corrélés ────────────────────────────────────────────── */
+
+    /**
+     * Plusieurs processus distincts en anomalie au même cycle, groupés en un seul signal — voir
+     * {@link CorrelatedIncident}. Une heuristique grossière et assumée : la seule concomitance dans
+     * un même cycle, jamais une cause établie.
+     */
+    public List<CorrelatedIncident> incidents() {
+        SupervisionProperties.Correlation correlation = properties.correlation();
+        CycleReport last = cycles.first();
+        if (!correlation.enabled() || last == null) {
+            return List.of();
+        }
+        Map<String, Anomaly> byProcess = new LinkedHashMap<>();
+        rawAnomalies().stream()
+                .filter(anomaly -> last.id().equals(anomaly.cycleId()))
+                .forEach(anomaly -> byProcess.putIfAbsent(anomaly.processId(), anomaly));
+        if (byProcess.size() < correlation.minProcesses()) {
+            return List.of();
+        }
+        ProcessState severity = byProcess.values().stream().anyMatch(a -> a.severity() == ProcessState.ERROR)
+                ? ProcessState.ERROR
+                : ProcessState.WARNING;
+        return List.of(new CorrelatedIncident(last.id(), last.finishedAt(), byProcess.size(),
+                byProcess.values().stream().map(Anomaly::processName).toList(), severity,
+                byProcess.values().stream().map(Anomaly::title).toList()));
+    }
+
+    /* ── Historique par processus ──────────────────────────────────────── */
+
+    /**
+     * Tendance d'un processus précis à travers les derniers cycles — l'agent en porte déjà une pour
+     * lui-même ({@link #cycles}), rien n'existait encore à l'échelle d'un seul processus.
+     */
+    public List<ProcessHistoryPoint> processHistory(String processId) {
+        findProcess(processId);
+        return snapshotHistory.list().stream()
+                .flatMap(set -> set.snapshots().stream()
+                        .filter(snapshot -> snapshot.processId().equals(processId))
+                        .map(snapshot -> new ProcessHistoryPoint(set.cycleId(), set.at(), snapshot.state(),
+                                snapshot.delayMillis())))
+                .toList();
     }
 
     private static int count(Map<ProcessState, Long> counts, ProcessState state) {
@@ -458,15 +562,26 @@ public class SupervisionService {
 
         Instant at = clock.instant();
         snapshots = CycleAnalysis.snapshots(answer.content(), monitored);
+        snapshotHistory.add(new SnapshotSet(cycleId, at, snapshots));
         List<Anomaly> detected = CycleAnalysis.anomalies(answer.content(), monitored, cycleId, at);
-        detected.forEach(anomalies::add);
+
+        // Une fenêtre de maintenance mute l'alerte et la décision, jamais l'observation : le
+        // relevé ci-dessus reste honnête, seule la suite (alertes, décisions) se tait.
+        List<Anomaly> muted = detected.stream().filter(a -> isUnderMaintenance(a.processId(), at)).toList();
+        List<Anomaly> actionable = detected.stream().filter(a -> !isUnderMaintenance(a.processId(), at)).toList();
+        actionable.forEach(anomalies::add);
 
         events.add(new CycleEvent(at, monitored.size() + " processus analysés",
                 answer.tools().size() + " appels d'outils"));
         events.add(new CycleEvent(at, detected.size() + " anomalies détectées",
                 detected.stream().map(Anomaly::title).reduce((a, b) -> a + " · " + b).orElse("Aucune")));
+        if (!muted.isEmpty()) {
+            events.add(new CycleEvent(at, muted.size() + " anomalie(s) ignorée(s)",
+                    "Fenêtre de maintenance active : " + muted.stream().map(Anomaly::processName)
+                            .distinct().reduce((a, b) -> a + ", " + b).orElse("")));
+        }
 
-        List<Decision> taken = detected.stream().map(anomaly -> decide(anomaly, cycleId)).toList();
+        List<Decision> taken = actionable.stream().map(anomaly -> decide(anomaly, cycleId)).toList();
         long pendingCount = taken.stream().filter(d -> d.status() == DecisionStatus.PENDING_APPROVAL).count();
         events.add(new CycleEvent(clock.instant(), taken.size() + " décisions prises",
                 pendingCount + " en attente de validation"));
@@ -486,7 +601,7 @@ public class SupervisionService {
     }
 
     private String prompt(List<MonitoredProcess> monitored) {
-        Thresholds thresholds = policy.get().thresholds();
+        Thresholds global = policy.get().thresholds();
         StringBuilder prompt = new StringBuilder("""
                 Tu supervises des processus d'intégration. Relève leur état en interrogeant les \
                 outils dont tu disposes — n'invente aucune valeur : un relevé impossible se rend \
@@ -521,20 +636,37 @@ public class SupervisionService {
             if (StringUtils.hasText(process.hint())) {
                 prompt.append(" — où regarder : ").append(process.hint());
             }
+            // Un processus à faible trafic et un à fort débit ne devraient pas partager le même
+            // seuil : trop sensible pour l'un, trop laxiste pour l'autre.
+            if (process.thresholds() != null) {
+                prompt.append(" — seuils propres à ce processus : ")
+                        .append(thresholdsSummary(global.withOverrides(process.thresholds())));
+            }
             prompt.append('\n');
         }
         prompt.append("""
 
                 Signale une anomalie quand un de ces seuils est franchi, et cite la mesure qui le \
-                montre dans les observations :
+                montre dans les observations. Un processus qui déclare ses propres seuils ci-dessus \
+                les utilise à leur place ; pour tout autre, ce sont ceux-ci qui s'appliquent :
+                %s
+                Juge les tendances sur une fenêtre de %s.
+
+                Si une note de connaissance interne déjà présente dans ce que tu as reçu a réellement \
+                informé ton analyse, cite-la brièvement dans `knowledgeReference` ; sinon omets ce \
+                champ plutôt que d'en inventer une.
+                """.formatted(thresholdsSummary(global), global.observationWindow()));
+        return prompt.toString();
+    }
+
+    private static String thresholdsSummary(Thresholds thresholds) {
+        return ("""
                 - retard de consommation (consumer lag) supérieur à %d
                 - taux d'erreur supérieur à %.1f %%
                 - temps de traitement supérieur à %s
                 - messages bloqués au-delà de %d
-                Juge les tendances sur une fenêtre de %s.
-                """.formatted(thresholds.consumerLag(), thresholds.errorRatePercent(),
-                thresholds.processingTime(), thresholds.blockedMessages(), thresholds.observationWindow()));
-        return prompt.toString();
+                """).formatted(thresholds.consumerLag(), thresholds.errorRatePercent(),
+                thresholds.processingTime(), thresholds.blockedMessages());
     }
 
     /* ── Décision ──────────────────────────────────────────────────────── */
@@ -701,6 +833,14 @@ public class SupervisionService {
                         .map(reason -> decision.resolvedAs(DecisionStatus.FAILED, reason, actor, at))
                         .orElseGet(() -> decision.resolvedAs(DecisionStatus.EXECUTED,
                                 "Notifié par webhook", actor, at));
+            }
+            // Le droit d'agir et le moyen d'agir sont deux choses distinctes : sans binding, la
+            // capacité reste inexécutable. `simulateUnboundActions` ne fabrique aucun appel d'outil
+            // qui n'existe pas — elle dit seulement que l'agent serait allé jusque-là.
+            if (properties.simulateUnboundActions()) {
+                return decision.resolvedAs(DecisionStatus.SIMULATED,
+                        "Simulée : aucun outil MCP lié à %s — action réelle si un outil existait : %s"
+                                .formatted(decision.capability(), decision.action()), actor, at);
             }
             return decision.resolvedAs(DecisionStatus.FAILED,
                     "Aucun outil MCP lié à la capacité " + decision.capability(), actor, at);
