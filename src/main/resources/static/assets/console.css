@@ -27,12 +27,13 @@
   --danger-soft: #fbe4e2;
   --pending: #6d28d9;
   --pending-soft: #ece4fb;
-  --radius: 10px;
-  --radius-sm: 6px;
+  --radius: 16px;
+  --radius-sm: 10px;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --rail: 232px;
   --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 8px 24px rgb(16 24 40 / 5%);
+  --shadow-hover: 0 6px 18px rgb(16 24 40 / 10%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -58,6 +59,7 @@
     --pending: #c4b5fd;
     --pending-soft: #211a34;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 30%);
+    --shadow-hover: 0 8px 22px rgb(0 0 0 / 38%);
   }
 }
 
@@ -83,6 +85,7 @@
   --pending: #c4b5fd;
   --pending-soft: #211a34;
   --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 30%);
+  --shadow-hover: 0 8px 22px rgb(0 0 0 / 38%);
 }
 
 * { box-sizing: border-box; }
@@ -151,17 +154,30 @@ body {
 .brand-text small { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 
 .rail nav { display: flex; flex-direction: column; gap: 2px; }
-.rail nav hr { border: 0; border-top: 1px solid var(--line-soft); margin: 8px 6px; }
+.rail nav hr { border: 0; border-top: 1px solid var(--line-soft); margin: 12px 6px; }
+
+/* Un court libellé au-dessus de chaque groupe (déjà séparé par un <hr>) : la nav se scanne par
+   intention — vue d'ensemble, agent, système — plutôt qu'en une seule liste plate de huit liens. */
+.nav-section {
+  padding: 0 10px;
+  margin: 2px 0 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-3);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 10px;
+  padding: 9px 12px;
   border-radius: var(--radius-sm);
   color: var(--ink-2);
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
+  transition: background-color .12s ease;
 }
 .nav-item:hover { background: var(--surface-2); color: var(--ink); }
 .nav-item[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
@@ -216,12 +232,12 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 12px;
+  padding: 7px 14px;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface-2);
-  font: 600 11px/1 var(--sans);
-  letter-spacing: .06em;
+  font: 700 11px/1 var(--sans);
+  letter-spacing: .04em;
   color: var(--ink-2);
 }
 .status-mark { font-family: var(--mono); font-size: 12px; }
@@ -255,7 +271,7 @@ main:focus { outline: none; }
   border-left: 3px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 16px;
+  padding: 20px;
   min-width: 0;
 }
 /* Même accent que les KPI et les cartes, posé sur le panneau lui-même quand il porte une
@@ -269,25 +285,30 @@ main:focus { outline: none; }
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .panel-head h1, .panel-head h2 { margin: 0; }
 /* Un seul poids partout mettait la fiche d'un processus et le titre de l'écran qui la contient
    sur le même plan. `h1` porte l'écran, `h2` un sous-panneau : la hiérarchie se lit avant de lire. */
-.panel-head h1 { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
-.panel-head h2 { font-size: 14px; font-weight: 600; }
+.panel-head h1 { font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
+.panel-head h2 { font-size: 15px; font-weight: 700; }
 .panel-actions { display: flex; align-items: center; gap: 8px; }
 
 .split { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
 
+/* Pilule plutôt que coin carré : au même rayon que les cartes, un bouton rectangulaire aurait
+   détonné à côté d'elles. La distinction entre actions passe par le remplissage (`.primary`),
+   jamais par la forme. */
 button, .ghost {
   font: inherit;
-  border-radius: var(--radius-sm);
+  font-weight: 600;
+  border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--ink);
-  padding: 7px 12px;
+  padding: 8px 16px;
   cursor: pointer;
+  transition: border-color .12s ease, box-shadow .12s ease;
 }
 button:hover:not(:disabled), a.ghost:hover { border-color: var(--ink-3); }
 button:disabled { opacity: .5; cursor: not-allowed; }
@@ -299,10 +320,10 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 16%);
 }
-.primary:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 2px 6px rgb(0 0 0 / 16%); }
+.primary:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 6px 16px rgb(0 0 0 / 20%); }
 .danger { color: var(--danger); }
 
 :where(button, a, input, textarea, select, summary, tr.clickable):focus-visible {
@@ -433,8 +454,8 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
 .kpi {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 16px;
+  gap: 4px;
+  padding: 18px 20px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-left: 3px solid var(--line);
@@ -442,14 +463,22 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
   box-shadow: var(--shadow);
   text-decoration: none;
   color: inherit;
+  transition: box-shadow .12s ease, transform .12s ease, border-color .12s ease;
 }
-.kpi:hover { border-color: var(--ink-3); }
-.kpi[data-state="WARNING"] { border-left-color: var(--warn); }
-.kpi[data-state="ERROR"] { border-left-color: var(--danger); }
-.kpi[data-state="PENDING"] { border-left-color: var(--pending); }
-.kpi-label { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+.kpi:hover { border-color: var(--ink-3); box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+/* Le liseré annonçait déjà l'état ; le fond du bloc le reprend maintenant en douceur — jamais
+   la seule couleur pleine, qui friserait l'alerte pour un simple avertissement. Un KPI sans état
+   déclaré (`OK`, ou rien à signaler) garde le fond neutre : lui inventer une teinte affirmerait
+   une mesure qui n'a pas été prise. */
+.kpi[data-state="WARNING"] { border-left-color: var(--warn); background: var(--warn-soft); }
+.kpi[data-state="ERROR"] { border-left-color: var(--danger); background: var(--danger-soft); }
+.kpi[data-state="PENDING"] { border-left-color: var(--pending); background: var(--pending-soft); }
+.kpi-label { font-size: 11px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+.kpi[data-state="WARNING"] .kpi-label { color: var(--warn); }
+.kpi[data-state="ERROR"] .kpi-label { color: var(--danger); }
+.kpi[data-state="PENDING"] .kpi-label { color: var(--pending); }
 .kpi-value-line { display: flex; align-items: baseline; gap: 6px; }
-.kpi-value { font: 700 28px/1.1 var(--mono); letter-spacing: -.02em; }
+.kpi-value { font: 700 30px/1.1 var(--mono); letter-spacing: -.02em; }
 .kpi-mark { font-family: var(--mono); font-size: 15px; }
 .kpi[data-state="WARNING"] .kpi-mark { color: var(--warn); }
 .kpi[data-state="ERROR"] .kpi-mark { color: var(--danger); }
@@ -530,16 +559,17 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 14px;
+  padding: 16px;
   background: var(--bg);
   border: 1px solid var(--line-soft);
   border-left: 3px solid var(--line);
   border-radius: var(--radius-sm);
+  transition: box-shadow .12s ease;
 }
-.card[data-state="WARNING"] { border-left-color: var(--warn); }
-.card[data-state="ERROR"] { border-left-color: var(--danger); }
-.card[data-state="OK"] { border-left-color: var(--ok); }
-.card[data-state="PENDING"] { border-left-color: var(--pending); }
+.card[data-state="WARNING"] { border-left-color: var(--warn); background: var(--warn-soft); }
+.card[data-state="ERROR"] { border-left-color: var(--danger); background: var(--danger-soft); }
+.card[data-state="OK"] { border-left-color: var(--ok); background: var(--ok-soft); }
+.card[data-state="PENDING"] { border-left-color: var(--pending); background: var(--pending-soft); }
 .card header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .card header h3 { margin: 0; font-size: 14px; flex: 1; min-width: 0; }
 .card header .time { font: 12px var(--mono); color: var(--ink-3); }
@@ -854,7 +884,7 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
     gap: 10px;
   }
   .rail nav { flex-direction: row; overflow-x: auto; scrollbar-width: none; }
-  .rail nav hr { display: none; }
+  .rail nav hr, .nav-section { display: none; }
   .nav-item { white-space: nowrap; }
   .brand, .rail-foot { display: none; }
   .topbar { position: sticky; top: 0; z-index: 20; }
