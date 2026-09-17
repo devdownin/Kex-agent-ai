@@ -704,11 +704,24 @@ suite de tests sans un mot, puisque `CycleAnalysisTest` ne fabrique que des rép
 qu'aucune CI ne doit joindre par principe (voir `SupervisionCycleIntegrationTest`, qui simule le
 modèle pour cette même raison). `@Tag("eval")`, exclu de `./mvnw verify` (`excludedGroups` dans
 `pom.xml`) ; `@EnabledIfEnvironmentVariable` le fait taire proprement sans clé plutôt que
-d'échouer. Il rejoue le risque documenté plus haut avec un `FakeMcpServer` scripté pour l'occasion
-(`withToolsList` / `withToolCallResult`, additions rétrocompatibles) : un relevé de lag Kafka
-arrêté avant la fin sur le topic qui concerne justement le processus surveillé, et l'assertion
-porte sur `ProcessSnapshot.coverage()` — ce que le modèle a réellement recopié — pas sur l'état
-final, que le code sait de toute façon corriger si le modèle a bien rendu la couverture.
+d'échouer. Chaque scénario rejoue un risque documenté plus haut avec un `FakeMcpServer` scripté
+pour l'occasion (`withToolsList` / `withToolCallResult`, additions rétrocompatibles) :
+
+- un relevé de lag Kafka arrêté avant la fin sur le topic qui concerne justement le processus
+  surveillé, l'assertion portant sur `ProcessSnapshot.coverage()` — ce que le modèle a réellement
+  recopié — pas sur l'état final, que le code sait de toute façon corriger si le modèle a bien
+  rendu la couverture ;
+- une mesure explicitement non prise (`measured: false`) sur une couverture par ailleurs
+  complète, pour vérifier que le modèle ne la lit pas comme un retard nul et ne rend donc pas
+  `OK` sur ce seul processus ;
+- un verdict d'outil (`STALLED`) porté par un chiffre de lag trompeusement petit, pour vérifier
+  que le modèle suit le verdict plutôt que de réinterpréter le nombre — l'anomalie doit sortir
+  malgré le chiffre rassurant.
+
+Un modèle qui a agi seul (voir `SupervisionScheduler`) et se trompe sur l'un de ces trois cas se
+trompe en production, sans personne pour le relire avant que l'action ne parte : ces trois-là, pas
+un seul, sont ce qu'un changement de modèle ou de prompt doit rejouer avant de partir en
+production.
 
 À rejouer à la main après un changement de modèle ou de prompt système de supervision :
 
@@ -1069,7 +1082,7 @@ n'entre dans la chaîne de build, la même contrainte que pour le reste de la co
 | `ApiKeyAuthFilterTest` | Principal nommé par jeton, jeton historique, jeton inconnu ou en-tête absent |
 | `ApiKeyPrincipalTest` | Deux opérateurs nommés distincts dans l'audit de supervision |
 | `LlmProviderTest` (cache) | Le préfixe de propriété du cache Anthropic est le bon, jusqu'au `ChatModel` réellement construit |
-| `ModelJudgmentEvalTest` *(`@Tag("eval")`, hors `verify`)* | Le modèle configuré recopie une couverture qu'il sait incomplète plutôt que de conclure à tort — un vrai appel au fournisseur, à la main |
+| `ModelJudgmentEvalTest` *(`@Tag("eval")`, hors `verify`)* | Trois jugements du modèle configuré, à la main sur un vrai appel au fournisseur : couverture incomplète recopiée plutôt que masquée, mesure absente non lue comme un zéro, verdict d'outil suivi plutôt qu'un chiffre réinterprété |
 | `RecordingToolCallbackProviderTest` (balisage) | Chaque résultat d'outil part balisé `<tool_result untrusted>`, y compris sans collecteur et sur l'appel à un seul argument |
 | `RateLimitTest` (par clé) | Deux clés nommées ont chacune leur seau ; l'une épuisée n'affame pas l'autre |
 | `SupervisionServiceTest` (verrou, trace, disjoncteurs) | Une seconde approbation concurrente échoue avec `DecisionInProgressException` sans exécuter deux fois l'action ; `AuditEntry.traceId` reprend la trace en cours ou reste `null` hors d'une trace ; `AgentStatus.circuitBreakers` liste les disjoncteurs connus |
