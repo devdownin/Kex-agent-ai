@@ -42,6 +42,7 @@ const DECISION_LABELS = {
   FAILED: 'Échec',
   EXPIRED: 'Expirée sans réponse',
   BLOCKED: 'Recommandation seule',
+  SIMULATED: 'Simulée (aucun outil lié)',
 };
 
 const DECISION_STATES = {
@@ -51,6 +52,7 @@ const DECISION_STATES = {
   FAILED: 'ERROR',
   EXPIRED: 'WARNING',
   BLOCKED: 'WARNING',
+  SIMULATED: 'WARNING',
 };
 
 const AGENT_STATES = {
@@ -91,6 +93,7 @@ export async function overview() {
   try {
     const data = await refresh();
     host.replaceChildren(kpis(data));
+    $('#incident-banner').replaceChildren(...incidentBanners(data.incidents));
     $('#overview-processes').replaceChildren(processTable(data.processes, openProcess, 8, COMPACT));
     $('#overview-attention').replaceChildren(attention(data));
     // Un panneau qui attend une décision n'a pas à ressembler à un panneau qui n'a rien à signaler.
@@ -144,6 +147,20 @@ function kpi(label, value, detail, href, state) {
   valueLine.append(el('strong', 'kpi-value', value));
   card.append(el('span', 'kpi-label', label), valueLine, el('span', 'kpi-detail', detail));
   return card;
+}
+
+/**
+ * Plusieurs processus distincts en anomalie au même cycle, groupés en un seul signal — voir
+ * SupervisionService.incidents. Une heuristique grossière et assumée : la seule concomitance,
+ * jamais une cause établie, ce que le libellé dit explicitement plutôt que de suggérer un diagnostic.
+ */
+function incidentBanners(incidents) {
+  return (incidents || []).map((incident) => {
+    const banner = el('p', incident.severity === 'ERROR' ? 'banner danger' : 'banner');
+    banner.append(`Incident probable : ${incident.processCount} processus en anomalie au même cycle `
+      + `(${incident.processNames.join(', ')}) — signale une cause commune possible, pas un diagnostic.`);
+    return banner;
+  });
 }
 
 function attention(data) {
@@ -290,6 +307,7 @@ function coverageReason(coverage) {
 function openProcess(row) {
   const data = current();
   const alerts = (data?.alerts || []).filter((alert) => alert.processId === row.processId);
+  const maintenance = (data?.maintenance || []).find((window) => window.processId === row.processId);
   const body = frag(
     definition('État', stateTag(row.state)),
     definition('Dernière exécution', el('span', null, stamp(row.lastRun))),
@@ -305,6 +323,16 @@ function openProcess(row) {
       + 'présence, jamais une absence — l’état est donc inconnu, pas sain.');
     extra.append(banner);
   }
+
+  extra.append(el('h3', 'drawer-sub', 'Tendance'));
+  const trend = el('div');
+  trend.append(el('p', 'muted', 'Chargement…'));
+  extra.append(trend);
+  loadProcessTrend(row.processId, trend);
+
+  extra.append(el('h3', 'drawer-sub', 'Maintenance'));
+  extra.append(maintenanceControls(row, maintenance));
+
   if (alerts.length) {
     extra.append(el('h3', 'drawer-sub', 'Alertes actives'));
     alerts.forEach((alert) => extra.append(alertCard(alert)));
@@ -313,6 +341,63 @@ function openProcess(row) {
   }
   setParams({ processus: row.processId, alerte: null, decision: null }, true);
   openDrawer(row.name, frag(body, extra));
+}
+
+/** Un point par cycle qui a relevé ce processus précis — voir SupervisionService.processHistory. */
+async function loadProcessTrend(processId, host) {
+  try {
+    const points = await api(`${BASE}/processes/${encodeURIComponent(processId)}/history`);
+    const chronological = [...points].reverse();
+    const graphic = sparkline(chronological.map((point) => point.delayMillis));
+    host.replaceChildren(graphic
+      ? frag(el('span', 'muted', `Retard sur les ${chronological.length} derniers relevés · `), graphic)
+      : empty('Pas encore de tendance.', 'Il faut au moins deux relevés pour en tracer une.'));
+  } catch (error) {
+    host.replaceChildren(errorState(error));
+  }
+}
+
+/**
+ * Un déploiement connu ne doit pas se lire comme un incident : pendant la fenêtre, ce processus ne
+ * produit ni alerte ni décision, même en anomalie réelle — son état relevé reste affiché tel quel.
+ */
+function maintenanceControls(row, maintenance) {
+  const wrap = el('div');
+  if (maintenance) {
+    wrap.append(el('p', null, `En maintenance jusqu’à ${stamp(maintenance.until)}`
+      + (maintenance.reason ? ` — ${maintenance.reason}` : '')));
+    const end = el('button', 'ghost', 'Lever la maintenance');
+    end.type = 'button';
+    end.addEventListener('click', () => busy(end, async () => {
+      try {
+        await api(`${BASE}/processes/${encodeURIComponent(row.processId)}/maintenance`, { method: 'DELETE' });
+        toast('Maintenance levée');
+        dismissDrawer();
+        await refresh();
+      } catch (error) {
+        report(error);
+      }
+    }));
+    wrap.append(end);
+    return wrap;
+  }
+  wrap.append(el('p', 'hint', 'Pendant une fenêtre de maintenance, ce processus ne produit ni '
+    + 'alerte ni décision — son état réel reste affiché.'));
+  const declare = el('button', 'ghost', 'Mettre en maintenance (2 h)');
+  declare.type = 'button';
+  declare.addEventListener('click', () => busy(declare, async () => {
+    try {
+      await api(`${BASE}/processes/${encodeURIComponent(row.processId)}/maintenance`,
+        { method: 'POST', body: { duration: 'PT2H', reason: 'Déclarée depuis la console' } });
+      toast('Maintenance déclarée pour 2 h');
+      dismissDrawer();
+      await refresh();
+    } catch (error) {
+      report(error);
+    }
+  }));
+  wrap.append(declare);
+  return wrap;
 }
 
 /* ── Anomalies et décisions ────────────────────────────────────────────── */
@@ -369,6 +454,10 @@ function openAnomaly(anomaly) {
   body.append(el('p', null, anomaly.analysis || 'Aucune analyse fournie.'));
   if (anomaly.probableCause) {
     body.append(el('p', 'muted', `Cause probable : ${anomaly.probableCause}`));
+  }
+  if (anomaly.knowledgeReference) {
+    // Rapporté tel quel : le modèle cite, rien ici ne vérifie ni ne retrouve la note elle-même.
+    body.append(el('p', 'muted', `Connaissance mobilisée : ${anomaly.knowledgeReference}`));
   }
 
   body.append(el('h3', 'drawer-sub', 'Confiance'));
@@ -728,6 +817,7 @@ export async function performance() {
         ['Réussies', data.actionsExecuted],
         ['En échec', data.actionsFailed, data.actionsFailed ? 'ko' : null],
         ['Bloquées par la politique', data.actionsBlocked],
+        ['Simulées (aucun outil lié)', data.actionsSimulated],
         ['Délai moyen de dénouement', duration(data.averageResolutionMillis)],
       ]));
 

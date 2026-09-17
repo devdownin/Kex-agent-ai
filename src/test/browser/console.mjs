@@ -89,6 +89,26 @@ function cycleStub(id, anomaliesDetected) {
   };
 }
 
+/** Le strict nécessaire pour que overview() (supervision.js) rende la vue d'ensemble. */
+function overviewStub(overrides = {}) {
+  const now = new Date().toISOString();
+  return {
+    agent: {
+      state: 'OPERATIONAL', mode: 'SUPERVISED', paused: false, cycleInProgress: false,
+      lastCycleAt: now, lastCycleId: 'c1', staleSince: null, policyVersion: 'policy-v1',
+      confidenceThreshold: 0.85, stateReason: null, circuitBreakers: [],
+    },
+    processesMonitored: 1, processesOk: 0, processesWarning: 1, processesError: 0, processesUnknown: 0,
+    anomaliesDetected: 0, pendingApprovals: 0,
+    processes: [{
+      processId: 'order-integration', name: 'Order Integration', state: 'WARNING', lastRun: now,
+      durationMillis: 1200, delayMillis: 90000, note: 'Retard', coverage: { complete: true, stopReason: 'EXHAUSTED' },
+    }],
+    alerts: [], pending: [], lastCycle: null, maintenance: [], incidents: [],
+    ...overrides,
+  };
+}
+
 await page.goto(`${BASE}/#/settings`, { waitUntil: 'networkidle' });
 await page.waitForSelector('dialog[open]');
 await page.fill('#api-key', TOKEN);
@@ -404,6 +424,71 @@ await check('un échange retrouvé dans l’historique se réaffiche sans rejoue
     const turns = await page.$$eval('#transcript li', (nodes) => nodes.length);
     assert.equal(turns, 2, 'la reprise doit réafficher le tour utilisateur et la réponse');
     await page.unroute('**/api/agent/chat');
+  });
+
+await check('plusieurs processus en anomalie au même cycle affichent un incident corrélé', async () => {
+  await page.route('**/api/agent/supervision/overview', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify(overviewStub({
+      incidents: [{
+        cycleId: 'c1', detectedAt: new Date().toISOString(), processCount: 3,
+        processNames: ['Order Integration', 'Billing', 'Shipping'], severity: 'ERROR', titles: ['Retard'],
+      }],
+    })),
+  }));
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#incident-banner .banner');
+  const text = await page.$eval('#incident-banner .banner', (node) => node.textContent);
+  assert.match(text, /Incident probable/);
+  assert.match(text, /3 processus/);
+  await page.unroute('**/api/agent/supervision/overview');
+});
+
+await check('un processus se met en maintenance, et une fenêtre active propose de la lever',
+  async () => {
+    await page.route('**/api/agent/supervision/overview', (route) => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify(overviewStub()),
+    }));
+    await page.route('**/api/agent/supervision/processes/order-integration/history', (route) => route.fulfill({
+      status: 200, contentType: 'application/json', body: '[]',
+    }));
+    let declared = false;
+    await page.route('**/api/agent/supervision/processes/order-integration/maintenance', (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      declared = true;
+      return route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ processId: 'order-integration', processName: 'Order Integration',
+          until: new Date(Date.now() + 7200000).toISOString(), reason: 'Déclarée depuis la console',
+          declaredBy: 'ci-secret' }),
+      });
+    });
+
+    await page.goto(`${BASE}/#/overview`, { waitUntil: 'networkidle' });
+    await page.click('#overview-processes table.grid tbody tr');
+    await page.waitForSelector('#drawer:not([hidden])');
+    await page.click('#drawer-body button:has-text("Mettre en maintenance")');
+    await page.waitForSelector('#toasts .toast');
+    assert.ok(declared, 'la déclaration de maintenance doit appeler l’endpoint dédié');
+
+    // Un second passage, avec la fenêtre déjà active : le panneau doit proposer de la lever.
+    await page.unroute('**/api/agent/supervision/overview');
+    await page.route('**/api/agent/supervision/overview', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify(overviewStub({
+        maintenance: [{ processId: 'order-integration', processName: 'Order Integration',
+          until: new Date(Date.now() + 3600000).toISOString(), reason: 'Déploiement', declaredBy: 'x' }],
+      })),
+    }));
+    await page.goto(`${BASE}/#/overview`, { waitUntil: 'networkidle' });
+    await page.click('#overview-processes table.grid tbody tr');
+    await page.waitForSelector('#drawer:not([hidden])');
+    const buttons = await page.$$eval('#drawer-body button', (nodes) => nodes.map((n) => n.textContent));
+    assert.ok(buttons.some((text) => text.includes('Lever la maintenance')));
+
+    await page.unroute('**/api/agent/supervision/overview');
+    await page.unroute('**/api/agent/supervision/processes/order-integration/history');
+    await page.unroute('**/api/agent/supervision/processes/order-integration/maintenance');
   });
 
 await check('aucune erreur de script sur le parcours', () => {

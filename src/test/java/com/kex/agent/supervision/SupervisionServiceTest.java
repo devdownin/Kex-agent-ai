@@ -38,7 +38,7 @@ import static org.mockito.Mockito.when;
 class SupervisionServiceTest {
 
     private static final MonitoredProcess ORDERS =
-            new MonitoredProcess("order-integration", "Order Integration", "Commandes", "topic integration.events");
+            new MonitoredProcess("order-integration", "Order Integration", "Commandes", "topic integration.events", null);
 
     private final AgentService agentService = mock(AgentService.class);
     private final McpToolCatalog toolCatalog = mock(McpToolCatalog.class);
@@ -742,6 +742,161 @@ class SupervisionServiceTest {
         assertThat(service.policy().version()).isEqualTo("policy-v1");
     }
 
+    /* ── Fenêtres de maintenance ───────────────────────────────────────── */
+
+    @Test
+    void une_fenetre_de_maintenance_tait_l_alerte_et_la_decision_sans_fausser_l_etat() {
+        analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.9));
+        SupervisionService service = service(properties(List.of(ORDERS),
+                Map.of(Capability.RESTART_CONSUMER, Autonomy.SUPERVISED), Map.of()));
+
+        service.declareMaintenance("order-integration", Duration.ofHours(2), "Déploiement", "opérateur");
+        service.runCycle("test");
+
+        assertThat(service.alerts()).isEmpty();
+        assertThat(service.decisions()).isEmpty();
+        // La maintenance mute l'alerte et la décision, jamais l'observation : l'état relevé reste
+        // celui que le modèle a rendu, pas un état inventé pour la circonstance.
+        assertThat(service.snapshots()).singleElement()
+                .extracting(ProcessSnapshot::state).isEqualTo(ProcessState.WARNING);
+    }
+
+    @Test
+    void une_fenetre_de_maintenance_levee_laisse_repartir_les_decisions() {
+        analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.9));
+        SupervisionService service = service(properties(List.of(ORDERS),
+                Map.of(Capability.RESTART_CONSUMER, Autonomy.SUPERVISED), Map.of()));
+        service.declareMaintenance("order-integration", Duration.ofHours(2), "Déploiement", "opérateur");
+
+        service.endMaintenance("order-integration", "opérateur");
+        service.runCycle("test");
+
+        assertThat(service.alerts()).hasSize(1);
+    }
+
+    @Test
+    void une_maintenance_sur_un_processus_inconnu_ne_se_devine_pas() {
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        assertThatThrownBy(() -> service.declareMaintenance("inexistant", Duration.ofHours(1), null, "x"))
+                .isInstanceOf(UnknownProcessException.class);
+    }
+
+    @Test
+    void l_apercu_liste_les_fenetres_de_maintenance_actives() {
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        service.declareMaintenance("order-integration", Duration.ofHours(1), "Déploiement", "opérateur");
+
+        assertThat(service.overview().maintenance()).singleElement()
+                .extracting(MaintenanceWindow::processId).isEqualTo("order-integration");
+    }
+
+    /* ── Incidents corrélés ────────────────────────────────────────────── */
+
+    @Test
+    void plusieurs_processus_en_anomalie_au_meme_cycle_forment_un_incident_correle() {
+        MonitoredProcess billing = new MonitoredProcess("billing", "Billing", null, null, null);
+        MonitoredProcess shipping = new MonitoredProcess("shipping", "Shipping", null, null, null);
+        analysisReturns(Map.of("processes", List.of(), "anomalies", List.of(
+                anomalyRow("order-integration", "Retard"), anomalyRow("billing", "Retard"),
+                anomalyRow("shipping", "Retard"))));
+        SupervisionService service = service(properties(List.of(ORDERS, billing, shipping), Map.of(), Map.of()));
+
+        service.runCycle("test");
+
+        assertThat(service.incidents()).singleElement().satisfies(incident -> {
+            assertThat(incident.processCount()).isEqualTo(3);
+            assertThat(incident.processNames())
+                    .containsExactlyInAnyOrder("Order Integration", "Billing", "Shipping");
+        });
+    }
+
+    @Test
+    void deux_processus_en_anomalie_ne_suffisent_pas_a_un_incident_correle() {
+        MonitoredProcess billing = new MonitoredProcess("billing", "Billing", null, null, null);
+        analysisReturns(Map.of("processes", List.of(),
+                "anomalies", List.of(anomalyRow("order-integration", "A"), anomalyRow("billing", "B"))));
+        SupervisionService service = service(properties(List.of(ORDERS, billing), Map.of(), Map.of()));
+
+        service.runCycle("test");
+
+        assertThat(service.incidents()).isEmpty();
+    }
+
+    /* ── Simulation d'une capacité sans outil lié ─────────────────────── */
+
+    @Test
+    void une_capacite_sans_outil_lie_se_simule_plutot_que_d_echouer_quand_demande() {
+        analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.9));
+        SupervisionProperties base = properties(List.of(ORDERS),
+                Map.of(Capability.RESTART_CONSUMER, Autonomy.SUPERVISED), Map.of());
+        SupervisionService service = service(simulating(base));
+        service.runCycle("test");
+        String id = service.pending().getFirst().id();
+
+        Decision approved = service.approve(id, "opérateur");
+
+        assertThat(approved.status()).isEqualTo(DecisionStatus.SIMULATED);
+        assertThat(approved.result()).contains("Simulée");
+    }
+
+    /* ── Note de connaissance citée par le modèle ──────────────────────── */
+
+    @Test
+    void une_note_de_connaissance_citee_par_le_modele_se_retrouve_sur_l_alerte() {
+        analysisReturns(Map.of("processes", List.of(), "anomalies", List.of(
+                Map.of("processId", "order-integration", "title", "Retard", "severity", "WARNING",
+                        "confidence", 0.8, "knowledgeReference", "Runbook consumer-lag-2024"))));
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        service.runCycle("test");
+
+        assertThat(service.alerts()).singleElement()
+                .extracting(Alert::knowledgeReference).isEqualTo("Runbook consumer-lag-2024");
+    }
+
+    /* ── Seuils par processus ──────────────────────────────────────────── */
+
+    @Test
+    void un_processus_avec_seuils_propres_les_recite_dans_le_prompt() {
+        MonitoredProcess noisy = new MonitoredProcess("noisy", "Noisy", null, null,
+                new ThresholdOverrides(5000L, null, null, null, null));
+        analysisReturns(Map.of("processes", List.of(), "anomalies", List.of()));
+        SupervisionService service = service(properties(List.of(noisy), Map.of(), Map.of()));
+
+        service.runCycle("test");
+
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        verify(agentService).askStructured(anyString(), prompt.capture(), any());
+        assertThat(prompt.getValue()).contains("seuils propres à ce processus").contains("5000");
+    }
+
+    /* ── Historique par processus ──────────────────────────────────────── */
+
+    @Test
+    void l_historique_d_un_processus_suit_son_etat_a_travers_les_cycles() {
+        analysisReturns(Map.of("processes",
+                List.of(Map.of("processId", "order-integration", "state", "OK")), "anomalies", List.of()));
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+        service.runCycle("test");
+        clock.advance(Duration.ofMinutes(5));
+        analysisReturns(Map.of("processes", List.of(Map.of("processId", "order-integration",
+                "state", "WARNING", "delayMillis", 90_000)), "anomalies", List.of()));
+        service.runCycle("test");
+
+        assertThat(service.processHistory("order-integration")).hasSize(2)
+                .extracting(ProcessHistoryPoint::state)
+                .containsExactly(ProcessState.WARNING, ProcessState.OK);
+    }
+
+    @Test
+    void l_historique_d_un_processus_inconnu_ne_se_devine_pas() {
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        assertThatThrownBy(() -> service.processHistory("inexistant")).isInstanceOf(UnknownProcessException.class);
+    }
+
     /* ── Outillage ─────────────────────────────────────────────────────── */
 
     private SupervisionService service(SupervisionProperties properties) {
@@ -800,7 +955,20 @@ class SupervisionServiceTest {
         return new SupervisionProperties(true, processes, mode, 0.85, thresholds(),
                 autonomy, floors, actions, 200, Duration.ofMinutes(30), Duration.ofMinutes(15),
                 new SupervisionProperties.Schedule(false, Duration.ofMinutes(5), Duration.ofMinutes(10)),
-                new SupervisionProperties.AutoAdjust(true, 5, 0.5, 0.05));
+                new SupervisionProperties.AutoAdjust(true, 5, 0.5, 0.05),
+                new SupervisionProperties.Correlation(true, 3), false);
+    }
+
+    /** Même politique, {@code simulateUnboundActions} activé — un seul cas en a besoin. */
+    private static SupervisionProperties simulating(SupervisionProperties base) {
+        return new SupervisionProperties(base.enabled(), base.processes(), base.mode(),
+                base.confidenceThreshold(), base.thresholds(), base.autonomy(), base.confidenceThresholds(),
+                base.actions(), base.historySize(), base.approvalTimeout(), base.staleAfter(),
+                base.schedule(), base.autoAdjust(), base.correlation(), true);
+    }
+
+    private static Map<String, Object> anomalyRow(String processId, String title) {
+        return Map.of("processId", processId, "title", title, "severity", "WARNING", "confidence", 0.8);
     }
 
     /** Horloge pilotable : l'expiration et la péremption se testent en avançant, pas en attendant. */

@@ -56,7 +56,17 @@ public record SupervisionProperties(
 
         @DefaultValue Schedule schedule,
 
-        @DefaultValue AutoAdjust autoAdjust) {
+        @DefaultValue AutoAdjust autoAdjust,
+
+        @DefaultValue Correlation correlation,
+
+        /**
+         * Une capacité sans outil MCP lié échoue par défaut ({@code FAILED}) plutôt que de
+         * s'exécuter à moitié. Ce drapeau la laisse à la place se résoudre en {@code SIMULATED} —
+         * ce que l'agent aurait fait, sans le faire — pour calibrer la confiance et l'autonomie
+         * avant qu'un exécuteur réel n'existe.
+         */
+        @DefaultValue("false") boolean simulateUnboundActions) {
 
     /**
      * Départ autonome du cycle, sans clic. Non actif par défaut, et actif seulement sous le profil
@@ -91,5 +101,16 @@ public record SupervisionProperties(
                              @DefaultValue("5") int minSamples,
                              @DefaultValue("0.5") double minRelevance,
                              @DefaultValue("0.05") double increment) {
+    }
+
+    /**
+     * Plusieurs processus distincts en anomalie au même cycle se lisent comme une cause commune —
+     * voir {@link CorrelatedIncident}. Une heuristique volontairement grossière : la seule
+     * concomitance, rien de plus.
+     *
+     * @param minProcesses nombre de processus distincts en anomalie dans le même cycle à partir
+     *                     duquel un incident corrélé est signalé
+     */
+    public record Correlation(@DefaultValue("true") boolean enabled, @DefaultValue("3") int minProcesses) {
     }
 }

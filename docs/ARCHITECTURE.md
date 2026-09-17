@@ -267,8 +267,9 @@ bouton Retour qui le referme, panneau rouvert depuis son adresse, filtre qui sur
 rechargement, bandeau hors ligne, tableau compact qui signale qu'il défile, arguments hors schéma
 refusés sans appel réseau, export CSV qui déclenche un téléchargement, sélection groupée qui
 approuve chaque décision cochée, tendance tracée dès deux cycles connus, diff avant/après sur une
-mise à jour de politique, reprise d'une conversation depuis l'historique local, et aucune erreur de
-script sur le parcours.
+mise à jour de politique, reprise d'une conversation depuis l'historique local, un incident corrélé
+affiché en bannière, une fenêtre de maintenance déclarée puis proposée à la levée, et aucune erreur
+de script sur le parcours.
 
 Playwright n'est pas une dépendance du projet : le job de CI l'installe hors de l'arborescence et
 son chemin arrive par `PLAYWRIGHT_MODULE`. Un `package.json` à la racine ferait vivre une seconde
@@ -677,6 +678,73 @@ redémarrer un consumer, eux, n'ont pas de forme générique possible. Un webhoo
 (Slack, Teams, tout collecteur qui en accepte un) couvre ce seul cas. Sans URL configurée, l'appel
 échoue en le disant, exactement comme l'absence d'outil MCP pour les autres capacités — aucun appel
 réseau n'est tenté.
+
+### Une capacité sans outil lié peut se simuler plutôt qu'échouer
+
+`kex.agent.supervision.simulate-unbound-actions` (`false` par défaut) déplace le repli des autres
+capacités : au lieu de `FAILED` (« aucun outil MCP lié »), la décision se résout en `SIMULATED`
+(« aurait dû s'exécuter, sans le pouvoir »). Aucun appel n'est inventé — sans `ActionBinding`,
+il n'y a de toute façon aucun outil ni argument à nommer — seule la conséquence pour l'opérateur
+change : une capacité qu'on n'a pas encore câblée à un exécuteur réel arrête de s'accumuler dans
+les échecs, et l'agent tel qu'il aurait agi se lit dans `AgentPerformance.actionsSimulated` et
+`GET /decisions`, pour calibrer la confiance et l'autonomie avant qu'un exécuteur n'existe.
+Distinct de `FAILED` : un outil bien lié qui refuse l'appel reste un vrai échec.
+
+### Plusieurs processus en anomalie au même cycle : un incident, pas dix alertes
+
+Chaque alerte se déduplique déjà par processus et par titre (voir plus bas), mais rien ne
+rapprochait deux processus distincts touchés au même cycle — un broker en panne ou un cluster
+saturé se lisait alors comme une série d'incidents indépendants plutôt que comme un seul événement.
+`kex.agent.supervision.correlation.min-processes` (`3` par défaut) fixe le seuil : au-delà, `GET
+/api/agent/supervision/overview` porte un `CorrelatedIncident` en plus des alertes habituelles, que
+la vue d'ensemble affiche en bannière au-dessus des KPI.
+
+Une heuristique volontairement grossière, assumée comme telle jusque dans son libellé à l'écran :
+la seule concomitance dans un même cycle, jamais une cause établie. Deviner une causalité précise à
+partir d'une simple simultanéité serait plus trompeur que de ne rien dire.
+
+### Une fenêtre de maintenance mute l'alerte et la décision, jamais l'observation
+
+`POST /api/agent/supervision/processes/{id}/maintenance` (`{"duration":"PT2H","reason":"..."}`) et
+son pendant `DELETE` déclarent une intention passagère, en mémoire du processus comme la pause de
+l'agent — pas une propriété à redéployer pour un déploiement qu'on n'a pas anticipé au démarrage.
+
+Pendant la fenêtre, les anomalies du processus couvert n'entrent ni dans `alerts()` ni dans les
+décisions prises : un déploiement connu ne doit pas se lire comme un incident, ni déclencher une
+validation humaine pour un symptôme déjà expliqué. `ProcessSnapshot` continue en revanche d'être
+relevé et affiché normalement — la fenêtre tait la suite (alerte, décision), jamais le constat :
+un état inventé pour la circonstance serait pire que le bruit qu'elle évite. Si le lag persiste une
+fois la fenêtre expirée, le cycle suivant le redécouvre sans qu'il ait jamais été caché.
+
+### Un processus peut durcir ses propres seuils de détection
+
+`kex.agent.supervision.processes[].thresholds` (voir `ThresholdOverrides`) recouvre, champ par
+champ, les seuils globaux de la politique pour ce seul processus — un champ omis hérite du seuil
+global, `Thresholds.withOverrides` s'en charge. Un processus à faible trafic et un à fort débit
+partageaient jusqu'ici les mêmes seuils, trop sensibles pour l'un ou trop laxistes pour l'autre. Le
+prompt récite les seuils propres à chaque processus qui en déclare, et rappelle que les seuils par
+défaut restent la référence pour tous les autres.
+
+### Une note de connaissance citée, jamais vérifiée mécaniquement
+
+Le `ChatClient` qui sert le cycle de supervision porte déjà le `QuestionAnswerAdvisor` de la base
+de connaissance quand `kex.agent.knowledge.enabled` l'active — un document ingéré pèse donc déjà
+sur l'analyse. Rien ne disait en revanche sur quel document elle s'était appuyée : une
+recommandation fondée restait aussi opaque qu'une recommandation inventée. Le schéma d'anomalie
+porte désormais `knowledgeReference`, que le prompt demande d'omettre plutôt que d'inventer une
+citation. Rapportée telle quelle sur `Anomaly`/`Alert` : ni vérifiée, ni retrouvée mécaniquement
+dans le magasin vectoriel — un modèle qui l'invente reste possible, au même titre que le reste de
+sa sortie structurée (voir « Un éval, pas un test » plus bas).
+
+### La tendance d'un processus, pas seulement celle de l'agent
+
+`GET /cycles` porte l'historique de l'agent (nombre d'anomalies, de décisions), mais rien ne
+gardait l'évolution d'un processus précis à travers les cycles. `SupervisionService` conserve
+désormais un instantané des relevés à chaque cycle (`SnapshotSet`, borné comme les autres
+historiques) ; `GET /api/agent/supervision/processes/{id}/history` en extrait la série propre à un
+processus. Le panneau qui lui est déjà consacré y trace une mini-tendance du retard observé, sur le
+même composant `sparkline` que la tendance de l'agent — silencieuse en dessous de deux relevés,
+pour la même raison qu'ailleurs : pas de droite tracée sur un point isolé.
 
 ### Un plancher de confiance se durcit tout seul sur des refus répétés
 
@@ -1209,3 +1277,9 @@ class="dump">` à la fois.
 | `WebhookNotifierTest` | Contre un vrai serveur HTTP : succès, webhook qui refuse, absence de configuration sans appel réseau |
 | `TokenBudgetServiceTest` | Illimité à zéro, épuisement au plafond configuré, usage absent jamais compté, remise à zéro le lendemain |
 | `SupervisionServiceTest` (NOTIFY sans outil, budget, durcissement automatique) | Le repli webhook de NOTIFY et son échec ; un cycle non exécuté et l'état dégradé quand le budget est épuisé ; le plancher d'une capacité relevé après des refus majoritaires, jamais avec trop peu de verdicts ou une pertinence suffisante |
+| `ThresholdsTest` | `withOverrides` : un champ omis hérite du seuil global, un champ déclaré remplace le sien seul |
+| `SupervisionServiceTest` (maintenance) | Une fenêtre tait l'alerte et la décision sans fausser l'état relevé ; levée avant terme, les décisions repartent ; processus inconnu refusé ; l'aperçu liste les fenêtres actives |
+| `SupervisionServiceTest` (incidents corrélés) | Trois processus distincts en anomalie au même cycle forment un incident ; deux n'y suffisent pas |
+| `SupervisionServiceTest` (simulation, connaissance, seuils par processus, historique) | Une capacité sans outil lié se résout en `SIMULATED` quand demandé ; une note de connaissance citée se retrouve sur l'alerte ; un processus avec seuils propres les récite dans le prompt ; l'historique d'un processus suit son état à travers les cycles, refusé pour un processus inconnu |
+| `CycleAnalysisTest` (`knowledgeReference`) | Une note citée est reprise telle quelle ; son absence reste absente, jamais inventée |
+| `SupervisionControllerTest` (maintenance, historique) | Déclaration et levée d'une fenêtre, 404 sur un processus inconnu, contrat HTTP de la tendance par processus |

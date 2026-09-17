@@ -11,9 +11,12 @@ import java.util.List;
  *                    qu'elle se vérifie plutôt qu'elle ne se croie.
  * @param capability  l'action recommandée, {@code null} quand l'agent ne recommande rien d'autre
  *                    que de regarder
+ * @param knowledgeReference note de connaissance interne citée par le modèle à l'appui de son
+ *                    analyse, {@code null} sinon. Rapportée telle quelle : ni vérifiée ni retrouvée
+ *                    mécaniquement, un modèle qui l'invente reste possible — voir ARCHITECTURE.md
  */
 public record Anomaly(String id, String cycleId, String processId, String processName, String title,
                       ProcessState severity, List<Observation> observations, String analysis,
                       String probableCause, double confidence, String recommendation,
-                      Capability capability, Instant detectedAt) {
+                      Capability capability, Instant detectedAt, String knowledgeReference) {
 }

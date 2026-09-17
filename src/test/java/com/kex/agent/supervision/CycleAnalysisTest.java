@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CycleAnalysisTest {
 
     private static final List<MonitoredProcess> KNOWN =
-            List.of(new MonitoredProcess("orders", "Order Integration", null, null));
+            List.of(new MonitoredProcess("orders", "Order Integration", null, null, null));
 
     private static final Instant NOW = Instant.parse("2026-09-15T05:32:14Z");
 
@@ -221,6 +221,24 @@ class CycleAnalysisTest {
                 Map.of("processId", "orders", "title", "A", "capability", "REBOOT_EVERYTHING")));
 
         assertThat(CycleAnalysis.anomalies(answer, KNOWN, "c", NOW).getFirst().capability()).isNull();
+    }
+
+    @Test
+    void une_note_de_connaissance_citee_est_reprise_telle_quelle() {
+        Map<String, Object> answer = Map.of("anomalies", List.of(
+                Map.of("processId", "orders", "title", "Retard", "knowledgeReference", "Runbook-42")));
+
+        assertThat(CycleAnalysis.anomalies(answer, KNOWN, "c", NOW))
+                .singleElement().extracting(Anomaly::knowledgeReference).isEqualTo("Runbook-42");
+    }
+
+    @Test
+    void l_absence_de_note_de_connaissance_reste_absente_jamais_inventee() {
+        Map<String, Object> answer = Map.of("anomalies",
+                List.of(Map.of("processId", "orders", "title", "Retard")));
+
+        assertThat(CycleAnalysis.anomalies(answer, KNOWN, "c", NOW))
+                .singleElement().extracting(Anomaly::knowledgeReference).isNull();
     }
 
     @Test

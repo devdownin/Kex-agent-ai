@@ -45,7 +45,7 @@ class SupervisionControllerTest {
     void le_taux_de_pertinence_absent_se_rend_absent_et_non_a_zero() {
         // Un 0 sérialisé se lirait « l'agent se trompe toujours » là où personne n'a encore tranché.
         given(supervision.performance()).willReturn(new AgentPerformance(3, 0, 1200L, 5, 2, 4, 1, 0, 0,
-                null, 1, 0, 1, 0, null));
+                null, 1, 0, 1, 0, 0, null));
 
         assertThat(mvc.get().uri("/api/agent/supervision/performance"))
                 .hasStatusOk()
@@ -56,7 +56,7 @@ class SupervisionControllerTest {
     @Test
     void rend_la_vue_d_ensemble_en_une_requete() {
         given(supervision.overview()).willReturn(new Overview(status(AgentState.OPERATIONAL), 24, 23, 1, 0, 0,
-                3, 2, List.of(), List.of(), List.of(), null));
+                3, 2, List.of(), List.of(), List.of(), null, List.of(), List.of()));
         given(supervision.alerts()).willReturn(List.of());
 
         assertThat(mvc.get().uri("/api/agent/supervision/overview"))
@@ -192,6 +192,53 @@ class SupervisionControllerTest {
     }
 
     @Test
+    void declare_une_fenetre_de_maintenance() {
+        MaintenanceWindow window = new MaintenanceWindow("order-integration", "Order Integration",
+                NOW.plusSeconds(7200), "Déploiement", "opérateur");
+        given(supervision.declareMaintenance(eq("order-integration"), eq(Duration.ofHours(2)),
+                eq("Déploiement"), anyString())).willReturn(window);
+
+        assertThat(mvc.post().uri("/api/agent/supervision/processes/order-integration/maintenance")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"duration":"PT2H","reason":"Déploiement"}"""))
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.processId").isEqualTo("order-integration");
+    }
+
+    @Test
+    void leve_une_fenetre_de_maintenance() {
+        assertThat(mvc.delete().uri("/api/agent/supervision/processes/order-integration/maintenance"))
+                .hasStatus(HttpStatus.NO_CONTENT);
+
+        verify(supervision).endMaintenance(eq("order-integration"), anyString());
+    }
+
+    @Test
+    void une_maintenance_sur_un_processus_inconnu_rend_404() {
+        willThrow(new UnknownProcessException("x")).given(supervision)
+                .declareMaintenance(eq("x"), any(), any(), anyString());
+
+        assertThat(mvc.post().uri("/api/agent/supervision/processes/x/maintenance")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"duration":"PT1H"}"""))
+                .hasStatus(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void rend_la_tendance_d_un_processus() {
+        given(supervision.processHistory("order-integration")).willReturn(List.of(
+                new ProcessHistoryPoint("cycle-1", NOW, ProcessState.WARNING, 90_000L)));
+
+        assertThat(mvc.get().uri("/api/agent/supervision/processes/order-integration/history"))
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$[0].state").isEqualTo("WARNING");
+    }
+
+    @Test
     void met_en_pause_et_reprend() {
         given(supervision.pause(anyString())).willReturn(status(AgentState.PAUSED));
         given(supervision.resume(anyString())).willReturn(status(AgentState.OPERATIONAL));
@@ -207,7 +254,7 @@ class SupervisionControllerTest {
         given(supervision.snapshots()).willReturn(List.of());
         given(supervision.alerts()).willReturn(List.of());
         given(supervision.performance()).willReturn(new AgentPerformance(0, 0, null, 0, 0, 0, 0, 0, 0,
-                null, 0, 0, 0, 0, null));
+                null, 0, 0, 0, 0, 0, null));
         given(supervision.cycles()).willReturn(List.of());
         given(supervision.audit()).willReturn(List.of());
         given(supervision.decisions()).willReturn(List.of());

@@ -20,7 +20,7 @@ public record Alert(String id, String processId, String processName, String titl
                     ProcessState severity, int occurrences, Instant firstSeenAt, Instant lastSeenAt,
                     List<Observation> observations, String analysis, String probableCause,
                     double confidence, String recommendation, Capability capability,
-                    String pendingDecisionId) {
+                    String pendingDecisionId, String knowledgeReference) {
 
     /** Sépare deux titres identiques sur des processus différents, sans dépendre d'un compteur. */
     static String identity(String processId, String title) {

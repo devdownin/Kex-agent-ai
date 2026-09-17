@@ -77,6 +77,34 @@ qu'un cycle puisse partir sans qu'un humain clique :
 | `auto-adjust.min-samples` | `5` | Verdicts humains minimum avant de tirer une conclusion |
 | `auto-adjust.min-relevance` | `0.5` | En-deçà de ce taux d'approbation, le plancher est relevé |
 | `auto-adjust.increment` | `0.05` | Ce qui est ajouté à chaque relèvement, jamais au-delà de `1.0` |
+| `correlation.enabled` | `true` | Signale un incident corrélé quand plusieurs processus sont en anomalie au même cycle |
+| `correlation.min-processes` | `3` | Nombre de processus distincts à partir duquel la concomitance est signalée — une heuristique grossière, pas un diagnostic |
+| `simulate-unbound-actions` | `false` | Une capacité sans outil MCP lié se résout en `SIMULATED` plutôt qu'en `FAILED` — ce que l'agent aurait fait, sans le faire, pour calibrer la confiance avant qu'un exécuteur réel n'existe |
+
+### `kex.agent.supervision.processes[].thresholds`
+
+Seuils propres à un processus précis, en plus des seuils globaux ci-dessus. Chaque champ omis
+hérite du seuil global — voir `Thresholds.withOverrides` — pas de valeur par défaut propre :
+
+```yaml
+kex.agent.supervision.processes[0].thresholds.consumer-lag: 5000
+```
+
+Un processus à faible trafic et un à fort débit ne devraient pas partager le même seuil : trop
+sensible pour l'un, trop laxiste pour l'autre.
+
+### Fenêtres de maintenance
+
+Pas une propriété de configuration : déclarées à l'exécution, pour un déploiement qu'on n'a pas
+forcément anticipé au démarrage.
+
+| Endpoint | Rôle |
+|---|---|
+| `POST /api/agent/supervision/processes/{id}/maintenance` | `{"duration":"PT2H","reason":"..."}` — le processus ne produit ni alerte ni décision jusqu'à l'échéance |
+| `DELETE /api/agent/supervision/processes/{id}/maintenance` | Lève la fenêtre avant terme |
+
+L'état réel du processus reste relevé et affiché normalement : la fenêtre mute l'alerte et la
+décision, jamais l'observation.
 
 ### `kex.resilience.*`
 

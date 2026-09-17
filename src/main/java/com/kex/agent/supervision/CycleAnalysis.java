@@ -87,7 +87,10 @@ final class CycleAnalysis {
                                         "capability", enumField(
                                                 List.of("NOTIFY", "CREATE_INCIDENT", "RESTART_CONSUMER",
                                                         "REPLAY_MESSAGES", "MODIFY_CONFIGURATION"),
-                                                "Capacité correspondant à la recommandation, omise si aucune ne convient"))))));
+                                                "Capacité correspondant à la recommandation, omise si aucune ne convient"),
+                                        "knowledgeReference", field("string",
+                                                "Note de connaissance interne ayant réellement informé cette "
+                                                        + "analyse, citée brièvement ; omis si aucune ne s'applique"))))));
     }
 
     private static Map<String, Object> array(Map<String, Object> items) {
@@ -155,7 +158,7 @@ final class CycleAnalysis {
             anomalies.add(new Anomaly(UUID.randomUUID().toString(), cycleId, processId, names.get(processId),
                     title, severity(string(row, "severity")), observations(row), string(row, "analysis"),
                     string(row, "probableCause"), confidence(row), string(row, "recommendation"),
-                    capability(string(row, "capability")), at));
+                    capability(string(row, "capability")), at, string(row, "knowledgeReference")));
         }
         return List.copyOf(anomalies);
     }

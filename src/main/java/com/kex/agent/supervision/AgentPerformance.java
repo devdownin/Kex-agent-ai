@@ -23,5 +23,5 @@ public record AgentPerformance(int cycles, int cyclesFailed, Long averageCycleMi
                                int decisionsTaken, int autonomousDecisions, int humanApprovals,
                                int humanRejections, Double relevanceRate,
                                int actionsExecuted, int actionsFailed, int actionsBlocked,
-                               int approvalsExpired, Long averageResolutionMillis) {
+                               int approvalsExpired, int actionsSimulated, Long averageResolutionMillis) {
 }
