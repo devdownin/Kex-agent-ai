@@ -172,9 +172,17 @@ class AgentController {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
     }
 
+    /**
+     * L'identifiant de conversation part avec l'échec : l'échange continue en arrière-plan et sa
+     * réponse tardive atterrira là. Sans lui, un appelant qui n'en avait pas fourni — le premier
+     * message de la console, par exemple — ne pourrait ni reprendre cette conversation ni la
+     * purger, alors que son message y est déjà écrit.
+     */
     @ExceptionHandler(AgentTimeoutException.class)
     ProblemDetail timeout(AgentTimeoutException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.GATEWAY_TIMEOUT, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.GATEWAY_TIMEOUT, ex.getMessage());
+        problem.setProperty("conversationId", ex.conversationId());
+        return problem;
     }
 
     @ExceptionHandler(UnknownMcpServerException.class)

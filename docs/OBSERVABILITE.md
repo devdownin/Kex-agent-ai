@@ -37,8 +37,15 @@ condition. `KexAgentApplicationTests` vérifie que le bean est bien là, pour qu
 dépendance Prometheus ne rende pas le coût silencieusement invisible.
 
 Les compteurs sont agrégés par modèle, **pas par conversation** : un `conversationId` en étiquette
-ferait exploser la cardinalité. Pour imputer un coût à un utilisateur, passer par les journaux, pas
-par les métriques.
+ferait exploser la cardinalité. Pour imputer un coût à un échange précis, lire la réponse plutôt que
+les métriques : `POST /api/agent/chat` et `/chat/structured` rendent `usage.inputTokens` et
+`usage.outputTokens` — `null` quand le fournisseur ne les compte pas, jamais `0`, une mesure absente
+n'étant pas une consommation nulle.
+
+Ces réponses portent aussi `finishReason`, dans le vocabulaire du fournisseur (`max_tokens` chez
+Anthropic, `length` chez OpenAI) : sans lui, une réponse coupée au plafond `max-tokens` se lit
+exactement comme une réponse complète. La console marque le tour concerné. Le chemin en flux ne le
+rend pas encore — la métadonnée arrive dans le dernier fragment, que `stream()` ne collecte pas.
 
 ### Outils
 
@@ -104,6 +111,12 @@ ouvrir une détachée.
 
 `kex.agent.log-interactions: true` journalise prompts et réponses via `SimpleLoggerAdvisor`. À
 réserver au debug : le contenu des échanges y passe en clair.
+
+Cet advisor écrit en `DEBUG`, et le niveau est posé dans `application.yml` pour que la propriété se
+suffise à elle-même — sans quoi elle promettait des journaux que le niveau par défaut n'imprimait
+jamais, pendant que la console avertissait d'une fuite de prompts qui n'existait pas. L'advisor
+n'étant enregistré que lorsque la propriété est vraie, ce niveau ne produit rien tant qu'elle reste
+fausse. `KexAgentApplicationTests` le vérifie.
 
 `spring.ai.chat.observations.log-prompt` et `log-completion` font de même au niveau des observations,
 avec le même avertissement.

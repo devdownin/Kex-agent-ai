@@ -47,7 +47,7 @@ class RateLimitTest {
 
     @Test
     void refuse_au_dela_de_la_pointe_autorisee() throws Exception {
-        given(agentService.ask(any(), anyString())).willReturn(new AgentAnswer("conv-1", "ok", java.util.List.of()));
+        given(agentService.ask(any(), anyString())).willReturn(new AgentAnswer("conv-1", "ok", java.util.List.of(), null, "end_turn"));
 
         List<Integer> codes = IntStream.range(0, 5).mapToObj(i -> chat("Bearer secret")).toList();
 
@@ -60,7 +60,7 @@ class RateLimitTest {
      */
     @Test
     void isole_le_debit_entre_deux_clefs_nommees() throws Exception {
-        given(agentService.ask(any(), anyString())).willReturn(new AgentAnswer("conv-1", "ok", java.util.List.of()));
+        given(agentService.ask(any(), anyString())).willReturn(new AgentAnswer("conv-1", "ok", java.util.List.of(), null, "end_turn"));
 
         List<Integer> ci = IntStream.range(0, 5).mapToObj(i -> chat("Bearer jeton-ci")).toList();
         assertThat(ci).startsWith(200, 200, 200).endsWith(429, 429);

@@ -222,6 +222,15 @@ kex:
     max-message-characters: 4000
     log-interactions: false
 
+logging:
+  level:
+    # SimpleLoggerAdvisor écrit en DEBUG : sans cette ligne, kex.agent.log-interactions=true posait
+    # l'advisor sans qu'une seule ligne n'apparaisse au niveau par défaut — la propriété promettait
+    # des journaux vides, et la console avertissait d'une fuite de prompts qui n'existait pas.
+    # L'advisor n'est enregistré que lorsque la propriété est vraie (AgentConfig) : ce niveau ne
+    # fait donc rien tant qu'elle reste fausse.
+    org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor: DEBUG
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

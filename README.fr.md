@@ -213,7 +213,7 @@ y compris ce qu'est MCP si c'est votre premier — est dans [`docs/MCP.md`](docs
 
 | Méthode | Route | Rôle |
 |---|---|---|
-| `POST` | `/api/agent/chat` | Poser une question, obtenir la réponse, le `conversationId` et les outils utilisés |
+| `POST` | `/api/agent/chat` | Poser une question, obtenir la réponse, le `conversationId`, les outils utilisés, les jetons consommés et le motif d'arrêt |
 | `POST` | `/api/agent/chat/structured` | Idem, réponse en JSON conforme à un schéma que vous fournissez |
 | `POST` | `/api/agent/chat/stream` | Idem, en événements SSE nommés : `conversation`, `token`, `tool`, `error` |
 | `DELETE` | `/api/agent/conversations/{id}` | Oublier une conversation |

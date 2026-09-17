@@ -8,7 +8,9 @@ import com.kex.agent.agent.AgentService;
 import com.kex.agent.agent.ToolCallRecorder;
 import com.kex.agent.mcp.McpToolCatalog;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.chat.observation.ChatModelMeterObservationHandler;
 import org.springframework.ai.mcp.ToolContextToMcpMetaConverter;
@@ -51,6 +53,14 @@ class KexAgentApplicationTests {
         // Spring AI n'enregistre ce handler que si un MeterRegistry est présent : sans lui, le coût
         // de chaque échange ne serait mesuré nulle part.
         assertThat(context.getBeanNamesForType(ChatModelMeterObservationHandler.class)).isNotEmpty();
+    }
+
+    @Test
+    void laisse_sortir_les_journaux_d_echange_quand_ils_sont_demandes() {
+        // SimpleLoggerAdvisor écrit en DEBUG : sans le niveau posé dans application.yml,
+        // kex.agent.log-interactions=true enregistrait l'advisor sans qu'une seule ligne
+        // n'apparaisse, pendant que la console avertissait d'une fuite de prompts inexistante.
+        assertThat(LoggerFactory.getLogger(SimpleLoggerAdvisor.class).isDebugEnabled()).isTrue();
     }
 
     @Test

@@ -209,7 +209,7 @@ MCP is, if this is your first one — is in [`docs/MCP.md`](docs/MCP.md).
 
 | Method | Route | What it does |
 |---|---|---|
-| `POST` | `/api/agent/chat` | Ask a question, get an answer, the `conversationId`, and the tools it used |
+| `POST` | `/api/agent/chat` | Ask a question, get an answer, the `conversationId`, the tools it used, the tokens it cost and why the model stopped |
 | `POST` | `/api/agent/chat/structured` | Same, answered as JSON matching a schema you supply |
 | `POST` | `/api/agent/chat/stream` | Same, streamed as named SSE events: `conversation`, `token`, `tool`, `error` |
 | `DELETE` | `/api/agent/conversations/{id}` | Forget a conversation |

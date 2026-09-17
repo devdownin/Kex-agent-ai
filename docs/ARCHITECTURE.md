@@ -406,13 +406,26 @@ n'a rien fait de mal. Un schéma vide, lui, rend `400`.
 appel MCP, pas l'échange : avec vingt tours d'outils autorisés, le pire cas gardait une connexion
 HTTP ouverte une vingtaine de minutes.
 
-Les deux chemins ne sont pas équivalents, et c'est assumé :
+Les deux chemins bornent la même chose — la durée de l'échange, depuis la souscription — mais pas
+de la même façon, et c'est assumé :
 
-- **flux** — `Flux.timeout` annule réellement l'amont ;
+- **flux** — `takeUntilOther(Mono.delay(...))` annule réellement l'amont. Pas `Flux.timeout(Duration)`,
+  qui ne borne que le silence *entre deux jetons* : vingt tours d'outils restant chacun sous le
+  plafond n'auraient jamais déclenché ce timeout-là, et la connexion serait restée ouverte
+  exactement le temps que cette propriété existe pour éviter — jusqu'à ce que
+  `spring.mvc.async.request-timeout` coupe sans rien dire à l'appelant ;
 - **bloquant** — l'appel de Spring AI n'est pas interruptible. Le plafond borne l'attente de
   l'appelant (`504`), pas le travail, qui continue jusqu'à son terme sur un thread virtuel où un
   orphelin coûte une pile et non un thread noyau. `spring.threads.virtual.enabled` est activé pour
   cette raison.
+
+Un échange abandonné laisse deux traces, que le `504` ne cachait pas mais ne disait pas non plus.
+L'advisor de mémoire écrit le message de l'utilisateur *avant* l'appel au modèle et la réponse à sa
+fin : la réponse tardive rejoint donc l'historique après coup, et conditionne le tour suivant de
+cette conversation. Le `504` porte l'identifiant de la conversation (`conversationId` dans le
+`ProblemDetail`) pour qu'elle reste relisable et purgeable ; quand cet identifiant avait été tiré
+par l'agent faute d'en recevoir un, personne ne l'aurait connu, et la conversation est alors purgée
+à la fin de la tâche orpheline — purger plus tôt la ferait revenir juste après.
 
 ### Disjoncteur et réessai sur les intégrations externes
 
@@ -981,7 +994,7 @@ n'entre dans la chaîne de build, la même contrainte que pour le reste de la co
 | `McpStreamableHttpIntegrationTest` | Le transport MCP réel, bearer compris, sur un serveur HTTP monté dans le test |
 | `ApiSecurityTest` / `…UnconfiguredTest` | 401 / 200 / 503, et la sonde de santé jamais bloquée |
 | `McpToolCatalogTest` | Introspection, appel, ressources, serveur injoignable, capacité absente |
-| `AgentServiceTest` | Propagation du `conversationId` à l'advisor de mémoire |
+| `AgentServiceTest` | Propagation du `conversationId` à l'advisor de mémoire, plafond de durée des deux chemins (dont un flux qui débite sans se taire), purge d'une conversation que l'échec rend inatteignable, jetons et motif d'arrêt rendus |
 | `AgentControllerTest` | Contrat HTTP des 7 routes |
 | `SharedMemoryProfileTest` | Le profil `shared-memory` remplace bien le dépôt en mémoire |
 | `KexAgentApplicationTests` | Le contexte démarre sans aucun serveur MCP configuré |

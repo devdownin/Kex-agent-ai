@@ -62,7 +62,7 @@ class AgentControllerTest {
 
     @Test
     void repond_avec_le_contenu_de_l_agent() {
-        given(agentService.ask("conv-1", "bonjour")).willReturn(new AgentAnswer("conv-1", "salut", List.of()));
+        given(agentService.ask("conv-1", "bonjour")).willReturn(new AgentAnswer("conv-1", "salut", List.of(), null, "end_turn"));
 
         var response = mvc.post().uri("/api/agent/chat")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -228,7 +228,7 @@ class AgentControllerTest {
     @Test
     void le_flux_emet_un_evenement_error_au_lieu_de_se_taire() throws Exception {
         given(agentService.stream("conv-1", "bonjour")).willReturn(new AgentStream("conv-1",
-                Flux.error(new AgentTimeoutException(Duration.ofSeconds(120)))));
+                Flux.error(new AgentTimeoutException(Duration.ofSeconds(120), "conv-1"))));
 
         var response = mvc.post().uri("/api/agent/chat/stream")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -241,22 +241,29 @@ class AgentControllerTest {
                 .contains("event:error").contains("120s");
     }
 
+    /**
+     * L'échange continue en arrière-plan et sa réponse tardive atterrira dans cette conversation :
+     * sans l'identifiant dans le corps, un appelant qui n'en avait pas fourni — le premier message
+     * de la console — ne pourrait ni la reprendre ni la purger, alors que son message y est écrit.
+     */
     @Test
-    void retourne_504_quand_l_appel_bloquant_depasse_le_plafond() {
-        willThrow(new AgentTimeoutException(Duration.ofSeconds(120)))
+    void retourne_504_avec_l_identifiant_de_conversation_quand_l_appel_depasse_le_plafond() {
+        willThrow(new AgentTimeoutException(Duration.ofSeconds(120), "conv-9"))
                 .given(agentService).ask("conv-1", "bonjour");
 
-        assertThat(mvc.post().uri("/api/agent/chat")
+        var response = mvc.post().uri("/api/agent/chat")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"conversationId":"conv-1","message":"bonjour"}"""))
-                .hasStatus(504);
+                        {"conversationId":"conv-1","message":"bonjour"}""");
+
+        assertThat(response).hasStatus(504);
+        assertThat(response).bodyJson().extractingPath("$.conversationId").isEqualTo("conv-9");
     }
 
     @Test
     void rend_une_sortie_structuree() {
         given(agentService.askStructured("conv-1", "combien de topics ?", Map.of("type", "object")))
-                .willReturn(new AgentStructuredAnswer("conv-1", Map.of("total", 8), List.of()));
+                .willReturn(new AgentStructuredAnswer("conv-1", Map.of("total", 8), List.of(), null, "end_turn"));
 
         var response = mvc.post().uri("/api/agent/chat/structured")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -339,7 +346,7 @@ class AgentControllerTest {
     @Test
     void expose_les_outils_utilises_par_une_reponse() {
         given(agentService.ask("conv-1", "bonjour")).willReturn(new AgentAnswer("conv-1", "salut",
-                List.of(new AgentEvent.ToolCall("kex_list_topics", 42, false))));
+                List.of(new AgentEvent.ToolCall("kex_list_topics", 42, false)), null, "end_turn"));
 
         var response = mvc.post().uri("/api/agent/chat")
                 .contentType(MediaType.APPLICATION_JSON)
