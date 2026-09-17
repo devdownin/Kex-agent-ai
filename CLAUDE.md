@@ -203,4 +203,20 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   `application.yml` ; il ne produit rien tant que la propriété reste fausse, l'advisor n'étant alors
   pas enregistré.
 
+- **`pg_advisory_lock` ne survit pas à un `JdbcTemplate` adossé à un pool.** Un verrou consultatif
+  Postgres s'attache à la connexion qui l'a pris ; `JdbcTemplate` en emprunte une par appel, sans
+  garantie que l'appel qui relâche tienne la même que celui qui a pris. `SupervisionScheduler` verrouille
+  donc avec une ligne à jour d'expiration (`UPDATE ... WHERE locked_until < ?`), qui n'a pas ce
+  problème et expire d'elle-même si la réplique qui la tenait tombe en plein cycle.
+
+- **`EnumMap(Map)` refuse une source vide qui n'est pas déjà un `EnumMap`.** Il ne peut alors pas
+  déduire le type d'énumération, et lève `IllegalArgumentException` — précisément le cas de la
+  première installation, avant tout plancher de confiance par capacité. `new EnumMap<>(Capability.class)`
+  puis `putAll(...)` évite la déduction.
+
+- **Deux stubs Mockito qui matchent le même appel : le dernier enregistré gagne**, pas le premier.
+  Un test qui stubbe une erreur avant d'appeler un `service(...)` fabriqué par un helper — lequel
+  pose son propre stub de succès par défaut — voit ce second stub écraser silencieusement le
+  premier. Le stub qui doit compter se pose donc après avoir construit ce qu'il teste.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

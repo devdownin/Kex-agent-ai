@@ -103,9 +103,11 @@ L'agent sert sa propre console d'exploitation sur `/`, construite autour d'une s
 
 Quelques partis pris explicites :
 
-- **Un cycle d'analyse ne part que sur demande.** Pas de planificateur : en multi-instance chaque
-  réplique lancerait le sien et les actions partiraient en double. En ajouter un suppose un verrou
-  partagé, donc une base — une décision d'exploitation que ce projet ne prend pas à votre place.
+- **Un cycle d'analyse ne part sur demande que par défaut, et sans clic seulement là où un verrou
+  peut le protéger.** Un planificateur nu ferait lancer son propre cycle à chaque réplique en
+  multi-instance, chaque action partant en double. `kex.agent.supervision.schedule.enabled` active
+  un départ autonome derrière un verrou partagé, mais seulement sous le profil `shared-memory` — le
+  seul endroit où ce verrou peut exister.
 - **Rien n'est inventé pour remplir l'écran.** Aucun processus déclaré donne un tableau de bord
   vide, et une mesure que les outils n'ont pas produite vaut `UNKNOWN`, jamais `OK`. Un état qui
   paraît sain parce que la donnée manque est exactement ce qui fait rater une panne.

@@ -58,6 +58,25 @@ arrive.
 | `memory.capacity` | `200` | Souvenirs actifs conservés, le plus ancien évincé au-delà |
 | `memory.max-content-length` | `500` | Un souvenir plus long est tronqué à l'écriture |
 | `memory.retention` | `30d` | Au-delà, un souvenir n'est plus relu (sans être supprimé) |
+| `token-budget.daily-limit` | `0` | Jetons consommés par jour, toutes conversations confondues. `0` lève la borne. Tenu en mémoire, par instance — comme `rate-limit` ci-dessus |
+
+### `kex.agent.supervision.*` (nouveautés)
+
+Le reste de la politique de supervision (mode, autonomie, seuils, actions) est décrit dans
+`docs/ARCHITECTURE.md` et dans les commentaires d'`application.yml`. Trois blocs, ajoutés pour
+qu'un cycle puisse partir sans qu'un humain clique :
+
+| Propriété | Défaut | Rôle |
+|---|---|---|
+| `schedule.enabled` | `false` | Départ autonome du cycle. N'a d'effet que sous le profil `shared-memory`, seul endroit où le verrou partagé qu'il exige peut exister |
+| `schedule.interval` | `5m` | Délai entre deux tentatives — une tentative, pas forcément un cycle : une réplique qui ne tient pas le verrou repart aussitôt |
+| `schedule.lock-at-most-for` | `10m` | Expiration du verrou si la réplique qui le tenait tombe en plein cycle |
+| `notify.webhook-url` | *(vide)* | Débouché par défaut de `NOTIFY` sans outil MCP lié — la seule capacité qui en a un |
+| `notify.webhook-token` | *(vide)* | Bearer optionnel envoyé au webhook |
+| `auto-adjust.enabled` | `true` | Relève tout seul le plancher de confiance d'une capacité qui se fait rejeter plus souvent qu'approuver |
+| `auto-adjust.min-samples` | `5` | Verdicts humains minimum avant de tirer une conclusion |
+| `auto-adjust.min-relevance` | `0.5` | En-deçà de ce taux d'approbation, le plancher est relevé |
+| `auto-adjust.increment` | `0.05` | Ce qui est ajouté à chaque relèvement, jamais au-delà de `1.0` |
 
 ### `kex.resilience.*`
 

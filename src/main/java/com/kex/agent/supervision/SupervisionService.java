@@ -20,6 +20,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import com.kex.agent.agent.AgentService;
 import com.kex.agent.agent.AgentStructuredAnswer;
+import com.kex.agent.agent.TokenBudgetService;
 import com.kex.agent.mcp.McpToolCatalog;
 import com.kex.agent.mcp.McpToolResult;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -35,9 +36,10 @@ import org.springframework.util.StringUtils;
  * transforme chaque anomalie en décision dont la politique dit si elle s'exécute, attend un humain,
  * ou reste une simple recommandation.
  *
- * <p>Le cycle ne part que sur demande explicite. Pas de planificateur : en multi-instance, chaque
- * réplique lancerait le sien et les actions partiraient en double. Ajouter l'ordonnancement suppose
- * un verrou partagé, donc une base — une décision d'exploitation qui n'a pas à être prise ici.
+ * <p>Le cycle ne part sur demande explicite que par défaut : {@link SupervisionScheduler}, sous le
+ * profil {@code shared-memory} et lui seul, le fait partir sans clic derrière un verrou partagé —
+ * sans lui, en multi-instance, chaque réplique lancerait le sien et les actions partiraient en
+ * double.
  */
 @Service
 public class SupervisionService {
@@ -57,6 +59,8 @@ public class SupervisionService {
     private final Tracer tracer;
     private final CircuitBreakerRegistry circuitBreakerRegistry;
     private final AuditRepository auditRepository;
+    private final WebhookNotifier notifier;
+    private final TokenBudgetService tokenBudget;
 
     private final AtomicReference<SupervisionPolicy> policy = new AtomicReference<>();
     private final AtomicInteger policyRevision = new AtomicInteger(1);
@@ -86,7 +90,8 @@ public class SupervisionService {
     SupervisionService(AgentService agentService, McpToolCatalog toolCatalog,
                        SupervisionProperties properties, Clock clock, ModelAvailability model,
                        Tracer tracer, CircuitBreakerRegistry circuitBreakerRegistry,
-                       AuditRepository auditRepository) {
+                       AuditRepository auditRepository, WebhookNotifier notifier,
+                       TokenBudgetService tokenBudget) {
         this.agentService = agentService;
         this.toolCatalog = toolCatalog;
         this.properties = properties;
@@ -95,6 +100,8 @@ public class SupervisionService {
         this.tracer = tracer;
         this.circuitBreakerRegistry = circuitBreakerRegistry;
         this.auditRepository = auditRepository;
+        this.notifier = notifier;
+        this.tokenBudget = tokenBudget;
         this.cycles = new History<>(properties.historySize());
         this.anomalies = new History<>(properties.historySize());
         this.decisions = new History<>(properties.historySize());
@@ -310,6 +317,13 @@ public class SupervisionService {
             return new Diagnosis(AgentState.DEGRADED,
                     "Aucune clé pour le fournisseur de modèle retenu — voir Configuration");
         }
+        // Même famille que la clé manquante : l'agent ne peut rien observer de plus aujourd'hui,
+        // pas parce qu'il est en panne mais parce qu'il a atteint la limite qu'on lui a fixée.
+        if (tokenBudget.exceeded()) {
+            return new Diagnosis(AgentState.DEGRADED,
+                    "Budget de jetons journalier épuisé (%d/%d) — reprend demain"
+                            .formatted(tokenBudget.consumedToday(), tokenBudget.dailyLimit()));
+        }
         // « Jamais analysé » n'est pas « tout va bien » : c'est l'absence de toute mesure. Le
         // bandeau le disait déjà, la pastille affichait OPÉRATIONNEL par-dessus.
         if (last == null) {
@@ -409,6 +423,16 @@ public class SupervisionService {
             // processus pour remplir l'écran serait pire qu'un écran vide.
             events.add(new CycleEvent(clock.instant(), "Aucun processus déclaré",
                     "kex.agent.supervision.processes est vide"));
+            return finish(cycleId, started, events, 0, 0, List.of(), null);
+        }
+
+        // Vérifié avant d'appeler le modèle, pas après : un cycle qui part seul (voir
+        // SupervisionScheduler) n'a que ce plafond pour frein, à la différence d'un humain qui
+        // clique et voit la facture. Épuisé, le cycle ne coûte donc rien de plus qu'une lecture.
+        if (tokenBudget.exceeded()) {
+            events.add(new CycleEvent(clock.instant(), "Cycle non exécuté",
+                    "Budget de jetons journalier épuisé (%d/%d)"
+                            .formatted(tokenBudget.consumedToday(), tokenBudget.dailyLimit())));
             return finish(cycleId, started, events, 0, 0, List.of(), null);
         }
 
@@ -569,6 +593,7 @@ public class SupervisionService {
             store(executed);
             record(actor, "Validation : " + decision.action(), decision.processId(), id,
                     "Approuvée par " + actor, describe(executed));
+            maybeAutoAdjustThreshold(decision.capability());
             return executed;
         }
         finally {
@@ -585,7 +610,53 @@ public class SupervisionService {
                 StringUtils.hasText(reason) ? reason : "Refusée par " + actor, actor, clock.instant());
         store(rejected);
         record(actor, "Refus : " + decision.action(), decision.processId(), id, reason, "Refusée");
+        maybeAutoAdjustThreshold(decision.capability());
         return rejected;
+    }
+
+    /**
+     * Un plancher qui ne bouge qu'à la hausse, sur les seuls verdicts humains : {@link
+     * SupervisionPolicy#confidenceThresholdOf} n'autorise déjà que ce sens, ceci l'automatise
+     * quand une capacité se fait rejeter plus souvent qu'approuver — sans quoi les verdicts
+     * humains se seraient accumulés sans jamais reprendre la main sur la politique qui les avait
+     * provoqués.
+     */
+    private void maybeAutoAdjustThreshold(Capability capability) {
+        SupervisionProperties.AutoAdjust autoAdjust = properties.autoAdjust();
+        if (!autoAdjust.enabled()) {
+            return;
+        }
+        List<Decision> forCapability = decisions().stream()
+                .filter(d -> d.capability() == capability)
+                .toList();
+        long approved = forCapability.stream()
+                .filter(d -> isHuman(d) && d.status() != DecisionStatus.REJECTED).count();
+        long rejected = forCapability.stream().filter(d -> d.status() == DecisionStatus.REJECTED).count();
+        long ruled = approved + rejected;
+        if (ruled < autoAdjust.minSamples()) {
+            return;
+        }
+        double relevance = (double) approved / ruled;
+        if (relevance >= autoAdjust.minRelevance()) {
+            return;
+        }
+        SupervisionPolicy current = policy.get();
+        double floor = current.confidenceThresholdOf(capability);
+        double raised = Math.min(1.0, floor + autoAdjust.increment());
+        if (raised <= floor) {
+            // Déjà au plafond, ou incrément nul : rien de plus à durcir, et republier la même
+            // politique gonflerait sa version pour rien.
+            return;
+        }
+        // EnumMap(Map) exige une source non vide pour déduire le type d'énumération : la plupart
+        // des installations n'ont encore aucun plancher par capacité au premier relèvement.
+        Map<Capability, Double> thresholds = new EnumMap<>(Capability.class);
+        thresholds.putAll(current.confidenceThresholds());
+        thresholds.put(capability, raised);
+        updatePolicy(new PolicyUpdate(null, null, null, thresholds, null,
+                "Pertinence de %s à %.0f %% sur %d décisions : plancher relevé automatiquement"
+                        .formatted(capability, relevance * 100, ruled)),
+                SYSTEM);
     }
 
     private Decision pendingOrFail(String id) {
@@ -621,8 +692,16 @@ public class SupervisionService {
         ActionBinding binding = properties.actions().get(decision.capability());
         Instant at = clock.instant();
         if (binding == null || !StringUtils.hasText(binding.connection()) || !StringUtils.hasText(binding.tool())) {
-            // Le droit d'agir et le moyen d'agir sont deux choses : la politique peut autoriser une
-            // capacité qu'aucun outil n'implémente, et le dire vaut mieux que l'exécuter à moitié.
+            // NOTIFY est la seule capacité dont WebhookNotifier sait tenir lieu d'outil : son
+            // système cible est une personne, pas un système au schéma propre — voir sa javadoc.
+            // Les autres restent sans repli : « le droit d'agir et le moyen d'agir sont deux
+            // choses », et le dire vaut mieux que d'exécuter une capacité à moitié.
+            if (decision.capability() == Capability.NOTIFY) {
+                return notifier.send(decision.action(), decision.context())
+                        .map(reason -> decision.resolvedAs(DecisionStatus.FAILED, reason, actor, at))
+                        .orElseGet(() -> decision.resolvedAs(DecisionStatus.EXECUTED,
+                                "Notifié par webhook", actor, at));
+            }
             return decision.resolvedAs(DecisionStatus.FAILED,
                     "Aucun outil MCP lié à la capacité " + decision.capability(), actor, at);
         }

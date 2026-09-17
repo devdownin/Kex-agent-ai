@@ -572,12 +572,22 @@ d'appelant.
 Le flux (`/chat/stream`) n'a pas ce défaut : `onErrorResume` y transforme déjà toute exception en
 `event: error` sur un flux `200`, avant même que la question ne se pose.
 
-### Le cycle de supervision ne part que sur demande
+### Le cycle de supervision ne part sur demande que par défaut
 
-Pas de `@Scheduled`. En multi-instance, chaque réplique lancerait son propre cycle : deux analyses
-sur les mêmes faits, donc deux décisions et deux exécutions de la même action. Ordonnancer suppose
-un verrou partagé, donc une base — une décision d'exploitation qui n'a pas à être prise ici, et qui
-serait invisible dans un fichier de configuration.
+Pas de `@Scheduled` nu sur `runCycle` : en multi-instance, chaque réplique lancerait son propre
+cycle, deux analyses sur les mêmes faits produisant deux décisions et deux exécutions de la même
+action. `SupervisionScheduler` (`kex.agent.supervision.schedule.enabled`) le fait partir sans clic,
+mais seulement sous le profil `shared-memory` — le seul où un verrou partagé peut exister.
+
+Le verrou est une ligne à jour d'expiration en base (`kex_supervision_lock`), pas
+`pg_advisory_lock` : un verrou consultatif Postgres s'attache à la connexion qui l'a pris, or
+`JdbcTemplate` emprunte une connexion à un pool par appel — rien ne garantit que l'appel qui
+relâche tienne la même connexion que celui qui a pris. Une ligne dont l'expiration se lit et
+s'écrit par une seule requête `UPDATE ... WHERE locked_until < ?` n'a pas ce problème, et porte son
+propre filet : `lock-at-most-for` (10 minutes par défaut) fait expirer le verrou de lui-même si la
+réplique qui le tenait tombe en plein cycle, plutôt que de le garder pris à jamais. Le verrou est
+relâché dès la fin du cycle, pas au bout de ce plafond : sans quoi une réplique qui réussit
+attendrait quand même dix minutes avant de pouvoir retenter.
 
 À l'intérieur d'une instance, un `ReentrantLock.tryLock()` refuse un second cycle concurrent plutôt
 que de le mettre en file : une file ne ferait que différer le doublon.
@@ -585,6 +595,10 @@ que de le mettre en file : une file ne ferait que différer le doublon.
 La conversation du cycle est jetable (`supervision-<cycleId>`, purgée en `finally`). Réutiliser un
 identifiant ferait grossir la mémoire à chaque exécution jusqu'au plafond, en payant du contexte
 pour des faits périmés.
+
+Un cycle qui part seul n'a que `kex.agent.token-budget.daily-limit` comme frein à sa dépense — voir
+plus bas. Le vérifier avant d'appeler le modèle, pas après, évite qu'un cycle épuisé coûte quoi que
+ce soit de plus qu'une lecture.
 
 ### L'autonomie se règle par capacité, le mode ne peut que restreindre
 
@@ -610,6 +624,27 @@ vraiment, c'est régler à l'aveugle. Le champ de plancher affiche d'ailleurs la
 et non celle qui est stockée : un réglage sous le plancher global n'a aucun effet, et le laisser à
 l'écran rendrait le champ invalide au regard de son propre minimum — formulaire insoumettable, sans
 rien pour l'expliquer.
+
+### NOTIFY tombe sur un webhook quand aucun outil ne lui est lié
+
+Toute autre capacité sans `ActionBinding` échoue en le disant : « le droit d'agir et le moyen
+d'agir sont deux choses ». `NOTIFY` est la seule exception, portée par `WebhookNotifier`
+(`kex.agent.supervision.notify.webhook-url`) : son système cible est une personne, pas un système
+au schéma propre que seul un outil MCP taillé pour lui saurait parler — créer un incident ou
+redémarrer un consumer, eux, n'ont pas de forme générique possible. Un webhook JSON générique
+(Slack, Teams, tout collecteur qui en accepte un) couvre ce seul cas. Sans URL configurée, l'appel
+échoue en le disant, exactement comme l'absence d'outil MCP pour les autres capacités — aucun appel
+réseau n'est tenté.
+
+### Un plancher de confiance se durcit tout seul sur des refus répétés
+
+`kex.agent.supervision.auto-adjust`, actif par défaut. Un taux de pertinence se calculait déjà par
+verdict humain (voir plus bas), sans jamais reprendre la main sur la politique qui les avait
+provoqués. Après chaque `approve`/`reject`, si une capacité compte au moins `min-samples` verdicts
+humains et que la part d'approbations tombe sous `min-relevance`, son plancher de confiance est
+relevé de `increment` — jamais abaissé, la même doctrine qu'ailleurs sur cette dimension. Le
+changement passe par `updatePolicy` comme un réglage manuel : nouvelle version, entrée d'audit,
+acteur `Système`.
 
 ### La sortie du modèle est contrainte, pas garantie
 
@@ -756,6 +791,22 @@ Trois précautions y sont prises, et ce sont elles qui comptent :
 
 `DecisionStatus.EXPIRED` est distinct de `FAILED` pour la même raison : confondre « l'outil a
 échoué » et « personne n'a répondu » masquerait un défaut d'organisation en défaut technique.
+
+### Un budget de jetons journalier, pour un cycle qui part sans clic
+
+`TokenBudgetService` (`kex.agent.token-budget.daily-limit`, `0` = illimité) accumule ce que chaque
+échange bloquant a coûté — `AgentAnswer.usage()`/`AgentStructuredAnswer.usage()`, donc le cycle de
+supervision comme le chat. Le flux SSE n'y participe pas : la métadonnée d'usage arrive dans le
+dernier fragment, que `stream()` ne collecte pas, comme documenté dans `OBSERVABILITE.md`.
+
+Un humain qui clique voit la facture. Un cycle qui part seul (`SupervisionScheduler`) n'a que ce
+plafond comme frein — d'où sa vérification *avant* d'appeler le modèle, dans `cycle()` : un budget
+épuisé ne coûte rien de plus qu'une lecture. Épuisé, `diagnose()` dégrade l'état de l'agent, dans la
+même famille qu'une clé de fournisseur manquante : dans les deux cas l'agent ne peut rien observer
+de plus pour l'instant, sans être en panne pour autant.
+
+Tenu en mémoire par instance, comme le seau de `rate-limit` : en multi-instance, chaque réplique a
+son propre budget, à diviser le seuil en conséquence plutôt que d'y voir un budget partagé.
 
 ### L'historique est en mémoire, donc mono-instance — l'audit seul en sort
 
@@ -1030,3 +1081,7 @@ n'entre dans la chaîne de build, la même contrainte que pour le reste de la co
 | `BoundedChatMemoryTest` | Un message relu est coupé au-delà de `max-message-characters`, la coupe est dite dans le texte, un message court reste intact, lecture et purge restent déléguées |
 | `MemoryControllerTest` | Contrat HTTP de la lecture et de la suppression : 204 sur suppression, 404 sur identifiant inconnu sans rien auditer, l'audit porte le contenu supprimé |
 | `SharedMemoryRepositoryTest` | Le profil `shared-memory` bascule bien la mémoire long-terme sur `JdbcMemoryRepository`, un souvenir écrit s'y relit, et une suppression par un opérateur rejoint l'audit de supervision sur la même base |
+| `SupervisionSchedulerTest` | Le verrou en base sur H2 : un cycle part quand il est libre, aucun quand une autre réplique le tient, reprise à l'expiration, relâché dès la fin du cycle plutôt qu'au plafond, y compris quand le cycle lève |
+| `WebhookNotifierTest` | Contre un vrai serveur HTTP : succès, webhook qui refuse, absence de configuration sans appel réseau |
+| `TokenBudgetServiceTest` | Illimité à zéro, épuisement au plafond configuré, usage absent jamais compté, remise à zéro le lendemain |
+| `SupervisionServiceTest` (NOTIFY sans outil, budget, durcissement automatique) | Le repli webhook de NOTIFY et son échec ; un cycle non exécuté et l'état dégradé quand le budget est épuisé ; le plancher d'une capacité relevé après des refus majoritaires, jamais avec trop peu de verdicts ou une pertinence suffisante |

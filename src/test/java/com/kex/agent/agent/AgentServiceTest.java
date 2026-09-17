@@ -66,6 +66,9 @@ class AgentServiceTest {
     @Mock
     ChatClient.StreamResponseSpec streamSpec;
 
+    @Mock
+    TokenBudgetService tokenBudget;
+
     private static AgentProperties properties(Duration timeout) {
         return new AgentProperties("prompt", 40, 4000, false, "", Map.of(), timeout);
     }
@@ -83,7 +86,7 @@ class AgentServiceTest {
     }
 
     private AgentService service(Duration timeout) {
-        return new AgentService(chatClient, chatMemory, properties(timeout), CircuitBreakerRegistry.ofDefaults());
+        return new AgentService(chatClient, chatMemory, properties(timeout), CircuitBreakerRegistry.ofDefaults(), tokenBudget);
     }
 
     private void blockingCall() {
@@ -158,6 +161,21 @@ class AgentServiceTest {
         // Sans ce motif, une réponse coupée au plafond se lit comme une réponse complète.
         assertThat(answer.finishReason()).isEqualTo("max_tokens");
         assertThat(answer.usage()).isEqualTo(new AgentUsage(1200, 4096));
+    }
+
+    /**
+     * Sans ce comptage, un cycle de supervision qui part seul (voir {@code SupervisionScheduler})
+     * n'aurait aucun frein à sa dépense.
+     */
+    @Test
+    void compte_les_jetons_consommes_dans_le_budget() {
+        blockingCall();
+        AgentUsage usage = new AgentUsage(100, 200);
+        given(callSpec.chatResponse()).willReturn(response("pong", "end_turn", new DefaultUsage(100, 200)));
+
+        service(Duration.ofSeconds(10)).ask("conv-1", "ping");
+
+        verify(tokenBudget).record(usage);
     }
 
     /** Les compteurs à zéro d'{@link EmptyUsage} diraient « rien consommé » là où rien n'est su. */
@@ -313,7 +331,7 @@ class AgentServiceTest {
         CircuitBreaker breaker = registry.circuitBreaker("agent-model");
         breaker.transitionToOpenState();
 
-        var stream = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), registry)
+        var stream = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), registry, tokenBudget)
                 .stream("conv-1", "ping");
 
         StepVerifier.create(stream.events()).expectError(CallNotPermittedException.class).verify();
@@ -332,7 +350,7 @@ class AgentServiceTest {
                 .waitDurationInOpenState(Duration.ofMinutes(1))
                 .recordExceptions(AgentTimeoutException.class)
                 .build());
-        AgentService service = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), registry);
+        AgentService service = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), registry, tokenBudget);
 
         StepVerifier.create(service.stream("conv-1", "ping").events())
                 .expectError(AgentTimeoutException.class).verify();
@@ -358,7 +376,7 @@ class AgentServiceTest {
                 .waitDurationInOpenState(Duration.ofMinutes(1))
                 .recordExceptions(AgentTimeoutException.class)
                 .build());
-        AgentService service = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), registry);
+        AgentService service = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), registry, tokenBudget);
 
         // Les deux premiers appels échouent normalement et ouvrent le disjoncteur ; le troisième
         // n'atteint même plus le mock, faute de quoi il attendrait le plafond de temps pour rien.

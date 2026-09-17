@@ -30,4 +30,9 @@ public record AgentUsage(Integer inputTokens, Integer outputTokens) {
         }
         return new AgentUsage(usage.getPromptTokens(), usage.getCompletionTokens());
     }
+
+    /** Les deux compteurs sont nullables séparément ; le budget n'a besoin que de leur somme. */
+    long total() {
+        return (inputTokens == null ? 0 : inputTokens) + (outputTokens == null ? 0 : outputTokens);
+    }
 }

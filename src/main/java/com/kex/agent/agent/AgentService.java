@@ -44,13 +44,15 @@ public class AgentService {
     private final ChatMemory chatMemory;
     private final Duration timeout;
     private final CircuitBreaker modelCircuitBreaker;
+    private final TokenBudgetService tokenBudget;
 
     AgentService(ChatClient chatClient, ChatMemory chatMemory, AgentProperties properties,
-                CircuitBreakerRegistry circuitBreakerRegistry) {
+                CircuitBreakerRegistry circuitBreakerRegistry, TokenBudgetService tokenBudget) {
         this.chatClient = chatClient;
         this.chatMemory = chatMemory;
         this.timeout = properties.requestTimeout();
         this.modelCircuitBreaker = circuitBreakerRegistry.circuitBreaker("agent-model");
+        this.tokenBudget = tokenBudget;
     }
 
     /**
@@ -66,8 +68,9 @@ public class AgentService {
         ToolCallRecorder recorder = new ToolCallRecorder();
         ChatResponse response = bounded(conversation, CircuitBreaker.decorateSupplier(modelCircuitBreaker,
                 () -> request(conversation.id(), message, recorder).call().chatResponse()));
-        return new AgentAnswer(conversation.id(), text(response), recorder.calls(),
-                AgentUsage.from(response), finishReason(response));
+        AgentUsage usage = AgentUsage.from(response);
+        tokenBudget.record(usage);
+        return new AgentAnswer(conversation.id(), text(response), recorder.calls(), usage, finishReason(response));
     }
 
     public AgentStructuredAnswer askStructured(String conversationId, String message,
@@ -81,8 +84,10 @@ public class AgentService {
                 CircuitBreaker.decorateSupplier(modelCircuitBreaker,
                         () -> request(conversation.id(), message, recorder).call()
                                 .responseEntity(new JsonSchemaOutputConverter(schema))));
+        AgentUsage usage = AgentUsage.from(answer.response());
+        tokenBudget.record(usage);
         return new AgentStructuredAnswer(conversation.id(), answer.entity(), recorder.calls(),
-                AgentUsage.from(answer.response()), finishReason(answer.response()));
+                usage, finishReason(answer.response()));
     }
 
     /**

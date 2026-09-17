@@ -100,9 +100,10 @@ The agent ships with its own operations console at `/`, built around one loop:
 
 A few things it deliberately does:
 
-- **An analysis cycle runs only when you ask it to.** There is no scheduler. In multi-instance
-  every replica would launch its own and actions would fire twice; adding one means a shared lock,
-  therefore a database — an operations decision this project does not make for you.
+- **An analysis cycle runs on request by default, and off a schedule only where it can be locked.**
+  A bare scheduler would have every replica launch its own cycle in multi-instance, firing every
+  action twice. `kex.agent.supervision.schedule.enabled` turns on an unattended cycle behind a
+  shared lock, but only under the `shared-memory` profile — the only place that lock can live.
 - **Nothing is invented to fill the screen.** No process declared means an empty dashboard, and a
   measurement the tools could not produce is `UNKNOWN`, never `OK`. A state that looks healthy
   because the data is missing is exactly what makes an outage go unnoticed.

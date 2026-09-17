@@ -8,10 +8,12 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 
 import com.kex.agent.agent.AgentService;
 import com.kex.agent.agent.AgentStructuredAnswer;
+import com.kex.agent.agent.TokenBudgetService;
 import com.kex.agent.mcp.McpToolCatalog;
 import com.kex.agent.mcp.McpToolResult;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -27,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -39,6 +42,8 @@ class SupervisionServiceTest {
 
     private final AgentService agentService = mock(AgentService.class);
     private final McpToolCatalog toolCatalog = mock(McpToolCatalog.class);
+    private final WebhookNotifier notifier = mock(WebhookNotifier.class);
+    private final TokenBudgetService tokenBudget = mock(TokenBudgetService.class);
     private MutableClock clock;
 
     @BeforeEach
@@ -233,7 +238,7 @@ class SupervisionServiceTest {
         when(traceContext.traceId()).thenReturn("trace-42");
         SupervisionService service = new SupervisionService(agentService, toolCatalog,
                 properties(List.of(), Map.of(), Map.of()), clock, keyMissing, tracer,
-                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200));
+                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200), notifier, tokenBudget);
 
         service.pause("opérateur");
 
@@ -244,7 +249,7 @@ class SupervisionServiceTest {
     void ne_correle_rien_hors_d_une_trace_en_cours() {
         SupervisionService service = new SupervisionService(agentService, toolCatalog,
                 properties(List.of(), Map.of(), Map.of()), clock, keyMissing, mock(Tracer.class),
-                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200));
+                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200), notifier, tokenBudget);
 
         service.pause("opérateur");
 
@@ -257,7 +262,7 @@ class SupervisionServiceTest {
         registry.circuitBreaker("mcp-tool");
         SupervisionService service = new SupervisionService(agentService, toolCatalog,
                 properties(List.of(), Map.of(), Map.of()), clock, keyMissing, mock(Tracer.class),
-                registry, new InMemoryAuditRepository(200));
+                registry, new InMemoryAuditRepository(200), notifier, tokenBudget);
 
         assertThat(service.status().circuitBreakers())
                 .extracting(CircuitBreakerStatus::name)
@@ -629,6 +634,114 @@ class SupervisionServiceTest {
                 .extracting(Decision::capability).isEqualTo(Capability.NOTIFY);
     }
 
+    @Test
+    void notifie_par_webhook_quand_aucun_outil_n_est_lie_a_notify() {
+        analysisReturns(anomalyPayload("NOTIFY", 0.99));
+        SupervisionService service = service(properties(ExecutionMode.AUTOMATIC, List.of(ORDERS),
+                Map.of(Capability.NOTIFY, Autonomy.AUTOMATIC), Map.of()));
+
+        service.runCycle("test");
+
+        assertThat(service.decisions()).singleElement().satisfies(decision -> {
+            assertThat(decision.status()).isEqualTo(DecisionStatus.EXECUTED);
+            assertThat(decision.result()).isEqualTo("Notifié par webhook");
+        });
+        verify(notifier).send(anyString(), anyString());
+    }
+
+    @Test
+    void signale_l_echec_du_webhook_de_notification() {
+        analysisReturns(anomalyPayload("NOTIFY", 0.99));
+        SupervisionService service = service(properties(ExecutionMode.AUTOMATIC, List.of(ORDERS),
+                Map.of(Capability.NOTIFY, Autonomy.AUTOMATIC), Map.of()));
+        // Après service(...) : son stub par défaut (succès) est sinon le dernier enregistré, donc
+        // celui qui gagne — Mockito retient le stub le plus récent quand deux matchers se recoupent.
+        given(notifier.send(anyString(), anyString())).willReturn(Optional.of("connexion refusée"));
+
+        service.runCycle("test");
+
+        assertThat(service.decisions()).singleElement().satisfies(decision -> {
+            assertThat(decision.status()).isEqualTo(DecisionStatus.FAILED);
+            assertThat(decision.result()).isEqualTo("connexion refusée");
+        });
+    }
+
+    @Test
+    void le_cycle_ne_part_pas_si_le_budget_de_jetons_est_epuise() {
+        given(tokenBudget.exceeded()).willReturn(true);
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        CycleReport report = service.runCycle("test");
+
+        assertThat(report.processesAnalysed()).isZero();
+        assertThat(report.events()).extracting(CycleEvent::label).contains("Cycle non exécuté");
+        verify(agentService, never()).askStructured(anyString(), anyString(), any());
+    }
+
+    @Test
+    void un_budget_epuise_degrade_l_etat_comme_une_cle_manquante() {
+        given(tokenBudget.exceeded()).willReturn(true);
+        given(tokenBudget.consumedToday()).willReturn(1_000L);
+        given(tokenBudget.dailyLimit()).willReturn(1_000L);
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        assertThat(service.status().state()).isEqualTo(AgentState.DEGRADED);
+        assertThat(service.status().stateReason()).contains("Budget de jetons");
+    }
+
+    /**
+     * Cinq refus de suite, sous le seuil de pertinence par défaut (50 %) : le plancher de
+     * RESTART_CONSUMER doit monter de l'incrément par défaut (5 points), une fois.
+     */
+    @Test
+    void releve_automatiquement_le_plancher_apres_des_refus_majoritaires() {
+        SupervisionService service = service(properties(List.of(ORDERS),
+                Map.of(Capability.RESTART_CONSUMER, Autonomy.SUPERVISED), Map.of()));
+
+        for (int i = 0; i < 5; i++) {
+            analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.90));
+            service.runCycle("test");
+            service.reject(service.pending().getFirst().id(), "faux positif", "opérateur");
+        }
+
+        assertThat(service.policy().confidenceThresholdOf(Capability.RESTART_CONSUMER)).isEqualTo(0.90);
+        assertThat(service.policy().version()).isEqualTo("policy-v2");
+        assertThat(service.audit()).anySatisfy(entry ->
+                assertThat(entry.reason()).contains("plancher relevé automatiquement"));
+    }
+
+    @Test
+    void ne_releve_pas_le_plancher_avec_trop_peu_de_verdicts() {
+        SupervisionService service = service(properties(List.of(ORDERS),
+                Map.of(Capability.RESTART_CONSUMER, Autonomy.SUPERVISED), Map.of()));
+
+        for (int i = 0; i < 3; i++) {
+            analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.90));
+            service.runCycle("test");
+            service.reject(service.pending().getFirst().id(), "faux positif", "opérateur");
+        }
+
+        assertThat(service.policy().version()).isEqualTo("policy-v1");
+    }
+
+    @Test
+    void ne_releve_pas_le_plancher_quand_la_pertinence_reste_suffisante() {
+        SupervisionService service = service(properties(List.of(ORDERS),
+                Map.of(Capability.NOTIFY, Autonomy.SUPERVISED), Map.of()));
+
+        for (int i = 0; i < 4; i++) {
+            analysisReturns(anomalyPayload("NOTIFY", 0.90));
+            service.runCycle("test");
+            service.approve(service.pending().getFirst().id(), "opérateur");
+        }
+        analysisReturns(anomalyPayload("NOTIFY", 0.90));
+        service.runCycle("test");
+        service.reject(service.pending().getFirst().id(), "faux positif", "opérateur");
+
+        // 4 approbations sur 5 : 80 % de pertinence, largement au-dessus du seuil de 50 %.
+        assertThat(service.policy().version()).isEqualTo("policy-v1");
+    }
+
     /* ── Outillage ─────────────────────────────────────────────────────── */
 
     private SupervisionService service(SupervisionProperties properties) {
@@ -636,9 +749,10 @@ class SupervisionServiceTest {
     }
 
     private SupervisionService service(SupervisionProperties properties, ModelAvailability model) {
+        given(notifier.send(any(), any())).willReturn(Optional.empty());
         return new SupervisionService(agentService, toolCatalog, properties, clock, model,
                 mock(Tracer.class), CircuitBreakerRegistry.ofDefaults(),
-                new InMemoryAuditRepository(properties.historySize()));
+                new InMemoryAuditRepository(properties.historySize()), notifier, tokenBudget);
     }
 
     private void analysisReturns(Map<String, Object> content) {
@@ -684,7 +798,9 @@ class SupervisionServiceTest {
                                                     Map<Capability, ActionBinding> actions,
                                                     Map<Capability, Double> floors) {
         return new SupervisionProperties(true, processes, mode, 0.85, thresholds(),
-                autonomy, floors, actions, 200, Duration.ofMinutes(30), Duration.ofMinutes(15));
+                autonomy, floors, actions, 200, Duration.ofMinutes(30), Duration.ofMinutes(15),
+                new SupervisionProperties.Schedule(false, Duration.ofMinutes(5), Duration.ofMinutes(10)),
+                new SupervisionProperties.AutoAdjust(true, 5, 0.5, 0.05));
     }
 
     /** Horloge pilotable : l'expiration et la péremption se testent en avançant, pas en attendant. */
