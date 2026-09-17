@@ -55,6 +55,25 @@ function renderToolChips(turn, calls) {
   }));
 }
 
+/**
+ * Les fins normales restent muettes ; le plafond de jetons atteint, ou un motif que la console ne
+ * connaît pas, se voient. Sans ce repère, une réponse coupée en plein milieu s'affiche exactement
+ * comme une réponse complète — et le vocabulaire varie d'un fournisseur à l'autre, si bien qu'un
+ * motif inconnu vaut un doute affiché, jamais un silence.
+ */
+const NORMAL_ENDINGS = new Set(['end_turn', 'stop', 'stop_sequence', 'tool_use', 'tool_calls']);
+const TRUNCATED = new Set(['max_tokens', 'length']);
+
+function renderFinishReason(turn, finishReason) {
+  const reason = (finishReason || '').toLowerCase();
+  if (!reason || NORMAL_ENDINGS.has(reason)) return;
+  const note = el('div', 'chips');
+  note.append(el('span', 'chip failed', TRUNCATED.has(reason)
+    ? `réponse coupée au plafond de jetons (${finishReason})`
+    : `fin inhabituelle (${finishReason})`));
+  turn.append(note);
+}
+
 function renderToolLog(calls) {
   $('#tool-log').replaceChildren(...calls.map((call) => {
     const line = el('li');
@@ -134,6 +153,7 @@ async function sendBlocking(message) {
   setConversation(answer.conversationId);
   const { turn } = addTurn('agent', answer.content);
   renderToolChips(turn, answer.tools || []);
+  renderFinishReason(turn, answer.finishReason);
   renderToolLog(answer.tools || []);
 }
 

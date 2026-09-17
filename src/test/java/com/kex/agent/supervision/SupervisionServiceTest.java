@@ -643,7 +643,7 @@ class SupervisionServiceTest {
 
     private void analysisReturns(Map<String, Object> content) {
         when(agentService.askStructured(anyString(), anyString(), any()))
-                .thenReturn(new AgentStructuredAnswer("cycle", content, List.of()));
+                .thenReturn(new AgentStructuredAnswer("cycle", content, List.of(), null, "end_turn"));
     }
 
     private static Map<String, Object> anomalyPayload(String capability, double confidence) {

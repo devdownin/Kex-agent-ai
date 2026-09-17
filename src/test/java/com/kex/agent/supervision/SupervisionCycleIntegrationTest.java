@@ -83,7 +83,7 @@ class SupervisionCycleIntegrationTest {
     @Test
     void un_cycle_mene_l_anomalie_jusqu_a_un_appel_d_outil_reel() {
         given(agentService.askStructured(anyString(), anyString(), any()))
-                .willReturn(new AgentStructuredAnswer("cycle", analysis(), List.of()));
+                .willReturn(new AgentStructuredAnswer("cycle", analysis(), List.of(), null, "end_turn"));
 
         CycleReport report = supervision.runCycle("test-integration");
 
@@ -121,7 +121,7 @@ class SupervisionCycleIntegrationTest {
     void une_capacite_sans_outil_lie_echoue_sans_toucher_au_reseau() {
         // MODIFY_CONFIGURATION n'est lié à aucun outil : l'échec doit le dire, pas partir à moitié.
         given(agentService.askStructured(anyString(), anyString(), any()))
-                .willReturn(new AgentStructuredAnswer("cycle", analysis("MODIFY_CONFIGURATION"), List.of()));
+                .willReturn(new AgentStructuredAnswer("cycle", analysis("MODIFY_CONFIGURATION"), List.of(), null, "end_turn"));
 
         CycleReport report = supervision.runCycle("test-integration");
 

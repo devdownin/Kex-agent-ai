@@ -169,4 +169,38 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   secondes qui donnait l'impression que le bloc n'occupait plus toute la largeur disponible. Le
   témoin ne s'affiche plus qu'au tout premier rendu, quand l'hôte est encore vide.
 
+- **`Flux.timeout(Duration)` borne le silence entre deux éléments, pas la durée d'un flux.** Le
+  chemin en flux paraissait plafonné comme le chemin bloquant ; il ne l'était pas. Vingt tours
+  d'outils entrecoupés de jetons ne dépassent jamais le délai entre deux éléments et tenaient la
+  connexion des minutes durant — précisément ce que `kex.agent.request-timeout` existe pour
+  empêcher, et ce que `spring.mvc.async.request-timeout` suppose déjà empêché. Un plafond de durée
+  se pose avec `takeUntilOther(Mono.delay(...))`, et un flux de test qui débite sans se taire est
+  le seul qui distingue les deux : `Flux.never()` passe avec l'une comme avec l'autre.
+
+- **Un échange en échec laisse sa trace en mémoire, et l'identifiant généré ne sort jamais.**
+  L'advisor de mémoire écrit le message de l'utilisateur *avant* l'appel au modèle. Sur échec, si
+  l'appelant n'avait pas fourni d'identifiant, personne ne connaît celui qui a été tiré : l'entrée
+  reste inatteignable et impurgeable — persistée en base sous `shared-memory`. Elle est donc purgée,
+  et pour un timeout seulement à la fin de la tâche orpheline : l'appel bloquant n'est pas
+  interruptible et écrit sa réponse après coup, une purge immédiate la ferait revenir juste après.
+
+- **`.call().content()` jette le `ChatResponse`**, donc le motif d'arrêt et les jetons consommés.
+  Une réponse coupée au plafond `max-tokens` se rendait alors exactement comme une réponse
+  complète. `chatResponse()` — et `responseEntity(...)` pour la sortie structurée — gardent les
+  deux. `EmptyUsage` compte `0` là où le fournisseur n'a rien dit : à traduire en absence, jamais
+  en zéro.
+
+- **Un `Supplier` décoré ne couvre pas un flux.** Le disjoncteur `agent-model` ne protégeait que
+  `ask`/`askStructured` : ouvert, il rendait `503` sur `/chat` pendant que `/chat/stream` — ce que
+  la console emprunte par défaut — continuait d'appeler le fournisseur en panne, sans même que ses
+  échecs comptent. `CircuitBreakerOperator` (`resilience4j-reactor`) le pose sur le flux, après le
+  plafond de durée pour que le timeout compte comme un échec, et par `transformDeferred` : l'état
+  se lit à la souscription, pas à l'assemblage.
+
+- **`SimpleLoggerAdvisor` écrit en `DEBUG`.** `kex.agent.log-interactions: true` enregistrait
+  l'advisor sans qu'une ligne n'apparaisse au niveau par défaut, pendant que la console avertissait
+  d'une fuite de prompts inexistante : une propriété qui ment deux fois. Le niveau est posé dans
+  `application.yml` ; il ne produit rien tant que la propriété reste fausse, l'advisor n'étant alors
+  pas enregistré.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

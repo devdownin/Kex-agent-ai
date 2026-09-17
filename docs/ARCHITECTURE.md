@@ -406,13 +406,26 @@ n'a rien fait de mal. Un schéma vide, lui, rend `400`.
 appel MCP, pas l'échange : avec vingt tours d'outils autorisés, le pire cas gardait une connexion
 HTTP ouverte une vingtaine de minutes.
 
-Les deux chemins ne sont pas équivalents, et c'est assumé :
+Les deux chemins bornent la même chose — la durée de l'échange, depuis la souscription — mais pas
+de la même façon, et c'est assumé :
 
-- **flux** — `Flux.timeout` annule réellement l'amont ;
+- **flux** — `takeUntilOther(Mono.delay(...))` annule réellement l'amont. Pas `Flux.timeout(Duration)`,
+  qui ne borne que le silence *entre deux jetons* : vingt tours d'outils restant chacun sous le
+  plafond n'auraient jamais déclenché ce timeout-là, et la connexion serait restée ouverte
+  exactement le temps que cette propriété existe pour éviter — jusqu'à ce que
+  `spring.mvc.async.request-timeout` coupe sans rien dire à l'appelant ;
 - **bloquant** — l'appel de Spring AI n'est pas interruptible. Le plafond borne l'attente de
   l'appelant (`504`), pas le travail, qui continue jusqu'à son terme sur un thread virtuel où un
   orphelin coûte une pile et non un thread noyau. `spring.threads.virtual.enabled` est activé pour
   cette raison.
+
+Un échange abandonné laisse deux traces, que le `504` ne cachait pas mais ne disait pas non plus.
+L'advisor de mémoire écrit le message de l'utilisateur *avant* l'appel au modèle et la réponse à sa
+fin : la réponse tardive rejoint donc l'historique après coup, et conditionne le tour suivant de
+cette conversation. Le `504` porte l'identifiant de la conversation (`conversationId` dans le
+`ProblemDetail`) pour qu'elle reste relisable et purgeable ; quand cet identifiant avait été tiré
+par l'agent faute d'en recevoir un, personne ne l'aurait connu, et la conversation est alors purgée
+à la fin de la tâche orpheline — purger plus tôt la ferait revenir juste après.
 
 ### Disjoncteur et réessai sur les intégrations externes
 
@@ -424,8 +437,8 @@ Pas le starter `resilience4j-spring-boot3` : sa propre autoconfiguration vérifi
 Spring Boot au démarrage et refuse explicitement Spring Boot 4 (`IncompatibleSpringBootVersionException`,
 constaté en l'ajoutant). `ResilienceConfig` construit donc `CircuitBreakerRegistry` et
 `RetryRegistry` à la main, à partir des seuls modules nus (`resilience4j-circuitbreaker`,
-`-retry`, `-micrometer`), et `McpToolCatalog` / `AgentService` y puisent le disjoncteur et le
-réessai qui les concernent par leur nom plutôt que par annotation.
+`-retry`, `-micrometer`, `-reactor`), et `McpToolCatalog` / `AgentService` y puisent le disjoncteur
+et le réessai qui les concernent par leur nom plutôt que par annotation.
 
 Deux disjoncteurs, pas un seul : `mcp-tool` et `agent-model` ne partagent pas les mêmes pannes, et
 un serveur MCP capricieux n'a pas à dégrader la disponibilité du modèle, ni l'inverse. Celui du
@@ -437,9 +450,17 @@ Le réessai, lui, n'existe que côté MCP, et seulement sur `McpServerUnavailabl
 l'indisponibilité *explicite* d'un serveur. Une erreur de protocole (outil inconnu, argument
 refusé) resterait fausse rejouée. Il n'y en a pas côté modèle : un échange qui a déjà exécuté
 plusieurs tours d'outils le rejouerait en entier au moindre échec, doublant les appels MCP déjà
-faits. Le disjoncteur du modèle protège donc `ask`/`askStructured`, pas `stream` : ce dernier rend
-déjà chaque échec en `event: error` sans jamais bloquer un appelant sur le plafond de temps, la
-même raison qui l'exempte du plafond bloquant plus haut.
+faits.
+
+Le disjoncteur du modèle, lui, couvre les trois chemins. `ask`/`askStructured` décorent un
+`Supplier` ; `stream` passe par `CircuitBreakerOperator` (`resilience4j-reactor`), un `Supplier`
+décoré ne couvrant pas un flux. Il ne l'a pas toujours fait, et l'écart ne protégeait presque
+rien : la console parle par défaut à `/chat/stream`, si bien qu'un disjoncteur ouvert rendait
+`503` sur `/chat` pendant que le flux continuait d'envoyer des prompts — et de dépenser — vers un
+fournisseur déjà constaté en panne, sans même que ses échecs comptent pour le garder ouvert.
+L'opérateur est posé *après* le plafond de durée, pour que notre propre timeout compte comme un
+échec du fournisseur ; `transformDeferred` plutôt que `transform`, l'état du disjoncteur se lisant
+à la souscription et non à l'assemblage.
 
 Un disjoncteur ouvert rend `503` (`CallNotPermittedException`, capté à côté des exceptions MCP et
 fournisseur) plutôt que de laisser l'appelant redécouvrir la panne en silence jusqu'au timeout.
@@ -981,7 +1002,7 @@ n'entre dans la chaîne de build, la même contrainte que pour le reste de la co
 | `McpStreamableHttpIntegrationTest` | Le transport MCP réel, bearer compris, sur un serveur HTTP monté dans le test |
 | `ApiSecurityTest` / `…UnconfiguredTest` | 401 / 200 / 503, et la sonde de santé jamais bloquée |
 | `McpToolCatalogTest` | Introspection, appel, ressources, serveur injoignable, capacité absente |
-| `AgentServiceTest` | Propagation du `conversationId` à l'advisor de mémoire |
+| `AgentServiceTest` | Propagation du `conversationId` à l'advisor de mémoire, plafond de durée des deux chemins (dont un flux qui débite sans se taire), purge d'une conversation que l'échec rend inatteignable, jetons et motif d'arrêt rendus |
 | `AgentControllerTest` | Contrat HTTP des 7 routes |
 | `SharedMemoryProfileTest` | Le profil `shared-memory` remplace bien le dépôt en mémoire |
 | `KexAgentApplicationTests` | Le contexte démarre sans aucun serveur MCP configuré |
