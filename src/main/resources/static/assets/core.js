@@ -410,6 +410,17 @@ export function registerDrawer(param, open) {
   DRAWERS.set(param, open);
 }
 
+/**
+ * Ouvre un panneau par son paramètre d'adresse, en effaçant tous les autres panneaux enregistrés.
+ * Sans ça, chaque module qui ouvre un panneau devrait connaître les paramètres de tous les autres
+ * pour ne pas laisser une adresse porter deux panneaux à la fois — exactement ce que le registre
+ * existe pour éviter.
+ */
+export function setDrawerParam(param, value) {
+  const cleared = Object.fromEntries([...DRAWERS.keys()].map((key) => [key, null]));
+  setParams({ ...cleared, [param]: value }, true);
+}
+
 /** L'adresse fait foi : aucun paramètre de panneau, aucun panneau. */
 export async function restoreDrawerFromUrl() {
   const query = params();
@@ -448,4 +459,122 @@ export function confirmAction({ title, lines, accept }) {
   return new Promise((resolve) => {
     dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), { once: true });
   });
+}
+
+/* ── Validation de schéma (sous-ensemble) ─────────────────────────────── */
+
+// Une antisèche côté client, pas un validateur JSON Schema complet : type, required, enum,
+// bornes numériques et longueurs suffisent à attraper une erreur de frappe avant l'aller-retour
+// serveur. $ref, allOf/anyOf/oneOf et les schémas composés restent du ressort du serveur, seule
+// autorité — les rejeter en silence ici serait pire que ne rien vérifier.
+function typeOf(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+function matchesType(value, type) {
+  if (type === 'integer') return typeOf(value) === 'number' && Number.isInteger(value);
+  return typeOf(value) === type;
+}
+
+export function schemaErrors(value, schema, label = 'valeur') {
+  if (!schema || typeof schema !== 'object') return [];
+  const errors = [];
+  if (schema.type && !matchesType(value, schema.type)) {
+    return [`${label} : attendu ${schema.type}, reçu ${typeOf(value)}`];
+  }
+  if (schema.enum && !schema.enum.includes(value)) {
+    errors.push(`${label} : doit être l’une de [${schema.enum.join(', ')}]`);
+  }
+  if (typeof value === 'string') {
+    if (schema.minLength != null && value.length < schema.minLength) {
+      errors.push(`${label} : au moins ${schema.minLength} caractère(s)`);
+    }
+    if (schema.maxLength != null && value.length > schema.maxLength) {
+      errors.push(`${label} : au plus ${schema.maxLength} caractère(s)`);
+    }
+    if (schema.pattern && !new RegExp(schema.pattern).test(value)) {
+      errors.push(`${label} : ne correspond pas au motif attendu`);
+    }
+  }
+  if (typeof value === 'number') {
+    if (schema.minimum != null && value < schema.minimum) errors.push(`${label} : au moins ${schema.minimum}`);
+    if (schema.maximum != null && value > schema.maximum) errors.push(`${label} : au plus ${schema.maximum}`);
+  }
+  if (schema.type === 'object' && value && typeof value === 'object') {
+    (schema.required || []).forEach((key) => {
+      if (!(key in value)) errors.push(`${label}.${key} : champ requis manquant`);
+    });
+    Object.entries(schema.properties || {}).forEach(([key, sub]) => {
+      if (key in value) errors.push(...schemaErrors(value[key], sub, `${label}.${key}`));
+    });
+  }
+  if (schema.type === 'array' && Array.isArray(value) && schema.items) {
+    value.forEach((item, index) => errors.push(...schemaErrors(item, schema.items, `${label}[${index}]`)));
+  }
+  return errors;
+}
+
+/* ── Export CSV ────────────────────────────────────────────────────────── */
+
+// RFC 4180 : une valeur qui contient une virgule, un guillemet ou un saut de ligne doit être
+// entre guillemets, doublés à l'intérieur — sans ça, un motif ou un acteur avec une virgule décale
+// toutes les colonnes qui suivent.
+function csvCell(value) {
+  const text = value == null ? '' : String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function toCsv(columns, rows) {
+  const lines = [columns.map(([label]) => csvCell(label)).join(',')];
+  rows.forEach((row) => lines.push(columns.map(([, pick]) => csvCell(pick(row))).join(',')));
+  return lines.join('\r\n');
+}
+
+/**
+ * Un lien éphémère : le navigateur télécharge, rien ne reste dans le DOM après. `columns` est une
+ * liste de `[intitulé, (ligne) => valeur]`, pour ne pas dupliquer la mise en forme déjà écrite pour
+ * l'écran.
+ */
+export function downloadCsv(filename, columns, rows) {
+  const blob = new Blob([toCsv(columns, rows)], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = el('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* ── Mini-tendance ─────────────────────────────────────────────────────── */
+
+/**
+ * Une poignée de points sans axes ni légende — pas un graphique — pour repérer une dérive avant
+ * qu'elle ne soit un chiffre inquiétant dans un compteur agrégé. En dessous de deux points connus,
+ * `null` : un tracé sur un seul point ne dirait rien, et une droite plate inventerait une tendance
+ * qui n'existe pas.
+ */
+export function sparkline(values, { width = 160, height = 32 } = {}) {
+  const known = (values || []).filter((value) => value != null);
+  if (known.length < 2) return null;
+  const clean = values.map((value) => value ?? 0);
+  const max = Math.max(...clean, 1);
+  const min = Math.min(...clean, 0);
+  const span = max - min || 1;
+  const step = width / (clean.length - 1);
+  const points = clean.map((value, index) =>
+    `${(index * step).toFixed(1)},${(height - ((value - min) / span) * height).toFixed(1)}`).join(' ');
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'sparkline');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label',
+    `Tendance sur les ${clean.length} derniers cycles, de ${clean[0]} à ${clean[clean.length - 1]}`);
+  const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+  polyline.setAttribute('points', points);
+  svg.append(polyline);
+  return svg;
 }

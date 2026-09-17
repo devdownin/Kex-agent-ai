@@ -68,6 +68,27 @@ function expected(message) {
     || (message.text().includes('404') && message.location().url.includes('/actuator/metrics/'));
 }
 
+/** Le strict nécessaire pour que decisionRow() (supervision.js) rende une carte sélectionnable. */
+function decisionStub(id) {
+  return {
+    id, cycleId: 'cycle-1', anomalyId: 'a1', processId: 'order-integration',
+    processName: 'Order Integration', capability: 'RESTART_CONSUMER', objective: 'objectif',
+    context: 'contexte', action: `Redémarrer ${id}`, observations: [], estimatedImpact: 'Faible',
+    confidence: 0.9, status: 'PENDING_APPROVAL', result: null, policyVersion: 'policy-v1',
+    correlationId: 'corr', decidedBy: null, decidedAt: new Date().toISOString(),
+    resolvedAt: null, expiresAt: new Date(Date.now() + 1800000).toISOString(),
+  };
+}
+
+/** Le strict nécessaire pour que trendGroup() (supervision.js) ait de quoi tracer une tendance. */
+function cycleStub(id, anomaliesDetected) {
+  const now = new Date().toISOString();
+  return {
+    id, startedAt: now, finishedAt: now, processesAnalysed: 2, anomaliesDetected,
+    decisionsTaken: 0, actionsExecuted: 0, events: [], failure: null,
+  };
+}
+
 await page.goto(`${BASE}/#/settings`, { waitUntil: 'networkidle' });
 await page.waitForSelector('dialog[open]');
 await page.fill('#api-key', TOKEN);
@@ -267,6 +288,123 @@ await check('le tableau compact de la vue d’ensemble signale qu’il défile',
   assert.equal(scroll.scrollbarWidth, 'thin');
   assert.ok(scroll.hasEdgeShadow, 'un halo de bord signale le contenu caché');
 });
+
+await check('les arguments qui ne respectent pas le schéma d’un outil sont refusés sans appel réseau',
+  async () => {
+    await page.route('**/api/agent/mcp/servers', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify([{
+        connection: 'kafka-explorer', serverName: 'kafka-explorer-mcp', version: '0.1.0',
+        protocolVersion: '2025-11-25', initialized: true, circuitBreakerState: 'CLOSED',
+        tools: [{
+          name: 'kex_list_topics', description: 'Liste les topics.',
+          inputSchema: { type: 'object', required: ['topic'], properties: { topic: { type: 'string' } } },
+        }],
+      }]),
+    }));
+    let called = false;
+    await page.route('**/api/agent/mcp/servers/*/tools/*', (route) => {
+      called = true;
+      route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+    await page.click('#servers .server ul.tool-list button');
+    // La valeur par défaut du champ ("{}") n'a pas "topic" : ça doit suffire à être refusé.
+    await page.click('.invoke button.primary');
+    const output = await page.$eval('.invoke .dump.result', (node) => node.textContent);
+    assert.match(output, /Arguments invalides/);
+    assert.equal(called, false, 'la validation locale doit empêcher tout appel réseau');
+    await page.unroute('**/api/agent/mcp/servers');
+    await page.unroute('**/api/agent/mcp/servers/*/tools/*');
+  });
+
+await check('l’export CSV de l’audit déclenche un téléchargement', async () => {
+  await page.goto(`${BASE}/#/audit`, { waitUntil: 'networkidle' });
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.click('#export-audit'),
+  ]);
+  assert.equal(download.suggestedFilename(), 'audit-kex-agent.csv');
+});
+
+await check('la sélection groupée approuve chaque décision cochée, sans nouvel endpoint de lot',
+  async () => {
+    await page.route('**/api/agent/supervision/decisions', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify([decisionStub('d1'), decisionStub('d2')]),
+    }));
+    const approved = [];
+    await page.route('**/api/agent/supervision/decisions/*/approve', (route) => {
+      approved.push(route.request().url());
+      route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ ...decisionStub('d1'), status: 'EXECUTED' }),
+      });
+    });
+    await page.goto(`${BASE}/#/decisions`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('#decisions-list .bulk-select');
+    for (const box of await page.$$('#decisions-list .bulk-select')) await box.check();
+    await page.waitForSelector('#decisions-bulk-bar:not([hidden])');
+    await page.click('#decisions-bulk-approve');
+    await page.click('#confirm-accept');
+    await page.waitForSelector('#toasts .toast');
+    assert.equal(approved.length, 2, `attendu 2 approbations, vu ${approved.length}`);
+    await page.unroute('**/api/agent/supervision/decisions');
+    await page.unroute('**/api/agent/supervision/decisions/*/approve');
+  });
+
+await check('la tendance des cycles se trace dès que deux cycles sont connus', async () => {
+  await page.route('**/api/agent/supervision/cycles', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify([cycleStub('c2', 3), cycleStub('c1', 1)]),
+  }));
+  await page.goto(`${BASE}/#/agent`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#performance svg.sparkline');
+  await page.unroute('**/api/agent/supervision/cycles');
+});
+
+await check('la mise à jour de politique montre un diff avant/après, pas seulement l’état visé', async () => {
+  await page.goto(`${BASE}/#/agent`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#agent-form');
+  const before = await page.$eval('input[name="mode"]:checked', (node) => node.value);
+  const other = before === 'SUPERVISED' ? 'MANUAL' : 'SUPERVISED';
+  await page.check(`input[name="mode"][value="${other}"]`);
+  await page.click('#agent-form button[type=submit]');
+  await page.waitForSelector('#confirm[open]');
+  const body = await page.$eval('#confirm-body', (node) => node.textContent);
+  assert.match(body, /→/, 'le diff doit montrer un avant → après, pas seulement le nouvel état');
+  assert.ok(body.includes(before) && body.includes(other),
+    `attendu ${before} et ${other} dans le diff, vu : ${body}`);
+  // Annulé : ce cas ne doit pas laisser la politique du reste de la suite dans un état différent.
+  await page.click('#confirm button[value=cancel]');
+});
+
+await check('un échange retrouvé dans l’historique se réaffiche sans rejouer l’appel au modèle',
+  async () => {
+    await page.route('**/api/agent/chat', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({
+        conversationId: 'conv-histoire', content: 'Réponse simulée', tools: [],
+        finishReason: 'end_turn', usage: null,
+      }),
+    }));
+    await page.goto(`${BASE}/#/chat`, { waitUntil: 'networkidle' });
+    await page.uncheck('#stream-mode');
+    await page.fill('#prompt', 'Question de test pour l’historique');
+    await page.click('#send');
+    await page.waitForFunction(() => document.querySelector('#conversation-id')?.textContent === 'conv-histoire');
+
+    await page.click('#open-history');
+    await page.waitForSelector('#drawer:not([hidden])');
+    const label = await page.$eval('#drawer-body .card h3', (node) => node.textContent);
+    assert.match(label, /Question de test/);
+
+    await page.click('#drawer-body .card button.primary');
+    await page.waitForSelector('#drawer[hidden]', { state: 'attached' });
+    const turns = await page.$$eval('#transcript li', (nodes) => nodes.length);
+    assert.equal(turns, 2, 'la reprise doit réafficher le tour utilisateur et la réponse');
+    await page.unroute('**/api/agent/chat');
+  });
 
 await check('aucune erreur de script sur le parcours', () => {
   assert.deepEqual(scriptErrors, []);

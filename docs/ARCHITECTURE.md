@@ -264,7 +264,10 @@ ont tous été trouvés à la main — donc une fois, sans garantie de non-retou
 jeton, pastille qui ne ment pas sur un agent qui n'a rien analysé, tri numérique avec les valeurs
 absentes en bas, support d'outils non annoncé distinct d'absent, panneau qui retient le focus,
 bouton Retour qui le referme, panneau rouvert depuis son adresse, filtre qui survit au
-rechargement, bandeau hors ligne, tableau compact qui signale qu'il défile, et aucune erreur de
+rechargement, bandeau hors ligne, tableau compact qui signale qu'il défile, arguments hors schéma
+refusés sans appel réseau, export CSV qui déclenche un téléchargement, sélection groupée qui
+approuve chaque décision cochée, tendance tracée dès deux cycles connus, diff avant/après sur une
+mise à jour de politique, reprise d'une conversation depuis l'historique local, et aucune erreur de
 script sur le parcours.
 
 Playwright n'est pas une dépendance du projet : le job de CI l'installe hors de l'arborescence et
@@ -1097,6 +1100,72 @@ lisible en illustration, plus du tout à 32 px : à cette taille, une icône ne 
 `assets/logo.png` est un recadrage serré sur le visage du robot, seul élément qui reste
 reconnaissable une fois réduit, exporté une fois pour toutes en 128 px — aucun outillage d'image
 n'entre dans la chaîne de build, la même contrainte que pour le reste de la console.
+
+### L'historique des conversations est une commodité du navigateur, pas une fonctionnalité du serveur
+
+`ChatMemory` retient les échanges par `conversationId`, sans lister les identifiants connus ni
+porter de dimension par principal — avec `kex.agent.api-keys` (plusieurs jetons nommés), rien côté
+serveur ne dit quelle conversation appartient à quel jeton. Lister « les conversations récentes »
+depuis le serveur exposerait donc les échanges de tout le monde à qui que ce soit d'authentifié,
+et ajouter cette dimension pour une liste de confort aurait été disproportionné.
+
+`chat.js` tient à la place un index (`kex.agent.conversations`) et une transcription par
+conversation (`kex.agent.conversation.<id>`) dans `localStorage` du navigateur — jamais dans
+`sessionStorage`, contrairement au jeton d'API : l'historique doit survivre à la fermeture de
+l'onglet, le jeton ne doit pas y survivre. Reprendre une conversation ne rejoue aucun appel : elle
+réaffiche la transcription déjà vue dans ce navigateur et continue d'écrire vers le même
+`conversationId`, dont la mémoire complète, elle, reste bien côté serveur. Une conversation ouverte
+sur un autre appareil ou après un vidage du stockage local reste invisible ici — un manque assumé,
+pas une régression : rien de plus n'est inventé.
+
+### La sélection groupée rejoue l'endpoint existant, elle n'en ajoute pas
+
+Approuver ou refuser plusieurs décisions à la fois (vue Décisions) ne crée pas de route « par
+lot » côté serveur : chaque décision cochée appelle `POST .../decisions/{id}/approve` (ou
+`/reject`) comme le ferait un clic individuel, en parallèle (`Promise.allSettled`). Chaque décision
+reste individuellement auditée et protégée par son propre verrou d'état
+(`DecisionInProgressException`) : un lot n'a besoin de rien de plus que ce chemin déjà correct, et
+un échec partiel se lit dans le résultat (« 1/2 traitée, 1 en échec ») plutôt que d'échouer le lot
+entier sur une seule décision déjà tranchée entre-temps.
+
+### Un diff avant/après, pas seulement l'état visé
+
+Confirmer une mise à jour de politique (mode, autonomie, seuils) affichait déjà l'état proposé,
+mais jamais ce qui changeait vraiment par rapport à l'existant — un opérateur qui ajuste un seul
+champ parmi dix devait deviner les neuf autres depuis sa propre mémoire. `policyDiff` et
+`thresholdsDiff` (`supervision.js`) comparent la politique chargée à ce que le formulaire s'apprête
+à envoyer et ne listent que ce qui diffère, en `intitulé : avant → après` — les lignes que
+`confirmAction` sait déjà afficher, sans nouveau composant. Rien ne change : sans différence, la
+politique s'enregistre directement, comme avant.
+
+### Une antisèche de schéma côté client, jamais une seconde autorité
+
+`schemaErrors` (`core.js`) vérifie les arguments d'un appel direct d'outil MCP contre le schéma
+JSON que `McpToolInfo.inputSchema` expose, avant l'aller-retour réseau — type, `required`, `enum`,
+bornes numériques et longueurs, rien de plus. `$ref`, `allOf`/`anyOf`/`oneOf` et les schémas
+composés ne sont pas couverts : les rejeter en silence serait pire que ne pas les vérifier, et le
+serveur MCP reste de toute façon la seule autorité sur ce qu'il accepte réellement. Un schéma que
+cette antisèche approuve peut encore être refusé côté serveur ; l'inverse — refuser ici ce que le
+serveur aurait accepté — ne doit jamais arriver, d'où l'étendue volontairement restreinte.
+
+### Une tendance a besoin d'au moins deux points, jamais d'une droite inventée
+
+`sparkline` (`core.js`) trace les anomalies détectées sur les derniers cycles (`GET
+.../cycles`, rendu du plus récent au plus ancien côté serveur — voir `History` — inversé ici pour
+un tracé chronologique). En dessous de deux cycles connus, elle rend `null` plutôt qu'un trait :
+une tendance sur un seul point n'existe pas, et une valeur par défaut à zéro laisserait croire à
+une accalmie qui n'a simplement pas encore été mesurée — le même principe que « une mesure absente
+n'est jamais zéro », appliqué à un tracé plutôt qu'à un nombre.
+
+### Deux `.dump` dans le même panneau : le sélecteur qui n'en cible qu'un
+
+Le panneau d'invocation directe d'un outil MCP porte deux blocs `<pre class="dump">` une fois le
+schéma affiché : le rappel du schéma (`.dump.muted.schema-hint`) et le résultat de l'appel
+(`.dump.result`). Une vérification automatisée qui cible `.invoke .dump` sans plus de précision
+tombe sur le premier des deux trouvés dans le document — le rappel de schéma, pas le résultat —
+et lit un texte qui a l'air plausible sans être celui qu'on voulait lire. `.dump.result` désigne le
+second sans ambiguïté ; le même risque existe pour tout panneau qui affiche plusieurs `<pre
+class="dump">` à la fois.
 
 ## Ce que les tests couvrent
 

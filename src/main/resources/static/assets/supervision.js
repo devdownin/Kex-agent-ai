@@ -5,8 +5,9 @@
 
 import {
   $, ago, api, busy, circuitBreakersValue, clockTime, confirmAction, definition, dismissDrawer,
-  drawerOpen, duration, el, empty, errorState, frag, loading, openDrawer, params, percent,
-  registerDrawer, render, report, setParams, sortable, stamp, stateMark, stateTag, toast,
+  downloadCsv, drawerOpen, duration, el, empty, errorState, frag, loading, openDrawer, params,
+  percent, registerDrawer, render, report, setParams, sortable, sparkline, stamp, stateMark,
+  stateTag, toast,
 } from './core.js';
 
 const BASE = '/api/agent/supervision';
@@ -471,12 +472,26 @@ export async function decisions() {
     rows.forEach((decision) => list.append(decisionRow(decision)));
     return list;
   });
+  // Un rendu neuf n'a aucune case cochée : la barre doit redevenir cachée avec lui, pas rester
+  // affichée pour une sélection qui n'existe plus dans le DOM qui vient de la remplacer.
+  updateBulkBar();
 }
 
 function decisionRow(decision) {
   const card = el('article', 'card');
   card.dataset.state = DECISION_STATES[decision.status] || 'UNKNOWN';
   const head = el('header');
+  // Seule une décision encore en attente se sélectionne : les autres sont déjà tranchées, cocher
+  // une décision exécutée ou refusée n'aurait rien à faire dans une action groupée.
+  if (decision.status === 'PENDING_APPROVAL') {
+    const checkbox = el('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'bulk-select';
+    checkbox.dataset.decisionId = decision.id;
+    checkbox.setAttribute('aria-label', `Sélectionner : ${decision.action}`);
+    checkbox.addEventListener('change', updateBulkBar);
+    head.append(checkbox);
+  }
   head.append(el('span', 'time', clockTime(decision.decidedAt)));
   head.append(el('h3', null, decision.action));
   head.append(stateTag(DECISION_STATES[decision.status], DECISION_LABELS[decision.status] || decision.status));
@@ -488,6 +503,50 @@ function decisionRow(decision) {
   open.addEventListener('click', () => openDecision(decision.id));
   card.append(open);
   return card;
+}
+
+function updateBulkBar() {
+  const boxes = [...document.querySelectorAll('#decisions-list .bulk-select:checked')];
+  const bar = $('#decisions-bulk-bar');
+  bar.hidden = boxes.length === 0;
+  $('#decisions-bulk-count').textContent = boxes.length
+    ? `${boxes.length} décision${boxes.length > 1 ? 's' : ''} sélectionnée${boxes.length > 1 ? 's' : ''}`
+    : '';
+}
+
+/**
+ * Une boucle d'appels au chemin déjà existant, pas un nouvel endpoint de lot : chaque décision
+ * reste individuellement auditée et gardée par son propre verrou d'état côté serveur — une
+ * approbation groupée n'a besoin de rien de plus que ce que `resolveDecision` fait déjà une à une.
+ */
+async function bulkResolve(approve) {
+  const ids = [...document.querySelectorAll('#decisions-list .bulk-select:checked')]
+    .map((box) => box.dataset.decisionId);
+  if (!ids.length) return;
+
+  const confirmed = await confirmAction({
+    title: approve ? `Confirmer ${ids.length} approbation${ids.length > 1 ? 's' : ''}`
+      : `Confirmer ${ids.length} refus`,
+    accept: approve ? 'Confirmer les approbations' : 'Confirmer les refus',
+    lines: [
+      ['Décisions concernées', String(ids.length)],
+      ['Conséquence', approve
+        ? 'Chaque action part immédiatement vers l’outil MCP lié à sa capacité.'
+        : 'Aucune action ne sera exécutée ; chaque refus est conservé dans l’audit.'],
+    ],
+  });
+  if (!confirmed) return;
+
+  const results = await Promise.allSettled(ids.map((id) => api(
+    `${BASE}/decisions/${encodeURIComponent(id)}/${approve ? 'approve' : 'reject'}`,
+    { method: 'POST', body: approve ? undefined : { reason: 'Refusée depuis la console (sélection groupée)' } })));
+  const failed = results.filter((result) => result.status === 'rejected').length;
+  toast(failed
+    ? `${ids.length - failed}/${ids.length} décision(s) traitée(s), ${failed} en échec`
+    : `${ids.length} décision(s) ${approve ? 'approuvée(s)' : 'refusée(s)'}`,
+    failed ? 'error' : undefined);
+  await overview();
+  await decisions();
 }
 
 async function openDecision(id) {
@@ -642,49 +701,75 @@ export async function agent() {
  * un délai de détection — celui-ci se compterait depuis le début de l'incident, que rien ne connaît.
  */
 export async function performance() {
-  await render($('#performance'), () => api(`${BASE}/performance`), (data) => {
-    const wrap = el('div', 'perf');
+  await render($('#performance'),
+    () => Promise.all([api(`${BASE}/performance`), api(`${BASE}/cycles`)]),
+    ([data, cycles]) => {
+      const wrap = el('div', 'perf');
 
-    wrap.append(perfGroup('Détections', [
-      ['Cycles exécutés', data.cycles],
-      ['Cycles en échec', data.cyclesFailed, data.cyclesFailed ? 'ko' : null],
-      ['Relevés d’anomalie', data.anomaliesDetected],
-      ['Alertes actives', data.activeAlerts],
-      ['Durée moyenne d’un cycle', duration(data.averageCycleMillis)],
-    ]));
+      wrap.append(perfGroup('Détections', [
+        ['Cycles exécutés', data.cycles],
+        ['Cycles en échec', data.cyclesFailed, data.cyclesFailed ? 'ko' : null],
+        ['Relevés d’anomalie', data.anomaliesDetected],
+        ['Alertes actives', data.activeAlerts],
+        ['Durée moyenne d’un cycle', duration(data.averageCycleMillis)],
+      ]));
 
-    wrap.append(perfGroup('Décisions', [
-      ['Prises', data.decisionsTaken],
-      ['Exécutées seules', data.autonomousDecisions],
-      ['Approuvées par un humain', data.humanApprovals],
-      ['Refusées', data.humanRejections],
-      ['Expirées sans réponse', data.approvalsExpired, data.approvalsExpired ? 'ko' : null],
-    ]));
+      wrap.append(trendGroup(cycles));
 
-    wrap.append(perfGroup('Actions', [
-      ['Réussies', data.actionsExecuted],
-      ['En échec', data.actionsFailed, data.actionsFailed ? 'ko' : null],
-      ['Bloquées par la politique', data.actionsBlocked],
-      ['Délai moyen de dénouement', duration(data.averageResolutionMillis)],
-    ]));
+      wrap.append(perfGroup('Décisions', [
+        ['Prises', data.decisionsTaken],
+        ['Exécutées seules', data.autonomousDecisions],
+        ['Approuvées par un humain', data.humanApprovals],
+        ['Refusées', data.humanRejections],
+        ['Expirées sans réponse', data.approvalsExpired, data.approvalsExpired ? 'ko' : null],
+      ]));
 
-    const relevance = el('div', 'perf-group');
-    relevance.append(el('h3', 'drawer-sub', 'Pertinence'));
-    if (data.relevanceRate == null) {
-      // Un taux calculé sur zéro verdict serait un chiffre inventé : on dit pourquoi il manque.
-      relevance.append(empty('Pas encore mesurable.',
-        'Le taux se calcule sur les recommandations qu’un humain a tranchées. Aucune ne l’a été.'));
-    } else {
-      const ruled = data.humanApprovals + data.humanRejections;
-      // Ni une confiance ni des observations : un taux, fondé sur des verdicts humains.
-      relevance.append(rateBar('Taux de pertinence', data.relevanceRate,
-        `${data.humanApprovals} approuvée(s) sur ${ruled} tranchée(s) par un humain`));
-      relevance.append(el('p', 'hint',
-        'Les exécutions autonomes n’y entrent pas : l’agent ne se confirme pas lui-même.'));
-    }
-    wrap.append(relevance);
-    return wrap;
-  });
+      wrap.append(perfGroup('Actions', [
+        ['Réussies', data.actionsExecuted],
+        ['En échec', data.actionsFailed, data.actionsFailed ? 'ko' : null],
+        ['Bloquées par la politique', data.actionsBlocked],
+        ['Délai moyen de dénouement', duration(data.averageResolutionMillis)],
+      ]));
+
+      const relevance = el('div', 'perf-group');
+      relevance.append(el('h3', 'drawer-sub', 'Pertinence'));
+      if (data.relevanceRate == null) {
+        // Un taux calculé sur zéro verdict serait un chiffre inventé : on dit pourquoi il manque.
+        relevance.append(empty('Pas encore mesurable.',
+          'Le taux se calcule sur les recommandations qu’un humain a tranchées. Aucune ne l’a été.'));
+      } else {
+        const ruled = data.humanApprovals + data.humanRejections;
+        // Ni une confiance ni des observations : un taux, fondé sur des verdicts humains.
+        relevance.append(rateBar('Taux de pertinence', data.relevanceRate,
+          `${data.humanApprovals} approuvée(s) sur ${ruled} tranchée(s) par un humain`));
+        relevance.append(el('p', 'hint',
+          'Les exécutions autonomes n’y entrent pas : l’agent ne se confirme pas lui-même.'));
+      }
+      wrap.append(relevance);
+      return wrap;
+    });
+}
+
+/**
+ * Un compteur agrégé ne dit pas si ça empire : une tendance sur les derniers cycles, avant qu'elle
+ * ne devienne un chiffre inquiétant dans les groupes ci-dessus. `cycles` arrive du plus récent au
+ * plus ancien (voir `History`, côté serveur) — inversé ici pour un tracé chronologique.
+ */
+function trendGroup(cycles) {
+  const group = el('div', 'perf-group');
+  group.append(el('h3', 'drawer-sub', 'Tendance'));
+  const chronological = [...cycles].reverse().slice(-20);
+  const graphic = sparkline(chronological.map((cycle) => cycle.anomaliesDetected));
+  if (!graphic) {
+    group.append(empty('Pas encore de tendance.',
+      'Il faut au moins deux cycles exécutés pour en tracer une.'));
+    return group;
+  }
+  const row = el('div', 'perf-row');
+  row.append(el('span', 'label', `Anomalies par cycle (${chronological.length} derniers)`));
+  row.append(graphic);
+  group.append(row);
+  return group;
 }
 
 function perfGroup(title, rows) {
@@ -931,6 +1016,48 @@ export function wire() {
   $('#refresh-performance').addEventListener('click', performance);
   $('#refresh-audit').addEventListener('click', audit);
 
+  $('#decisions-bulk-approve').addEventListener('click', (event) => busy(event.currentTarget, () => bulkResolve(true)));
+  $('#decisions-bulk-reject').addEventListener('click', (event) => busy(event.currentTarget, () => bulkResolve(false)));
+
+  $('#export-decisions').addEventListener('click', (event) => busy(event.currentTarget, async () => {
+    try {
+      const rows = await api(`${BASE}/decisions`);
+      downloadCsv('decisions-kex-agent.csv', [
+        ['Décidée le', (row) => row.decidedAt],
+        ['Action', (row) => row.action],
+        ['Processus', (row) => row.processName],
+        ['Capacité', (row) => row.capability],
+        ['Confiance', (row) => row.confidence],
+        ['État', (row) => row.status],
+        ['Résultat', (row) => row.result],
+        ['Politique', (row) => row.policyVersion],
+        ['Corrélation', (row) => row.correlationId],
+      ], rows);
+    } catch (error) {
+      report(error);
+    }
+  }));
+
+  $('#export-audit').addEventListener('click', (event) => busy(event.currentTarget, async () => {
+    try {
+      const rows = await api(`${BASE}/audit`);
+      const query = (params().get('q') || '').toLowerCase();
+      const matching = rows.filter((row) => !query || JSON.stringify(row).toLowerCase().includes(query));
+      downloadCsv('audit-kex-agent.csv', [
+        ['Horodatage', (row) => row.at],
+        ['Acteur', (row) => row.actor],
+        ['Action', (row) => row.action],
+        ['Processus', (row) => row.processId],
+        ['Motif', (row) => row.reason],
+        ['Politique', (row) => row.policyVersion],
+        ['Résultat', (row) => row.result],
+        ['Corrélation', (row) => row.correlationId],
+      ], matching);
+    } catch (error) {
+      report(error);
+    }
+  }));
+
   $('#audit-search').addEventListener('input', (event) => {
     setParams({ q: event.target.value.trim() });
     audit();
@@ -982,23 +1109,21 @@ export function wire() {
     });
     const threshold = Number($('#confidence').value) / 100;
 
-    // Passer une capacité en automatique est un changement à impact : il s'annonce avant, pas après.
+    // Passer une capacité en automatique est un changement à impact, pas comme les autres : sa
+    // conséquence s'annonce en plus du diff, jamais à sa place.
     const opened = Object.entries(autonomy)
       .filter(([capability, value]) => value === 'AUTOMATIC' && policy?.autonomy?.[capability] !== 'AUTOMATIC')
       .map(([capability]) => CAPABILITIES[capability]);
-    if (opened.length) {
+    const diff = policyDiff(policy, { mode, autonomy, confidenceThreshold: threshold, confidenceThresholds });
+    if (diff.length) {
       const confirmed = await confirmAction({
-        title: 'Confirmer l’élargissement de l’autonomie',
+        title: 'Confirmer la mise à jour de la politique',
         accept: 'Confirmer la nouvelle politique',
         lines: [
-          ['Passent en automatique', opened.join(', ')],
-          ['Mode', mode],
-          ['Plancher global', `${Math.round(threshold * 100)} %`],
-          ['Planchers propres', Object.entries(confidenceThresholds)
-            .map(([capability, value]) => `${CAPABILITIES[capability]} ${Math.round(value * 100)} %`)
-            .join(', ') || 'aucun'],
-          ['Conséquence', 'Ces actions pourront s’exécuter sans validation humaine dès que la '
-            + 'confiance atteint leur plancher.'],
+          ...diff,
+          opened.length ? ['Conséquence', `${opened.join(', ')} pourra`
+            + `${opened.length > 1 ? 'nt' : ''} s’exécuter sans validation humaine dès que la `
+            + 'confiance atteint son plancher.'] : null,
         ],
       });
       if (!confirmed) return;
@@ -1010,7 +1135,7 @@ export function wire() {
     $('#policy-reason').value = '';
   });
 
-  $('#thresholds-form').addEventListener('submit', (event) => {
+  $('#thresholds-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const processing = shortToIso($('#th-processing').value);
     const window = shortToIso($('#th-window').value);
@@ -1018,15 +1143,76 @@ export function wire() {
       toast('Les durées s’écrivent 30s, 5m ou 2h.', 'error');
       return;
     }
-    savePolicy({
-      thresholds: {
-        consumerLag: Number($('#th-lag').value),
-        errorRatePercent: Number($('#th-error').value),
-        processingTime: processing,
-        blockedMessages: Number($('#th-blocked').value),
-        observationWindow: window,
-      },
-      reason: $('#thresholds-reason').value,
-    });
+    const next = {
+      consumerLag: Number($('#th-lag').value),
+      errorRatePercent: Number($('#th-error').value),
+      processingTime: processing,
+      blockedMessages: Number($('#th-blocked').value),
+      observationWindow: window,
+    };
+    const diff = thresholdsDiff(policy, next);
+    if (diff.length) {
+      const confirmed = await confirmAction({
+        title: 'Confirmer les nouveaux seuils',
+        accept: 'Confirmer les seuils',
+        lines: diff,
+      });
+      if (!confirmed) return;
+    }
+    await savePolicy({ thresholds: next, reason: $('#thresholds-reason').value });
   });
+}
+
+/**
+ * Ce qui change entre la politique chargée et ce que le formulaire s'apprête à envoyer, en
+ * `[intitulé, "avant → après"]` — directement les lignes que `confirmAction` sait déjà afficher.
+ * Rien ne s'affiche pour un champ resté identique : un diff qui répète l'inchangé noierait ce qui
+ * compte vraiment.
+ */
+function policyDiff(before, after) {
+  if (!before) return [];
+  const lines = [];
+  if (before.mode !== after.mode) lines.push(['Mode', `${before.mode} → ${after.mode}`]);
+  if (Math.round(before.confidenceThreshold * 100) !== Math.round(after.confidenceThreshold * 100)) {
+    lines.push(['Plancher global',
+      `${Math.round(before.confidenceThreshold * 100)} % → ${Math.round(after.confidenceThreshold * 100)} %`]);
+  }
+  Object.keys(CAPABILITIES).forEach((capability) => {
+    const was = before.autonomy?.[capability] || 'FORBIDDEN';
+    const now = after.autonomy[capability];
+    if (was !== now) lines.push([CAPABILITIES[capability], `${AUTONOMY[was]} → ${AUTONOMY[now]}`]);
+
+    const wasFloor = before.confidenceThresholds?.[capability] ?? null;
+    const nowFloor = after.confidenceThresholds[capability] ?? null;
+    if (wasFloor !== nowFloor) {
+      const from = wasFloor == null ? 'plancher global' : `${Math.round(wasFloor * 100)} %`;
+      const to = nowFloor == null ? 'plancher global' : `${Math.round(nowFloor * 100)} %`;
+      lines.push([`Plancher — ${CAPABILITIES[capability]}`, `${from} → ${to}`]);
+    }
+  });
+  return lines;
+}
+
+/** Même principe que policyDiff, pour le formulaire de seuils de détection. */
+function thresholdsDiff(before, after) {
+  if (!before) return [];
+  const was = before.thresholds || {};
+  const lines = [];
+  if (was.consumerLag !== after.consumerLag) {
+    lines.push(['Consumer lag', `${was.consumerLag ?? '—'} → ${after.consumerLag}`]);
+  }
+  if (was.errorRatePercent !== after.errorRatePercent) {
+    lines.push(['Taux d’erreur', `${was.errorRatePercent ?? '—'} % → ${after.errorRatePercent} %`]);
+  }
+  if (was.processingTime !== after.processingTime) {
+    lines.push(['Temps de traitement', `${isoToShort(was.processingTime) || '—'} → ${isoToShort(after.processingTime)}`]);
+  }
+  if (was.blockedMessages !== after.blockedMessages) {
+    lines.push(['Messages bloqués', `${was.blockedMessages ?? '—'} → ${after.blockedMessages}`]);
+  }
+  if (was.observationWindow !== after.observationWindow) {
+    lines.push(['Fenêtre d’observation',
+      `${isoToShort(was.observationWindow) || '—'} → ${isoToShort(after.observationWindow)}`]);
+  }
+  return lines;
 }

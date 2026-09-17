@@ -4,7 +4,9 @@
 // Vue technique : les serveurs MCP et la santé de l'instance. Elle existe pour que le tableau de
 // bord métier n'en soit pas saturé — les signaux bruts sont au second niveau, jamais au premier.
 
-import { $, api, busy, circuitStateTag, el, empty, params, render, report, setParams, stateTag } from './core.js';
+import {
+  $, api, busy, circuitStateTag, el, empty, params, render, report, schemaErrors, setParams, stateTag,
+} from './core.js';
 import * as kafka from './kafka.js';
 import * as memory from './memory.js';
 
@@ -110,14 +112,16 @@ function invoke(host, connection, tool) {
   // Le schéma vient du serveur, jamais réinterprété : il dit ce que l'outil attend, pas ce qu'on
   // devine en tapant "{}" et en lisant l'erreur qui revient.
   if (tool.inputSchema && Object.keys(tool.inputSchema).length) {
-    panel.append(el('pre', 'dump muted', JSON.stringify(tool.inputSchema, null, 2)));
+    panel.append(el('pre', 'dump muted schema-hint', JSON.stringify(tool.inputSchema, null, 2)));
   }
 
   const args = el('textarea');
   args.rows = 4;
   args.spellcheck = false;
   args.value = '{}';
-  const output = el('pre', 'dump', '—');
+  // Deux ".dump" dans le même panneau une fois le schéma affiché : "result" les distingue, sans
+  // quoi un sélecteur qui cible l'un des deux tombe sur le premier trouvé, pas forcément le bon.
+  const output = el('pre', 'dump result', '—');
 
   const run = el('button', 'primary', 'Invoquer');
   run.type = 'button';
@@ -128,6 +132,16 @@ function invoke(host, connection, tool) {
     } catch {
       output.textContent = 'Arguments JSON invalides.';
       return;
+    }
+    // Un sous-ensemble du schéma, pas une validation complète (voir schemaErrors dans core.js) :
+    // attraper une erreur de frappe ici évite l'aller-retour serveur, sans prétendre remplacer le
+    // serveur MCP comme seule autorité sur ce qu'il accepte réellement.
+    if (tool.inputSchema) {
+      const errors = schemaErrors(parsed, tool.inputSchema, 'arguments');
+      if (errors.length) {
+        output.textContent = `Arguments invalides :\n- ${errors.join('\n- ')}`;
+        return;
+      }
     }
     output.textContent = '…';
     busy(run, async () => {

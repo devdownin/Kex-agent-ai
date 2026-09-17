@@ -221,7 +221,16 @@
       <section class="panel">
         <div class="panel-head">
           <h1>Décisions</h1>
-          <button type="button" class="ghost" id="refresh-decisions">Rafraîchir</button>
+          <div class="panel-actions">
+            <button type="button" class="ghost" id="export-decisions">Exporter (CSV)</button>
+            <button type="button" class="ghost" id="refresh-decisions">Rafraîchir</button>
+          </div>
+        </div>
+        <!-- N'apparaît qu'avec au moins une décision cochée — voir wire() dans supervision.js. -->
+        <div class="row-end bulk-bar" id="decisions-bulk-bar" hidden>
+          <span class="muted" id="decisions-bulk-count"></span>
+          <button type="button" class="ghost danger" id="decisions-bulk-reject">Refuser la sélection</button>
+          <button type="button" class="primary" id="decisions-bulk-approve">Approuver la sélection</button>
         </div>
         <div id="decisions-list"></div>
       </section>
@@ -288,7 +297,10 @@
       <section class="panel">
         <div class="panel-head">
           <h1>Audit</h1>
-          <button type="button" class="ghost" id="refresh-audit">Rafraîchir</button>
+          <div class="panel-actions">
+            <button type="button" class="ghost" id="export-audit">Exporter (CSV)</button>
+            <button type="button" class="ghost" id="refresh-audit">Rafraîchir</button>
+          </div>
         </div>
         <label class="sr-only" for="audit-search">Filtrer l'audit</label>
         <input type="search" id="audit-search" placeholder="Filtrer par acteur, action, processus ou identifiant">
@@ -339,6 +351,7 @@
             <h1>Conversation</h1>
             <div class="panel-actions">
               <code class="conv-id" id="conversation-id" title="Identifiant de conversation">—</code>
+              <button type="button" class="ghost" id="open-history">Conversations</button>
               <button type="button" class="ghost danger" id="clear-conversation" disabled>Purger</button>
             </div>
           </div>
