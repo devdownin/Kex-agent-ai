@@ -712,7 +712,8 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 .tool-list .desc { display: block; color: var(--ink-3); font-size: 12px; overflow-wrap: anywhere; }
 
 .invoke { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 12px; }
-.invoke h4 { margin: 0 0 8px; font: 600 13px var(--mono); }
+.invoke header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.invoke h4 { margin: 0; font: 600 13px var(--mono); }
 .invoke textarea { font: 12px var(--mono); }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
