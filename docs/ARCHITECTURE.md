@@ -268,8 +268,9 @@ rechargement, bandeau hors ligne, tableau compact qui signale qu'il défile, arg
 refusés sans appel réseau, export CSV qui déclenche un téléchargement, sélection groupée qui
 approuve chaque décision cochée, tendance tracée dès deux cycles connus, diff avant/après sur une
 mise à jour de politique, reprise d'une conversation depuis l'historique local, un incident corrélé
-affiché en bannière, une fenêtre de maintenance déclarée puis proposée à la levée, et aucune erreur
-de script sur le parcours.
+affiché en bannière, une fenêtre de maintenance déclarée puis proposée à la levée, un exemple
+pré-rempli pour un outil à paramètres contre un objet vide pour un outil qui n'en attend aucun, et
+aucune erreur de script sur le parcours.
 
 Playwright n'est pas une dépendance du projet : le job de CI l'installe hors de l'arborescence et
 son chemin arrive par `PLAYWRIGHT_MODULE`. Un `package.json` à la racine ferait vivre une seconde
@@ -1215,6 +1216,20 @@ composés ne sont pas couverts : les rejeter en silence serait pire que ne pas l
 serveur MCP reste de toute façon la seule autorité sur ce qu'il accepte réellement. Un schéma que
 cette antisèche approuve peut encore être refusé côté serveur ; l'inverse — refuser ici ce que le
 serveur aurait accepté — ne doit jamais arriver, d'où l'étendue volontairement restreinte.
+
+### Un outil à paramètres se pré-remplit d'un exemple, jamais d'un objet vide
+
+Le panneau d'invocation directe d'un outil MCP posait `{}` dans le champ d'arguments quel que soit
+le schéma déclaré, y compris pour un outil dont chaque paramètre est requis — l'opérateur devait
+relire le schéma affiché juste au-dessus, deviner la forme attendue, et la retaper à la main avant
+le premier essai. `exampleFromSchema` (`core.js`) construit à la place une valeur plausible pour
+chaque propriété déclarée : le `example`, les `examples` ou le `default` du serveur priment
+toujours quand ils existent, sinon le premier `enum`, sinon une valeur type par type (une chaîne
+`"exemple"`, adaptée au `format` connu — date, date-heure, uuid, email, URI — un nombre à son
+`minimum` sinon zéro, un objet ou un tableau récursés sur leurs `properties`/`items`). Un outil sans
+paramètre (`properties` vide ou absent) garde `{}` : il n'y a rien à y deviner. Cette valeur reste
+un point de départ à corriger, jamais une garantie — `schemaErrors` continue de vérifier ce qui part
+réellement au clic sur Invoquer, exemple pré-rempli ou saisie manuelle traités à l'identique.
 
 ### Une tendance a besoin d'au moins deux points, jamais d'une droite inventée
 

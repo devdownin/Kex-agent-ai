@@ -309,6 +309,36 @@ await check('le tableau compact de la vue d’ensemble signale qu’il défile',
   assert.ok(scroll.hasEdgeShadow, 'un halo de bord signale le contenu caché');
 });
 
+await check('un outil qui attend des paramètres propose un exemple pré-rempli, jamais un objet vide',
+  async () => {
+    await page.route('**/api/agent/mcp/servers', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify([{
+        connection: 'kafka-explorer', serverName: 'kafka-explorer-mcp', version: '0.1.0',
+        protocolVersion: '2025-11-25', initialized: true, circuitBreakerState: 'CLOSED',
+        tools: [{
+          name: 'kex_list_topics', description: 'Liste les topics.',
+          inputSchema: {
+            type: 'object', required: ['topic'],
+            properties: { topic: { type: 'string' }, limit: { type: 'integer', default: 50 } },
+          },
+        }, {
+          name: 'kex_ping', description: 'Sans paramètre.', inputSchema: { type: 'object', properties: {} },
+        }],
+      }]),
+    }));
+    await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+    // Un sélecteur re-résolu à chaque clic, jamais un handle gardé d'un appel à l'autre : le sondage
+    // de fond peut re-rendre la grille entre les deux et détacher un handle capturé trop tôt.
+    await page.click('#servers .server ul.tool-list li:nth-child(1) button');
+    const prefilled = await page.$eval('.invoke textarea', (node) => JSON.parse(node.value));
+    assert.deepEqual(prefilled, { topic: 'exemple', limit: 50 }, 'l’exemple doit couvrir chaque paramètre déclaré');
+    await page.click('#servers .server ul.tool-list li:nth-child(2) button');
+    const empty = await page.$eval('.invoke textarea', (node) => node.value);
+    assert.equal(empty, '{}', 'un outil sans paramètre garde un objet vide, rien à y deviner');
+    await page.unroute('**/api/agent/mcp/servers');
+  });
+
 await check('les arguments qui ne respectent pas le schéma d’un outil sont refusés sans appel réseau',
   async () => {
     await page.route('**/api/agent/mcp/servers', (route) => route.fulfill({
@@ -329,7 +359,8 @@ await check('les arguments qui ne respectent pas le schéma d’un outil sont re
     });
     await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
     await page.click('#servers .server ul.tool-list button');
-    // La valeur par défaut du champ ("{}") n'a pas "topic" : ça doit suffire à être refusé.
+    // Le champ est désormais pré-rempli d'un exemple valide : le vider pour tester le rejet lui-même.
+    await page.fill('.invoke textarea', '{}');
     await page.click('.invoke button.primary');
     const output = await page.$eval('.invoke .dump.result', (node) => node.textContent);
     assert.match(output, /Arguments invalides/);

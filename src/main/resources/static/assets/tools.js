@@ -5,7 +5,8 @@
 // bord métier n'en soit pas saturé — les signaux bruts sont au second niveau, jamais au premier.
 
 import {
-  $, api, busy, circuitStateTag, el, empty, params, render, report, schemaErrors, setParams, stateTag,
+  $, api, busy, circuitStateTag, el, empty, exampleFromSchema, params, render, report, schemaErrors, setParams,
+  stateTag,
 } from './core.js';
 import * as kafka from './kafka.js';
 import * as memory from './memory.js';
@@ -118,7 +119,12 @@ function invoke(host, connection, tool) {
   const args = el('textarea');
   args.rows = 4;
   args.spellcheck = false;
-  args.value = '{}';
+  // Un "{}" nu ne dit rien de ce qu'un outil à paramètres attend : un exemple conforme au schéma
+  // vaut mieux qu'un objet vide à déchiffrer depuis la seule lecture du schéma affiché au-dessus.
+  const properties = tool.inputSchema?.properties || {};
+  args.value = Object.keys(properties).length
+    ? JSON.stringify(exampleFromSchema(tool.inputSchema), null, 2)
+    : '{}';
   // Deux ".dump" dans le même panneau une fois le schéma affiché : "result" les distingue, sans
   // quoi un sélecteur qui cible l'un des deux tombe sur le premier trouvé, pas forcément le bon.
   const output = el('pre', 'dump result', '—');

@@ -516,6 +516,52 @@ export function schemaErrors(value, schema, label = 'valeur') {
   return errors;
 }
 
+/* ── Exemple pré-rempli ────────────────────────────────────────────────── */
+
+function exampleString(schema) {
+  switch (schema.format) {
+    case 'date-time': return new Date().toISOString();
+    case 'date': return new Date().toISOString().slice(0, 10);
+    case 'uuid': return '00000000-0000-0000-0000-000000000000';
+    case 'email': return 'nom@exemple.com';
+    case 'uri':
+    case 'url': return 'https://exemple.com';
+    default: return 'exemple';
+  }
+}
+
+/**
+ * Une valeur plausible pour un nœud de schéma JSON — jamais une validation. `example`, `examples`,
+ * `default` et le premier `enum` déclarés par le serveur priment toujours sur ce qui serait sinon
+ * deviné ici : c'est lui qui sait ce qu'une valeur signifie, pas cette heuristique.
+ */
+export function exampleFromSchema(schema) {
+  if (!schema || typeof schema !== 'object') return null;
+  if ('example' in schema) return schema.example;
+  if (Array.isArray(schema.examples) && schema.examples.length) return schema.examples[0];
+  if ('default' in schema) return schema.default;
+  if (Array.isArray(schema.enum) && schema.enum.length) return schema.enum[0];
+  const type = schema.type || (schema.properties ? 'object' : schema.items ? 'array' : null);
+  switch (type) {
+    case 'object': {
+      const value = {};
+      Object.entries(schema.properties || {}).forEach(([key, sub]) => { value[key] = exampleFromSchema(sub); });
+      return value;
+    }
+    case 'array':
+      return schema.items ? [exampleFromSchema(schema.items)] : [];
+    case 'boolean':
+      return false;
+    case 'integer':
+    case 'number':
+      return schema.minimum ?? 0;
+    case 'string':
+      return exampleString(schema);
+    default:
+      return null;
+  }
+}
+
 /* ── Export CSV ────────────────────────────────────────────────────────── */
 
 // RFC 4180 : une valeur qui contient une virgule, un guillemet ou un saut de ligne doit être
