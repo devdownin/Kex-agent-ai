@@ -5,10 +5,12 @@ package com.kex.agent.supervision;
 import java.time.Clock;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @Configuration(proxyBeanMethods = false)
 class SupervisionConfig {
@@ -45,6 +47,26 @@ class SupervisionConfig {
         @Bean
         AuditRepository jdbcAuditRepository(JdbcTemplate jdbcTemplate) {
             return new JdbcAuditRepository(jdbcTemplate);
+        }
+    }
+
+    /**
+     * Le cycle ne part seul que là où un verrou partagé existe pour empêcher deux répliques de le
+     * lancer ensemble — voir {@link SupervisionScheduler}. Éteint par défaut ({@code
+     * kex.agent.supervision.schedule.enabled}) : une installation existante ne se met pas à agir
+     * sans qu'on le lui ait demandé.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @Profile("shared-memory")
+    @ConditionalOnProperty(prefix = "kex.agent.supervision.schedule", name = "enabled", havingValue = "true")
+    @EnableScheduling
+    static class SupervisionScheduleConfig {
+
+        @Bean
+        SupervisionScheduler supervisionScheduler(SupervisionService supervision, JdbcTemplate jdbcTemplate,
+                                                  Clock clock, SupervisionProperties properties) {
+            return new SupervisionScheduler(supervision, jdbcTemplate, clock,
+                    properties.schedule().lockAtMostFor());
         }
     }
 }

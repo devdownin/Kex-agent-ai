@@ -52,5 +52,44 @@ public record SupervisionProperties(
         @DefaultValue("30m") java.time.Duration approvalTimeout,
 
         /** Au-delà, l'interface signale des données potentiellement obsolètes. */
-        @DefaultValue("15m") java.time.Duration staleAfter) {
+        @DefaultValue("15m") java.time.Duration staleAfter,
+
+        @DefaultValue Schedule schedule,
+
+        @DefaultValue AutoAdjust autoAdjust) {
+
+    /**
+     * Départ autonome du cycle, sans clic. Non actif par défaut, et actif seulement sous le profil
+     * {@code shared-memory} ({@link SupervisionScheduleConfig}) : le verrou qui empêche deux
+     * répliques de lancer le même cycle vit dans la base de la mémoire partagée, la seule qui existe
+     * dans les deux cas.
+     *
+     * @param interval      délai entre deux tentatives — une tentative, pas forcément un cycle : une
+     *                      réplique qui ne tient pas le verrou repart aussitôt
+     * @param lockAtMostFor durée après laquelle le verrou expire de lui-même. Sans elle, une réplique
+     *                      qui tombe en cours de cycle laisserait le verrou pris indéfiniment, et
+     *                      plus aucune autre ne pourrait jamais relancer l'analyse
+     */
+    public record Schedule(@DefaultValue("false") boolean enabled,
+                           @DefaultValue("5m") java.time.Duration interval,
+                           @DefaultValue("10m") java.time.Duration lockAtMostFor) {
+    }
+
+    /**
+     * Durcissement automatique d'un plancher de confiance par capacité, sur ses propres verdicts
+     * humains. Ne peut que relever — jamais abaisser — comme toute règle sur
+     * {@link SupervisionPolicy#confidenceThresholdOf}. Actif par défaut : il ne fait que resserrer,
+     * jamais ouvrir, et une installation qui n'a pas encore de verdict humain ne voit rien changer.
+     *
+     * @param minSamples   décisions humaines minimum avant de tirer une conclusion — trois refus
+     *                     sur trois ne disent encore rien d'une capacité tout juste activée
+     * @param minRelevance en-deçà de ce taux d'approbation, le plancher de la capacité concernée
+     *                     est relevé
+     * @param increment    ce qui est ajouté à chaque relèvement, jamais au-delà de {@code 1.0}
+     */
+    public record AutoAdjust(@DefaultValue("true") boolean enabled,
+                             @DefaultValue("5") int minSamples,
+                             @DefaultValue("0.5") double minRelevance,
+                             @DefaultValue("0.05") double increment) {
+    }
 }

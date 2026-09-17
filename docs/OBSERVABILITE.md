@@ -47,6 +47,13 @@ Anthropic, `length` chez OpenAI) : sans lui, une réponse coupée au plafond `ma
 exactement comme une réponse complète. La console marque le tour concerné. Le chemin en flux ne le
 rend pas encore — la métadonnée arrive dans le dernier fragment, que `stream()` ne collecte pas.
 
+`kex.agent.token-budget.daily-limit` (`0` par défaut, illimité) plafonne ce que ces mêmes compteurs
+accumulent par jour, toutes conversations confondues — le seul frein d'un cycle de supervision qui
+part sans clic (`kex.agent.supervision.schedule.enabled`). Budget épuisé, l'état de l'agent passe
+`DEGRADED` (`GET /api/agent/supervision/status`) plutôt que de le découvrir dans les métriques
+après coup.
+Tenu en mémoire, par instance, comme le seau de `rate-limit`.
+
 ### Outils
 
 | Métrique | Couvre | Étiquettes |

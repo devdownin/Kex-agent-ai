@@ -208,6 +208,29 @@ kex:
       approval-timeout: 30m
       # Au-delà, l'interface signale des données potentiellement obsolètes.
       stale-after: 15m
+      schedule:
+        # Départ autonome du cycle, derrière un verrou partagé. N'a d'effet que sous le profil
+        # shared-memory, seul endroit où ce verrou (en base) peut exister. Voir SupervisionScheduler.
+        enabled: false
+        interval: 5m
+        # Le verrou expire de lui-même après ce délai : sans cela, une réplique qui tombe en plein
+        # cycle le garderait pris indéfiniment, et plus aucune autre instance ne pourrait relancer
+        # l'analyse.
+        lock-at-most-for: 10m
+      notify:
+        # Débouché par défaut de la capacité NOTIFY quand aucun outil MCP ne lui est lié : c'est la
+        # seule capacité dont le système cible est une personne, pas un système au schéma propre.
+        # Vide, rien ne part.
+        webhook-url: ""
+        webhook-token: ""
+      auto-adjust:
+        # Durcit tout seul le plancher de confiance d'une capacité qui se fait rejeter plus souvent
+        # qu'approuver. Ne peut que relever, jamais abaisser — même règle que confidence-thresholds
+        # ci-dessus, dont il ne fait qu'automatiser un cas d'usage.
+        enabled: true
+        min-samples: 5
+        min-relevance: 0.5
+        increment: 0.05
 
     rate-limit:
       # Limite d'instance, pas par appelant : le bearer est unique et partagé. Elle protège le
@@ -221,6 +244,11 @@ kex:
     # jusqu'à sortir de la fenêtre. Coupé à l'écriture seulement — le tour en cours voit tout.
     max-message-characters: 4000
     log-interactions: false
+
+    token-budget:
+      # 0 = illimité. Tenu en mémoire, par instance : diviser le seuil en multi-instance, comme
+      # pour rate-limit ci-dessus. Le seul frein d'un cycle qui part sans clic (schedule.enabled).
+      daily-limit: 0
 
 logging:
   level:
