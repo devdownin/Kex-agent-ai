@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,9 @@ class SupervisionControllerTest {
 
     @MockitoBean
     SupervisionService supervision;
+
+    @MockitoBean
+    WebhookNotifier notifier;
 
     @Test
     void le_taux_de_pertinence_absent_se_rend_absent_et_non_a_zero() {
@@ -165,6 +169,26 @@ class SupervisionControllerTest {
                 .content("""
                         {"mode":"AUTOMATIC","confidenceThreshold":0.7}"""))
                 .hasStatusOk().bodyJson().extractingPath("$.version").isEqualTo("policy-v2");
+    }
+
+    @Test
+    void teste_le_webhook_et_journalise_le_resultat() {
+        given(notifier.send(anyString(), anyString())).willReturn(Optional.empty());
+
+        assertThat(mvc.post().uri("/api/agent/supervision/notify/test"))
+                .hasStatusOk().bodyJson().extractingPath("$.success").isEqualTo(true);
+
+        verify(supervision).auditAction(anyString(), eq("Test du webhook de notification"), eq("Envoyé"));
+    }
+
+    @Test
+    void rend_le_motif_d_echec_du_webhook() {
+        given(notifier.send(anyString(), anyString())).willReturn(Optional.of("injoignable"));
+
+        assertThat(mvc.post().uri("/api/agent/supervision/notify/test"))
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.detail").isEqualTo("injoignable");
     }
 
     @Test

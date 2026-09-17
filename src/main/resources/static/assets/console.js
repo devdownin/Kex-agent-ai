@@ -254,10 +254,12 @@ async function route() {
     document.title = `${VIEWS[view].title} — Kex Agent Control Center`;
     $('#announcer').textContent = VIEWS[view].title;
     supervision.syncFilters();
+    tools.syncFilters();
     await VIEWS[view].load?.();
   }
   else {
     supervision.syncFilters();
+    tools.syncFilters();
   }
   await restoreDrawerFromUrl();
 }

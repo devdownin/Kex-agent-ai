@@ -4,20 +4,50 @@
 // Vue technique : les serveurs MCP et la santé de l'instance. Elle existe pour que le tableau de
 // bord métier n'en soit pas saturé — les signaux bruts sont au second niveau, jamais au premier.
 
-import { $, api, busy, el, empty, render, report, stateTag } from './core.js';
+import { $, api, busy, circuitStateTag, el, empty, params, render, report, setParams, stateTag } from './core.js';
 import * as kafka from './kafka.js';
 import * as memory from './memory.js';
 
+// Cache du dernier relevé : la recherche filtre dessus plutôt que de refaire un appel réseau par
+// caractère saisi — l'endpoint n'a pas de paramètre de recherche et n'a pas à en gagner un pour ça.
+let lastServers = [];
+let lastMetrics = [];
+
 export async function servers() {
-  await render($('#servers'), () => api('/api/agent/mcp/servers'), (list) => {
-    if (!list.length) {
-      return empty('Aucune connexion MCP configurée.',
+  await render($('#servers'), async () => {
+    const [list, metrics] = await Promise.all([
+      api('/api/agent/mcp/servers'),
+      // Un serveur MCP jamais appelé n'a simplement pas encore de métrique : ce n'est pas une panne.
+      api('/api/agent/mcp/metrics').catch(() => []),
+    ]);
+    lastServers = list;
+    lastMetrics = metrics;
+    return list;
+  }, renderServers);
+}
+
+function renderServers(list) {
+  const query = (params().get('q') || '').trim().toLowerCase();
+  const filtered = query ? list.filter((server) => matchesQuery(server, query)) : list;
+  if (!filtered.length) {
+    return query
+      ? empty('Aucun serveur ni outil ne correspond à la recherche.')
+      : empty('Aucune connexion MCP configurée.',
         'Sans outil, l’agent ne peut qu’observer ce qu’on lui raconte.');
-    }
-    const grid = el('div', 'servers-grid');
-    list.forEach((server) => grid.append(card(server)));
-    return grid;
-  });
+  }
+  const grid = el('div', 'servers-grid');
+  filtered.forEach((server) => grid.append(card(server)));
+  return grid;
+}
+
+function matchesQuery(server, query) {
+  if (server.connection.toLowerCase().includes(query)) return true;
+  if (server.serverName?.toLowerCase().includes(query)) return true;
+  return (server.tools || []).some((tool) => tool.name.toLowerCase().includes(query));
+}
+
+function metricFor(connection, tool) {
+  return lastMetrics.find((candidate) => candidate.connection === connection && candidate.tool === tool);
 }
 
 function card(server) {
@@ -27,6 +57,11 @@ function card(server) {
   head.append(el('h3', null, server.connection));
   head.append(stateTag(server.initialized ? 'OK' : 'UNKNOWN',
     server.initialized ? 'Initialisé' : 'Pas de handshake'));
+  // Propre à cette connexion pour l'appel direct ; le chemin piloté par le modèle reste sur un
+  // disjoncteur partagé entre serveurs, voir McpServerInfo.circuitBreakerState.
+  if (server.circuitBreakerState) {
+    head.append(circuitStateTag(server.circuitBreakerState, `Disjoncteur : ${server.circuitBreakerState}`));
+  }
   node.append(head);
 
   const meta = [server.serverName, server.version, server.protocolVersion].filter(Boolean).join(' · ');
@@ -41,6 +76,13 @@ function card(server) {
       button.type = 'button';
       button.append(el('span', 'name', tool.name));
       if (tool.description) button.append(el('span', 'desc', tool.description));
+      const metric = metricFor(server.connection, tool.name);
+      if (metric) {
+        const label = metric.averageDurationMs == null
+          ? `${metric.callCount} appel(s)`
+          : `${metric.callCount} appel(s) · ${Math.round(metric.averageDurationMs)} ms en moyenne`;
+        button.append(el('span', 'muted', label));
+      }
       button.addEventListener('click', () => invoke(node, server.connection, tool));
       item.append(button);
       list.append(item);
@@ -65,6 +107,11 @@ function invoke(host, connection, tool) {
   host.querySelector('.invoke')?.remove();
   const panel = el('section', 'invoke');
   panel.append(el('h4', null, tool.name));
+  // Le schéma vient du serveur, jamais réinterprété : il dit ce que l'outil attend, pas ce qu'on
+  // devine en tapant "{}" et en lisant l'erreur qui revient.
+  if (tool.inputSchema && Object.keys(tool.inputSchema).length) {
+    panel.append(el('pre', 'dump muted', JSON.stringify(tool.inputSchema, null, 2)));
+  }
 
   const args = el('textarea');
   args.rows = 4;
@@ -201,4 +248,15 @@ export async function view() {
  */
 export function wire() {
   $('#refresh-tools').addEventListener('click', view);
+  $('#tools-search').addEventListener('input', (event) => {
+    setParams({ q: event.target.value.trim() });
+    // Filtre sur le relevé déjà en cache : pas d'appel réseau par caractère saisi.
+    $('#servers').replaceChildren(renderServers(lastServers));
+  });
+}
+
+/** Remet le champ en accord avec l'adresse, comme les recherches de Processus et Audit. */
+export function syncFilters() {
+  const query = params().get('q') || '';
+  if ($('#tools-search').value !== query) $('#tools-search').value = query;
 }

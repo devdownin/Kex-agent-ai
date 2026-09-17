@@ -35,11 +35,12 @@ flowchart TB
 
 | Classe | Rôle |
 |---|---|
-| `AgentController` | Les 7 routes REST et la traduction des erreurs MCP en codes HTTP |
+| `AgentController` | Les 10 routes REST et la traduction des erreurs MCP en codes HTTP |
 | `AgentService` | Conversation : identifiant, mémoire, appel bloquant ou flux |
-| `McpToolCatalog` | Introspection et invocation directe des serveurs MCP |
+| `McpToolCatalog` | Introspection et invocation directe des serveurs MCP, disjoncteur par connexion, métriques par outil |
+| `McpHealthCheckScheduler` | Retente périodiquement l'initialisation des clients MCP encore muets |
 | `AgentConfig` | Construit le `ChatClient`, la mémoire, le catalogue |
-| `McpBearerTokenCustomizer` | Injecte `Authorization: Bearer` sur les transports MCP HTTP |
+| `McpBearerTokenCustomizer` | Injecte `Authorization: Bearer` sur les transports MCP HTTP, avertit sur une entrée mal renseignée |
 | `SecurityConfig` + `ApiKeyAuthFilter` | Bearer statique sur `/api/**` |
 | `SupervisionService` | Le cycle : observer, analyser, décider, agir ; la politique et l'audit |
 | `SupervisionController` | Le Control Center côté API : vue d'ensemble, décisions, politique, audit |
@@ -96,6 +97,15 @@ L'agent ne démarrait pas parce qu'un service tiers était éteint. En paresseux
 rattrapé sans redémarrage. C'est aussi ce qui permet au service `agent` de docker compose de ne pas
 attendre la sonde de santé de l'Explorer.
 
+### Un serveur revenu se rattrape sans attendre un appel
+
+`McpToolCatalog.initializePending()` ne joue que quand quelqu'un regarde (`servers()`, `call(...)`).
+`McpHealthCheckScheduler` (`kex.mcp.health-check`, actif par défaut) le rejoue périodiquement, sans
+verrou : contrairement au cycle de supervision, retenter l'initialisation de ses propres clients
+n'est pas une action partagée qu'une seconde réplique dupliquerait. `kex.mcp.server.up` (une jauge
+par connexion, 1 initialisé / 0 sinon) rend l'état observable sans attendre le prochain relevé de
+`GET /api/agent/mcp/servers`.
+
 ### Les serveurs sont adressés par clé de connexion
 
 `/api/agent/mcp/servers/{connection}/...` prend la clé de configuration
@@ -116,7 +126,34 @@ MCP. Tel quel, le jeton de l'Explorer partirait aussi vers n'importe quel autre 
 configuré.
 
 D'où `kex.mcp.bearer-tokens[]`, une liste de couples `url-prefix` / `token` : le customizer ne pose
-l'en-tête que sur les requêtes dont l'URI commence par le préfixe déclaré.
+l'en-tête que sur les requêtes dont l'URI commence par le préfixe déclaré. Un préfixe sans jeton
+reste filtré en silence — c'est la forme même d'un serveur MCP par défaut qui ne demande aucune
+authentification, celui de Kafka Explorer dans `application.yml`. Un jeton déclaré sans préfixe, à
+l'inverse, ne s'appliquera jamais à aucune requête ; un avertissement au démarrage le rapproche
+désormais du 401 qu'il cause côté serveur MCP, plutôt que de laisser les deux se découvrir
+séparément.
+
+### Un disjoncteur par connexion, mais seulement pour l'appel direct
+
+`McpToolCatalog` isolait un seul disjoncteur (`mcp-tool`) pour toutes les connexions : un serveur MCP
+en panne ouvrait un disjoncteur que les appels vers un autre serveur, sain, traversaient aussi. Il en
+crée désormais un par connexion (`mcp-tool-<connexion>`), enregistré dès la construction pour
+apparaître dans `/actuator/prometheus` et `GET /api/agent/mcp/servers` (`circuitBreakerState`) même
+sans trafic.
+
+Cette isolation ne couvre que l'appel direct (`POST /mcp/servers/{connection}/tools/{tool}`). Le
+chemin piloté par le modèle reste sur le disjoncteur partagé `mcp-tool` : Spring AI construit son
+propre callback (`SyncMcpToolCallback`) à partir du `McpSyncClient`, sans exposer publiquement la
+connexion dont il vient — rien, à cet endroit, ne permet de router vers le bon disjoncteur. Documenté
+ici plutôt que résolu, faute d'accroche côté SDK.
+
+### Coût et schéma des outils, exposés à la console
+
+`McpToolInfo.inputSchema` recopie le schéma JSON déclaré par le serveur (`McpSchema.Tool.inputSchema`)
+: la console l'affiche avant l'invocation directe d'un outil, pour remplacer deviner les arguments
+par les lire. `McpToolCatalog.metrics()` (`GET /api/agent/mcp/metrics`) agrège le compteur
+`kex.mcp.tool.call` par connexion et par outil — nombre d'appels et durée moyenne, toutes issues
+confondues — pour la même vue, sans passer par Prometheus.
 
 ### Plafond de la boucle d'outils
 
@@ -440,11 +477,13 @@ constaté en l'ajoutant). `ResilienceConfig` construit donc `CircuitBreakerRegis
 `-retry`, `-micrometer`, `-reactor`), et `McpToolCatalog` / `AgentService` y puisent le disjoncteur
 et le réessai qui les concernent par leur nom plutôt que par annotation.
 
-Deux disjoncteurs, pas un seul : `mcp-tool` et `agent-model` ne partagent pas les mêmes pannes, et
-un serveur MCP capricieux n'a pas à dégrader la disponibilité du modèle, ni l'inverse. Celui du
-modèle ne compte que les exceptions des SDK Anthropic/OpenAI et notre propre plafond de temps —
-une erreur de validation (schéma vide, connexion inconnue) n'est pas une panne du fournisseur et
-ne doit pas ouvrir le disjoncteur pour un défaut de l'appelant.
+Un disjoncteur par famille de panne, pas un seul : `mcp-tool-<connexion>` (un par serveur MCP, pour
+l'appel direct — voir « Un disjoncteur par connexion » plus haut), `mcp-tool` (partagé, pour le
+chemin piloté par le modèle) et `agent-model` ne partagent pas les mêmes pannes, et un serveur MCP
+capricieux n'a pas à dégrader la disponibilité du modèle, ni l'inverse, ni celle d'un autre serveur
+MCP. Celui du modèle ne compte que les exceptions des SDK Anthropic/OpenAI et notre propre plafond
+de temps — une erreur de validation (schéma vide, connexion inconnue) n'est pas une panne du
+fournisseur et ne doit pas ouvrir le disjoncteur pour un défaut de l'appelant.
 
 Le réessai, lui, n'existe que côté MCP, et seulement sur `McpServerUnavailableException` —
 l'indisponibilité *explicite* d'un serveur. Une erreur de protocole (outil inconnu, argument
@@ -1054,7 +1093,7 @@ n'entre dans la chaîne de build, la même contrainte que pour le reste de la co
 | `ApiSecurityTest` / `…UnconfiguredTest` | 401 / 200 / 503, et la sonde de santé jamais bloquée |
 | `McpToolCatalogTest` | Introspection, appel, ressources, serveur injoignable, capacité absente |
 | `AgentServiceTest` | Propagation du `conversationId` à l'advisor de mémoire, plafond de durée des deux chemins (dont un flux qui débite sans se taire), purge d'une conversation que l'échec rend inatteignable, jetons et motif d'arrêt rendus |
-| `AgentControllerTest` | Contrat HTTP des 7 routes |
+| `AgentControllerTest` | Contrat HTTP des 10 routes |
 | `SharedMemoryProfileTest` | Le profil `shared-memory` remplace bien le dépôt en mémoire |
 | `KexAgentApplicationTests` | Le contexte démarre sans aucun serveur MCP configuré |
 | `ConsoleTest` | La console est servie sans jeton, n'ouvre ni `/api/**` ni le `POST`, et appelle les routes qui existent |
@@ -1063,7 +1102,10 @@ n'entre dans la chaîne de build, la même contrainte que pour le reste de la co
 | `SupervisionServiceTest` | Autonomie, seuil de confiance, expiration, pause, cycle en échec, péremption des données |
 | `CycleAnalysisTest` | Ce qui arrive quand le modèle rend autre chose que le schéma demandé, et l'asymétrie de la couverture : un `OK` partiel devient `UNKNOWN`, une erreur partielle reste une erreur |
 | `SupervisionControllerTest` | Contrat HTTP du Control Center, dont 409 sur conflit d'état et 404 sur décision inconnue |
-| `McpToolCatalogTest` (résilience) | Réessai sur un serveur MCP explicitement injoignable, puis fail-fast une fois le disjoncteur ouvert |
+| `McpToolCatalogTest` (résilience) | Réessai sur un serveur MCP explicitement injoignable, puis fail-fast une fois le disjoncteur ouvert, isolation du disjoncteur par connexion, jauge de disponibilité, agrégation des métriques par outil |
+| `McpHealthCheckSchedulerTest` | Le sondage périodique retente bien l'initialisation des clients muets |
+| `McpBearerTokenCustomizerTest` | Filtrage par préfixe, et avertissement au démarrage sur une entrée mal renseignée |
+| `SupervisionScheduleConsistencyCheckTest` | Avertissement quand `kex.agent.supervision.schedule.enabled=true` sans le profil `shared-memory` |
 | `AgentServiceTest` / `AgentControllerTest` (disjoncteur) | Le disjoncteur `agent-model` ouvre après plusieurs pannes du fournisseur ; `CallNotPermittedException` rend `503` |
 | `McpTraceContextCustomizerTest` | Propagation du contexte de trace courant sur les appels MCP, rien hors d'une trace en cours |
 | `ApiKeyAuthFilterTest` | Principal nommé par jeton, jeton historique, jeton inconnu ou en-tête absent |

@@ -4,9 +4,9 @@
 // Les vues de supervision : observer → comprendre → décider → agir → vérifier.
 
 import {
-  $, ago, api, busy, clockTime, confirmAction, definition, dismissDrawer, drawerOpen, duration, el,
-  empty, errorState, frag, loading, openDrawer, params, percent, registerDrawer, render, report,
-  setParams, sortable, stamp, stateMark, stateTag, toast,
+  $, ago, api, busy, circuitBreakersValue, clockTime, confirmAction, definition, dismissDrawer,
+  drawerOpen, duration, el, empty, errorState, frag, loading, openDrawer, params, percent,
+  registerDrawer, render, report, setParams, sortable, stamp, stateMark, stateTag, toast,
 } from './core.js';
 
 const BASE = '/api/agent/supervision';
@@ -699,28 +699,6 @@ function perfGroup(title, rows) {
   return group;
 }
 
-// Un disjoncteur n'est pas un des états de ProcessState/DecisionStatus/AgentState : sa propre
-// petite table plutôt que de forcer une correspondance qui n'a pas de sens ailleurs.
-const CIRCUIT_STATES = {
-  CLOSED: 'OK',
-  HALF_OPEN: 'WARNING',
-  OPEN: 'ERROR',
-  FORCED_OPEN: 'ERROR',
-  DISABLED: 'UNKNOWN',
-  METRICS_ONLY: 'UNKNOWN',
-};
-
-function circuitBreakersValue(circuitBreakers) {
-  if (!circuitBreakers || !circuitBreakers.length) {
-    return el('span', 'muted', 'Aucun');
-  }
-  const wrap = el('span', 'tag-group');
-  circuitBreakers.forEach((breaker) => {
-    wrap.append(stateTag(CIRCUIT_STATES[breaker.state] || 'UNKNOWN', `${breaker.name} : ${breaker.state}`));
-  });
-  return wrap;
-}
-
 function agentSummary(status) {
   const wrap = el('div', 'summary');
   wrap.append(definition('État', stateTag(agentState(status.state).tag, agentState(status.state).label)));
@@ -973,6 +951,22 @@ export function wire() {
 
   $('#confidence').addEventListener('input', (event) => {
     $('#confidence-output').textContent = `${event.target.value} %`;
+  });
+
+  $('#test-webhook').addEventListener('click', (event) => {
+    busy(event.currentTarget, async () => {
+      const output = $('#webhook-test-result');
+      output.replaceChildren(loading('Envoi…'));
+      try {
+        const result = await api(`${BASE}/notify/test`, { method: 'POST' });
+        output.replaceChildren(result.success
+          ? stateTag('OK', 'Webhook joignable')
+          : errorState(new Error(result.detail || 'Échec du webhook.')));
+      } catch (error) {
+        output.replaceChildren(errorState(error));
+        report(error);
+      }
+    });
   });
 
   $('#agent-form').addEventListener('submit', async (event) => {

@@ -219,4 +219,27 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   pose son propre stub de succès par défaut — voit ce second stub écraser silencieusement le
   premier. Le stub qui doit compter se pose donc après avoir construit ce qu'il teste.
 
+- **Un disjoncteur par connexion MCP ne couvre que ce que le code peut nommer.** `McpToolCatalog`
+  isole désormais un disjoncteur par serveur (`mcp-tool-<connexion>`) pour l'appel direct — un
+  serveur en panne n'ouvre plus le disjoncteur des autres. Le chemin piloté par le modèle, lui,
+  reste sur un disjoncteur partagé : `SyncMcpToolCallback`, que Spring AI construit à partir du
+  `McpSyncClient`, n'expose pas publiquement la connexion dont il vient, donc rien ne permet d'y
+  router vers le bon disjoncteur. Une limite documentée, pas contournée.
+
+- **Une propriété gardée par un `@Profile` ne dit pas qu'elle ne sert à rien ailleurs.**
+  `kex.agent.supervision.schedule.enabled=true` sans le profil `shared-memory` actif ne lève ni
+  erreur ni avertissement : `SupervisionScheduleConfig` porte à la fois le `@Profile` et le
+  `@ConditionalOnProperty`, donc hors du profil la condition sur la propriété n'est simplement
+  jamais évaluée. Lu seul, l'`application.yml` a l'air correct. `SupervisionScheduleConsistencyCheck`
+  compare les deux au démarrage et avertit si la propriété est vraie sans le profil qui la rend utile
+  — même geste que `LlmProviderCheck`, pas un échec.
+
+- **Un champ de configuration manquant n'est pas toujours une erreur — parfois c'est le défaut.**
+  Un premier réflexe avertissait sur toute entrée `kex.mcp.bearer-tokens[]` incomplète, `url-prefix`
+  ou `token` manquant confondus. Ça aurait fait crier au démarrage sur l'installation par défaut
+  elle-même : `application.yml` déclare un `url-prefix` pour Kafka Explorer avec un `token` vide,
+  exactement la forme d'un serveur qui ne demande aucune authentification. Seul un jeton *sans*
+  préfixe est une erreur sans lecture alternative — il ne s'appliquera jamais à aucune requête —
+  et c'est le seul cas que `McpBearerTokenCustomizer` signale désormais.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
