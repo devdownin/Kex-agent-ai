@@ -10,6 +10,7 @@ import java.util.function.Consumer;
 
 import com.kex.agent.config.AgentProperties;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.junit.jupiter.api.Test;
@@ -296,6 +297,52 @@ class AgentServiceTest {
 
         assertThatThrownBy(() -> service.askStructured("c", "m", Map.of()))
                 .isInstanceOf(InvalidJsonSchemaException.class);
+    }
+
+    /**
+     * La console parle par défaut au flux : sans le disjoncteur sur ce chemin-là, il continuait
+     * d'envoyer des prompts — et de dépenser — vers un fournisseur déjà constaté en panne, pendant
+     * que l'appel bloquant rendait 503 sans même l'appeler.
+     */
+    @Test
+    void refuse_un_flux_quand_le_disjoncteur_est_ouvert() {
+        streamingCall();
+        given(streamSpec.content()).willReturn(Flux.just("pong"));
+
+        CircuitBreakerRegistry registry = CircuitBreakerRegistry.ofDefaults();
+        CircuitBreaker breaker = registry.circuitBreaker("agent-model");
+        breaker.transitionToOpenState();
+
+        var stream = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), registry)
+                .stream("conv-1", "ping");
+
+        StepVerifier.create(stream.events()).expectError(CallNotPermittedException.class).verify();
+    }
+
+    @Test
+    void compte_l_echec_d_un_flux_dans_le_disjoncteur() {
+        streamingCall();
+        given(streamSpec.content()).willReturn(Flux.error(new AgentTimeoutException(Duration.ofSeconds(1), "conv-1")));
+
+        CircuitBreakerRegistry registry = CircuitBreakerRegistry.ofDefaults();
+        registry.circuitBreaker("agent-model", CircuitBreakerConfig.custom()
+                .slidingWindowSize(2)
+                .minimumNumberOfCalls(2)
+                .failureRateThreshold(50)
+                .waitDurationInOpenState(Duration.ofMinutes(1))
+                .recordExceptions(AgentTimeoutException.class)
+                .build());
+        AgentService service = new AgentService(chatClient, chatMemory, properties(Duration.ofSeconds(10)), registry);
+
+        StepVerifier.create(service.stream("conv-1", "ping").events())
+                .expectError(AgentTimeoutException.class).verify();
+        StepVerifier.create(service.stream("conv-1", "ping").events())
+                .expectError(AgentTimeoutException.class).verify();
+
+        // Sans ce comptage, les échecs du flux n'ouvriraient jamais le disjoncteur : il ne
+        // protégerait que la route que la console n'emprunte pas.
+        StepVerifier.create(service.stream("conv-1", "ping").events())
+                .expectError(CallNotPermittedException.class).verify();
     }
 
     @Test

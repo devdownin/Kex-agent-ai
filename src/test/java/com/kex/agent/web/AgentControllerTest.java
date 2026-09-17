@@ -246,6 +246,24 @@ class AgentControllerTest {
      * sans l'identifiant dans le corps, un appelant qui n'en avait pas fourni — le premier message
      * de la console — ne pourrait ni la reprendre ni la purger, alors que son message y est écrit.
      */
+    /** La même panne ne se raconte pas de deux façons selon la route empruntée. */
+    @Test
+    void le_flux_dit_le_disjoncteur_ouvert_comme_le_chemin_bloquant() throws Exception {
+        given(agentService.stream("conv-1", "bonjour")).willReturn(new AgentStream("conv-1",
+                Flux.error(CallNotPermittedException.createCallNotPermittedException(
+                        CircuitBreaker.ofDefaults("agent-model")))));
+
+        var response = mvc.post().uri("/api/agent/chat/stream")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"conversationId":"conv-1","message":"bonjour"}""")
+                .exchange();
+
+        assertThat(response).hasStatusOk();
+        assertThat(response.getResponse().getContentAsString())
+                .contains("event:error").contains("nouvel essai dans quelques instants");
+    }
+
     @Test
     void retourne_504_avec_l_identifiant_de_conversation_quand_l_appel_depasse_le_plafond() {
         willThrow(new AgentTimeoutException(Duration.ofSeconds(120), "conv-9"))

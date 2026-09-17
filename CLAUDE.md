@@ -190,6 +190,13 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   deux. `EmptyUsage` compte `0` là où le fournisseur n'a rien dit : à traduire en absence, jamais
   en zéro.
 
+- **Un `Supplier` décoré ne couvre pas un flux.** Le disjoncteur `agent-model` ne protégeait que
+  `ask`/`askStructured` : ouvert, il rendait `503` sur `/chat` pendant que `/chat/stream` — ce que
+  la console emprunte par défaut — continuait d'appeler le fournisseur en panne, sans même que ses
+  échecs comptent. `CircuitBreakerOperator` (`resilience4j-reactor`) le pose sur le flux, après le
+  plafond de durée pour que le timeout compte comme un échec, et par `transformDeferred` : l'état
+  se lit à la souscription, pas à l'assemblage.
+
 - **`SimpleLoggerAdvisor` écrit en `DEBUG`.** `kex.agent.log-interactions: true` enregistrait
   l'advisor sans qu'une ligne n'apparaisse au niveau par défaut, pendant que la console avertissait
   d'une fuite de prompts inexistante : une propriété qui ment deux fois. Le niveau est posé dans

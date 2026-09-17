@@ -52,6 +52,14 @@ class AgentController {
 
     private static final Logger log = LoggerFactory.getLogger(AgentController.class);
 
+    /**
+     * Le disjoncteur `agent-model` a ouvert après une série d'échecs amont : échouer tout de suite
+     * plutôt que de laisser chaque appel attendre son propre plafond de temps pour redécouvrir la
+     * même panne. Partagé par les deux chemins, pour qu'ils n'en dérivent pas séparément.
+     */
+    private static final String MODEL_CIRCUIT_OPEN =
+            "Le modèle a échoué à plusieurs reprises récemment ; nouvel essai dans quelques instants";
+
     private final AgentService agentService;
     private final McpToolCatalog toolCatalog;
     private final SupervisionService supervision;
@@ -101,10 +109,18 @@ class AgentController {
         return ServerSentEvent.<String>builder().event(name).data(data).build();
     }
 
-    /** Le détail interne reste dans les journaux : il n'a pas à repartir chez l'appelant. */
+    /**
+     * Le détail interne reste dans les journaux : il n'a pas à repartir chez l'appelant. Le
+     * disjoncteur ouvert n'est pas un incident à journaliser mais un refus attendu, dit au client
+     * dans les mêmes termes que sur le chemin bloquant — la même panne ne se raconte pas de deux
+     * façons selon la route empruntée.
+     */
     private static String streamErrorMessage(Throwable ex) {
         if (ex instanceof AgentTimeoutException timeout) {
             return timeout.getMessage();
+        }
+        if (ex instanceof CallNotPermittedException) {
+            return MODEL_CIRCUIT_OPEN;
         }
         log.error("Échec pendant le flux de chat", ex);
         return "Le flux s'est interrompu avant la fin de la réponse";
@@ -220,14 +236,8 @@ class AgentController {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
     }
 
-    /**
-     * Le disjoncteur `agent-model` a ouvert après une série d'échecs amont : échouer tout de suite
-     * plutôt que de laisser chaque appel attendre son propre plafond de temps pour redécouvrir la
-     * même panne.
-     */
     @ExceptionHandler(CallNotPermittedException.class)
     ProblemDetail modelCircuitOpen(CallNotPermittedException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
-                "Le modèle a échoué à plusieurs reprises récemment ; nouvel essai dans quelques instants");
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, MODEL_CIRCUIT_OPEN);
     }
 }

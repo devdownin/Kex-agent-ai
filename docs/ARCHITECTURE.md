@@ -437,8 +437,8 @@ Pas le starter `resilience4j-spring-boot3` : sa propre autoconfiguration vérifi
 Spring Boot au démarrage et refuse explicitement Spring Boot 4 (`IncompatibleSpringBootVersionException`,
 constaté en l'ajoutant). `ResilienceConfig` construit donc `CircuitBreakerRegistry` et
 `RetryRegistry` à la main, à partir des seuls modules nus (`resilience4j-circuitbreaker`,
-`-retry`, `-micrometer`), et `McpToolCatalog` / `AgentService` y puisent le disjoncteur et le
-réessai qui les concernent par leur nom plutôt que par annotation.
+`-retry`, `-micrometer`, `-reactor`), et `McpToolCatalog` / `AgentService` y puisent le disjoncteur
+et le réessai qui les concernent par leur nom plutôt que par annotation.
 
 Deux disjoncteurs, pas un seul : `mcp-tool` et `agent-model` ne partagent pas les mêmes pannes, et
 un serveur MCP capricieux n'a pas à dégrader la disponibilité du modèle, ni l'inverse. Celui du
@@ -450,9 +450,17 @@ Le réessai, lui, n'existe que côté MCP, et seulement sur `McpServerUnavailabl
 l'indisponibilité *explicite* d'un serveur. Une erreur de protocole (outil inconnu, argument
 refusé) resterait fausse rejouée. Il n'y en a pas côté modèle : un échange qui a déjà exécuté
 plusieurs tours d'outils le rejouerait en entier au moindre échec, doublant les appels MCP déjà
-faits. Le disjoncteur du modèle protège donc `ask`/`askStructured`, pas `stream` : ce dernier rend
-déjà chaque échec en `event: error` sans jamais bloquer un appelant sur le plafond de temps, la
-même raison qui l'exempte du plafond bloquant plus haut.
+faits.
+
+Le disjoncteur du modèle, lui, couvre les trois chemins. `ask`/`askStructured` décorent un
+`Supplier` ; `stream` passe par `CircuitBreakerOperator` (`resilience4j-reactor`), un `Supplier`
+décoré ne couvrant pas un flux. Il ne l'a pas toujours fait, et l'écart ne protégeait presque
+rien : la console parle par défaut à `/chat/stream`, si bien qu'un disjoncteur ouvert rendait
+`503` sur `/chat` pendant que le flux continuait d'envoyer des prompts — et de dépenser — vers un
+fournisseur déjà constaté en panne, sans même que ses échecs comptent pour le garder ouvert.
+L'opérateur est posé *après* le plafond de durée, pour que notre propre timeout compte comme un
+échec du fournisseur ; `transformDeferred` plutôt que `transform`, l'état du disjoncteur se lisant
+à la souscription et non à l'assemblage.
 
 Un disjoncteur ouvert rend `503` (`CallNotPermittedException`, capté à côté des exceptions MCP et
 fournisseur) plutôt que de laisser l'appelant redécouvrir la panne en silence jusqu'au timeout.

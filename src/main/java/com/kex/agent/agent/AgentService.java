@@ -15,6 +15,7 @@ import java.util.function.Supplier;
 import com.kex.agent.config.AgentProperties;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ResponseEntity;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -53,10 +54,9 @@ public class AgentService {
     }
 
     /**
-     * Le disjoncteur borne les appels bloquants, pas {@link #stream}, dont chaque échec se rend
-     * déjà en {@code event: error} sans jamais bloquer un appelant sur le plafond de temps. Pas de
-     * réessai ici, contrairement aux appels MCP : un échange qui a déjà exécuté plusieurs tours
-     * d'outils le rejouerait en entier, doublant les appels MCP faits jusque-là.
+     * Pas de réessai ici, contrairement aux appels MCP : un échange qui a déjà exécuté plusieurs
+     * tours d'outils le rejouerait en entier, doublant les appels MCP faits jusque-là. Le
+     * disjoncteur, lui, couvre les deux chemins — voir {@link #stream}.
      *
      * <p>La réponse complète est retenue plutôt que son seul texte : le motif d'arrêt et les
      * jetons consommés n'existent nulle part ailleurs à l'échelle d'un échange.
@@ -88,6 +88,11 @@ public class AgentService {
     /**
      * Les événements d'outil et les jetons sont fusionnés dans un seul flux : sans eux, le flux
      * reste muet pendant qu'un outil s'exécute, ce qu'un client ne distingue pas d'un blocage.
+     *
+     * <p>Le même disjoncteur que le chemin bloquant, par l'opérateur réactif : décorer un
+     * {@code Supplier} ne couvre pas un flux. Sans lui, un disjoncteur ouvert rendait {@code 503}
+     * sur {@code /chat} pendant que {@code /chat/stream} — ce que la console emprunte par défaut —
+     * continuait d'envoyer des prompts, et de dépenser, vers un fournisseur déjà constaté en panne.
      */
     public AgentStream stream(String conversationId, String message) {
         String id = conversation(conversationId).id();
@@ -106,6 +111,10 @@ public class AgentService {
                 .<AgentEvent>map(AgentEvent.Token::new)
                 .takeUntilOther(Mono.delay(timeout)
                         .flatMap(tick -> Mono.error(new AgentTimeoutException(timeout, id))))
+                // Après le plafond, pour que notre propre timeout compte comme un échec du
+                // fournisseur, comme il le fait déjà sur le chemin bloquant. `transformDeferred` :
+                // l'état du disjoncteur se lit à la souscription, pas à l'assemblage.
+                .transformDeferred(CircuitBreakerOperator.of(modelCircuitBreaker))
                 .doFinally(signal -> tools.tryEmitComplete());
 
         return new AgentStream(id, Flux.merge(tools.asFlux(), tokens));
