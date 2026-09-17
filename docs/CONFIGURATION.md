@@ -288,7 +288,8 @@ MCP, et le test d'intégration monte son propre serveur.
 ### Évals de jugement du modèle
 
 Exclus de `./mvnw verify` (`@Tag("eval")`) : ils appellent un vrai fournisseur, donc payants et
-non déterministes. À rejouer à la main après un changement de modèle ou de prompt de supervision :
+non déterministes. Trois scénarios (couverture incomplète, mesure absente, verdict d'outil
+réinterprété) à rejouer à la main après un changement de modèle ou de prompt de supervision :
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-... ./mvnw test -Dtest=ModelJudgmentEvalTest -DexcludedGroups=

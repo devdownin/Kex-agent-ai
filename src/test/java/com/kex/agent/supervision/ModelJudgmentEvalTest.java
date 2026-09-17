@@ -34,11 +34,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <pre>ANTHROPIC_API_KEY=sk-ant-... ./mvnw test -Dtest=ModelJudgmentEvalTest -DexcludedGroups=</pre>
  *
- * <p>Le scénario reproduit le risque documenté dans ARCHITECTURE.md (« Un relevé partiel prouve
- * une présence, jamais une absence ») : un outil de lag Kafka dont le relevé s'est arrêté avant la
- * fin — budget de temps épuisé — sur le topic qui concerne précisément le processus surveillé. Le
- * prompt de supervision l'interdit explicitement ; ce qui est vérifié ici, c'est que le modèle le
- * respecte réellement, pas seulement que notre code sait dégrader une réponse déjà correcte.
+ * <p>Trois scénarios, chacun un risque documenté dans ARCHITECTURE.md que seul un vrai appel au
+ * modèle peut faire échouer — le code, lui, ne fait que dégrader une réponse déjà bien formée :
+ *
+ * <ul>
+ * <li>un relevé de lag Kafka arrêté avant la fin — budget de temps épuisé — sur le topic qui
+ * concerne précisément le processus surveillé (« Un relevé partiel prouve une présence, jamais
+ * une absence ») ;
+ * <li>une mesure explicitement non prise (« Une mesure absente n'est jamais zéro »), pour vérifier
+ * que le modèle ne la lit pas comme un retard nul ;
+ * <li>un verdict d'outil ({@code STALLED}) porté par un chiffre de lag trompeusement petit, pour
+ * vérifier que le modèle suit le verdict plutôt que de réinterpréter le nombre lui-même.
+ * </ul>
  */
 @Tag("eval")
 @EnabledIfEnvironmentVariable(named = "ANTHROPIC_API_KEY", matches = ".+")
@@ -112,6 +119,51 @@ class ModelJudgmentEvalTest {
                 .isTrue();
     }
 
+    @Test
+    void ne_traite_pas_une_mesure_absente_comme_un_retard_nul() throws Exception {
+        SERVER.withToolsList("""
+                {"tools":[{"name":"kex_consumer_lag",\
+                "description":"Retard de consommation d'un groupe Kafka sur un topic donné",\
+                "inputSchema":{"type":"object","properties":{"topic":{"type":"string"},\
+                "group":{"type":"string"}},"required":["topic","group"]}}]}""");
+        SERVER.withToolCallResult("kex_consumer_lag", absentMeasurementResult());
+
+        CycleReport report = supervision.runCycle("eval");
+
+        assertThat(report.failure()).isNull();
+        ProcessSnapshot snapshot = supervision.snapshots().stream()
+                .filter(candidate -> "order-integration".equals(candidate.processId()))
+                .findFirst()
+                .orElseThrow();
+
+        // Le point à verrouiller : "measured: false" ne doit jamais se lire comme un lag à zéro,
+        // ce qui affirmerait un rattrapage (OK) qu'aucune mesure ne soutient.
+        assertThat(snapshot.state())
+                .as("un lag non mesuré ne devrait jamais produire un état OK (note rendue : '%s')",
+                        snapshot.note())
+                .isNotEqualTo(ProcessState.OK);
+    }
+
+    @Test
+    void suit_le_verdict_de_l_outil_plutot_que_de_reinterpreter_le_chiffre() throws Exception {
+        SERVER.withToolsList("""
+                {"tools":[{"name":"kex_consumer_lag",\
+                "description":"Retard de consommation d'un groupe Kafka sur un topic donné",\
+                "inputSchema":{"type":"object","properties":{"topic":{"type":"string"},\
+                "group":{"type":"string"}},"required":["topic","group"]}}]}""");
+        SERVER.withToolCallResult("kex_consumer_lag", stalledVerdictResult());
+
+        CycleReport report = supervision.runCycle("eval");
+
+        assertThat(report.failure()).isNull();
+        // Le point à verrouiller : un lag chiffré à 5 ne doit pas faire ignorer un verdict STALLED
+        // explicite — l'outil sait qu'aucun membre n'est assigné au groupe, ce qu'aucun chiffre de
+        // lag, seul, ne dit.
+        assertThat(report.anomaliesDetected())
+                .as("un verdict STALLED explicite devrait produire une anomalie malgré un lag chiffré à 5")
+                .isGreaterThanOrEqualTo(1);
+    }
+
     private static String callResult() throws Exception {
         Map<String, Object> payload = Map.of(
                 "topic", "orders",
@@ -122,6 +174,35 @@ class ModelJudgmentEvalTest {
                         "stopReason", "TIME_BUDGET",
                         "topicsNotReached", List.of("orders"),
                         "detail", "Budget de requête épuisé avant la fin du balayage"));
+        String text = JSON.writeValueAsString(payload);
+        return JSON.writeValueAsString(Map.of(
+                "content", List.of(Map.of("type", "text", "text", text)),
+                "isError", false));
+    }
+
+    /** Couverture complète, cette fois : seule la mesure elle-même manque. */
+    private static String absentMeasurementResult() throws Exception {
+        Map<String, Object> payload = Map.of(
+                "topic", "orders",
+                "group", "order-consumer",
+                "lag", Map.of("measured", false, "reason", "aucun offset commité pour ce groupe"),
+                "coverage", Map.of("complete", true, "stopReason", "EXHAUSTED"));
+        String text = JSON.writeValueAsString(payload);
+        return JSON.writeValueAsString(Map.of(
+                "content", List.of(Map.of("type", "text", "text", text)),
+                "isError", false));
+    }
+
+    /** Un chiffre rassurant, un verdict qui ne l'est pas : le second doit l'emporter. */
+    private static String stalledVerdictResult() throws Exception {
+        Map<String, Object> payload = Map.of(
+                "topic", "orders",
+                "group", "order-consumer",
+                "recordLag", 5,
+                "verdict", "STALLED",
+                "explanation", "Aucun membre assigné au groupe depuis 40 minutes : "
+                        + "le retard ne se résorbera pas de lui-même",
+                "coverage", Map.of("complete", true, "stopReason", "EXHAUSTED"));
         String text = JSON.writeValueAsString(payload);
         return JSON.writeValueAsString(Map.of(
                 "content", List.of(Map.of("type", "text", "text", text)),
