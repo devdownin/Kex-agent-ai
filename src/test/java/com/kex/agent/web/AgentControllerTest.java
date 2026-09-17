@@ -23,6 +23,7 @@ import com.kex.agent.mcp.McpToolInfo;
 import com.kex.agent.mcp.McpToolResult;
 import com.kex.agent.mcp.UnknownMcpServerException;
 import com.kex.agent.mcp.UnsupportedMcpCapabilityException;
+import com.kex.agent.supervision.SupervisionService;
 import com.openai.errors.OpenAIException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -36,6 +37,8 @@ import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import reactor.core.publisher.Flux;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
@@ -53,6 +56,9 @@ class AgentControllerTest {
 
     @MockitoBean
     McpToolCatalog toolCatalog;
+
+    @MockitoBean
+    SupervisionService supervision;
 
     @Test
     void repond_avec_le_contenu_de_l_agent() {
@@ -111,6 +117,36 @@ class AgentControllerTest {
         assertThat(response).hasStatusOk();
         assertThat(response).bodyJson().extractingPath("$.error").isEqualTo(false);
         assertThat(response).bodyJson().extractingPath("$.content[0]").isEqualTo("demo.orders");
+    }
+
+    /**
+     * Cette route agit sans décision ni politique de supervision à vérifier : l'audit est la seule
+     * trace de qui a appelé quoi, au même titre que la suppression d'un souvenir (MemoryController).
+     */
+    @Test
+    void trace_l_invocation_directe_dans_l_audit() {
+        given(toolCatalog.call("kafka-explorer", "kex_list_topics", Map.of("prefix", "demo.")))
+                .willReturn(new McpToolResult("kafka-explorer", "kex_list_topics", false, List.of("demo.orders"), null));
+
+        mvc.post().uri("/api/agent/mcp/servers/kafka-explorer/tools/kex_list_topics")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"arguments":{"prefix":"demo."}}""")
+                .exchange();
+
+        verify(supervision).auditAction("Anonyme", "Appel MCP direct : kex_list_topics sur kafka-explorer",
+                "Exécuté");
+    }
+
+    @Test
+    void trace_l_echec_d_une_invocation_directe_dans_l_audit() {
+        willThrow(new McpServerUnavailableException("kafka-explorer", new IllegalStateException("refused")))
+                .given(toolCatalog).call("kafka-explorer", "kex_list_topics", Map.of());
+
+        mvc.post().uri("/api/agent/mcp/servers/kafka-explorer/tools/kex_list_topics").exchange();
+
+        verify(supervision).auditAction(eq("Anonyme"), eq("Appel MCP direct : kex_list_topics sur kafka-explorer"),
+                contains("refused"));
     }
 
     @Test

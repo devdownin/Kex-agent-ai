@@ -27,6 +27,10 @@ import static org.mockito.BDDMockito.given;
         "kex.agent.api-key=secret",
         "kex.agent.api-keys.ops-console=jeton-ops",
         "kex.agent.api-keys.ci-pipeline=jeton-ci",
+        // Clé dédiée : les autres tests de cette classe partagent le même contexte Spring, donc le
+        // même seau par principal — réutiliser "secret" ou "jeton-ops" ici dépendrait de l'ordre
+        // d'exécution des méthodes.
+        "kex.agent.api-keys.mcp-console=jeton-mcp",
         "kex.agent.rate-limit.enabled=true",
         // Débit lent : le seau ne doit pas se recharger pendant la rafale du test.
         "kex.agent.rate-limit.requests-per-minute=1",
@@ -72,6 +76,37 @@ class RateLimitTest {
             chat("Bearer secret");
         }
         assertThat(get("/api/agent/mcp/servers")).isEqualTo(200);
+    }
+
+    /**
+     * Contrairement à l'introspection (GET), cette route déclenche un vrai traitement côté serveur
+     * MCP à chaque appel : sans ce test, un caller authentifié pourrait la marteler sans aucun
+     * débit, y compris sur un serveur MCP inconnu du test (d'où le 404 attendu ici, pas un 200 —
+     * seul le comptage du débit est en jeu).
+     */
+    @Test
+    void limite_l_invocation_directe_d_un_outil_mcp() throws Exception {
+        List<Integer> codes = IntStream.range(0, 5).mapToObj(i -> callTool("Bearer jeton-mcp")).toList();
+
+        assertThat(codes.subList(0, 3)).doesNotContain(429);
+        assertThat(codes.subList(3, 5)).containsOnly(429);
+    }
+
+    private int callTool(String authorization) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder(URI.create(
+                            "http://localhost:" + port + "/api/agent/mcp/servers/kafka-explorer/tools/kex_list_topics"))
+                    .header("Authorization", authorization)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                    .build();
+            try (HttpClient client = HttpClient.newHttpClient()) {
+                return client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
+            }
+        }
+        catch (IOException | InterruptedException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     private int chat(String authorization) {

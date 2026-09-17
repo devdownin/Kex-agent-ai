@@ -7,6 +7,7 @@ import java.util.List;
 
 import com.kex.agent.mcp.McpToolCatalog;
 import com.kex.agent.memory.MemoryTools;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryRegistry;
 import io.micrometer.observation.ObservationRegistry;
@@ -90,7 +91,8 @@ class AgentConfig {
                                ObjectProvider<ToolCallbackProvider> toolCallbackProviders,
                                ObjectProvider<MemoryTools> memoryTools,
                                ObjectProvider<Advisor> declaredAdvisors,
-                               AgentProperties properties) {
+                               AgentProperties properties,
+                               CircuitBreakerRegistry circuitBreakerRegistry) {
 
         List<Advisor> advisors = new ArrayList<>();
         advisors.add(MessageChatMemoryAdvisor.builder(chatMemory).build());
@@ -101,10 +103,13 @@ class AgentConfig {
             advisors.add(new SimpleLoggerAdvisor());
         }
 
+        // Même disjoncteur que McpToolCatalog.call (voir ResilienceConfig) : ces callbacks viennent
+        // du même McpSyncClient, une panne du serveur doit compter et faire échouer vite ici aussi.
+        CircuitBreaker mcpCircuitBreaker = circuitBreakerRegistry.circuitBreaker("mcp-tool");
         return builder
                 .defaultSystem(properties.systemPrompt())
                 .defaultToolCallbacks(toolCallbackProviders.stream()
-                        .map(RecordingToolCallbackProvider::new)
+                        .map(provider -> new RecordingToolCallbackProvider(provider, mcpCircuitBreaker))
                         .toArray(ToolCallbackProvider[]::new))
                 // ObjectProvider : absent quand kex.agent.memory.enabled=false, pas d'outil à ajouter.
                 .defaultTools(memoryTools.stream().toArray())
