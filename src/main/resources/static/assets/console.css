@@ -617,6 +617,15 @@ table.grid tr.clickable:hover td { background: var(--surface-2); }
 .perf-row .value { font-family: var(--mono); font-weight: 600; }
 .perf-row .value.ko { color: var(--danger); }
 
+.sparkline { width: 160px; height: 32px; flex-shrink: 0; }
+.sparkline polyline { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+
+/* La sélection groupée n'apparaît qu'avec au moins une décision cochée : une barre vide au-dessus
+   d'une liste sans rien de sélectionné inviterait à cliquer un bouton qui n'agirait sur rien. */
+.bulk-bar { align-items: center; padding: 8px 0; }
+.bulk-bar .muted { margin-right: auto; }
+.bulk-select { margin-right: 10px; }
+
 .alert-text { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 2px; }
 .alert-text .hint { margin: 0; }
 

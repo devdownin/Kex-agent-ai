@@ -4,9 +4,21 @@
 // Conversation directe avec l'agent : le chemin manuel, quand la supervision ne suffit pas à
 // comprendre ce qui se passe.
 
-import { $, api, el, failure, headers, report } from './core.js';
+import {
+  $, ago, api, busy, dismissDrawer, el, empty, failure, headers, openDrawer, registerDrawer, report,
+  setDrawerParam,
+} from './core.js';
 
 const CONVERSATION_STORAGE = 'kex.agent.conversation';
+
+// Le serveur ne garde ni la liste des conversations ni leur transcription — seule sa mémoire de
+// modèle (ChatMemory) persiste, sans dimension par principal. Reprendre un échange passé n'a donc
+// de sens que pour la transcription déjà vue dans ce navigateur : `localStorage`, jamais une source
+// de vérité, seulement un moyen de la réafficher telle quelle.
+const HISTORY_INDEX = 'kex.agent.conversations';
+const TRANSCRIPT_PREFIX = 'kex.agent.conversation.';
+const MAX_HISTORY = 20;
+const MAX_TURNS_STORED = 40;
 
 let conversationId = null;
 let inFlight = null;
@@ -25,6 +37,61 @@ function setConversation(id) {
   try {
     if (id) sessionStorage.setItem(CONVERSATION_STORAGE, id);
     else sessionStorage.removeItem(CONVERSATION_STORAGE);
+  } catch {
+    /* idem */
+  }
+}
+
+function readIndex() {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_INDEX) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function writeIndex(list) {
+  try {
+    localStorage.setItem(HISTORY_INDEX, JSON.stringify(list.slice(0, MAX_HISTORY)));
+  } catch {
+    /* navigation privée ou quota dépassé : l'historique reste valide pour la session en cours */
+  }
+}
+
+function touchIndex(id, label) {
+  if (!id) return;
+  const list = readIndex();
+  const existing = list.find((entry) => entry.id === id);
+  const remaining = list.filter((entry) => entry.id !== id);
+  // Le libellé se fixe au premier message et ne bouge plus : le faire suivre le dernier message
+  // rendrait une entrée méconnaissable d'un envoi à l'autre dans la liste.
+  remaining.unshift({ id, label: existing?.label || label || 'Conversation', updatedAt: new Date().toISOString() });
+  writeIndex(remaining);
+}
+
+function removeFromIndex(id) {
+  writeIndex(readIndex().filter((entry) => entry.id !== id));
+  try {
+    localStorage.removeItem(TRANSCRIPT_PREFIX + id);
+  } catch {
+    /* idem */
+  }
+}
+
+function readTranscript(id) {
+  try {
+    return JSON.parse(localStorage.getItem(TRANSCRIPT_PREFIX + id) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function appendTranscript(id, turn) {
+  if (!id) return;
+  const turns = readTranscript(id);
+  turns.push(turn);
+  try {
+    localStorage.setItem(TRANSCRIPT_PREFIX + id, JSON.stringify(turns.slice(-MAX_TURNS_STORED)));
   } catch {
     /* idem */
   }
@@ -126,10 +193,17 @@ async function sendStreaming(message) {
   const { turn, bubble } = addTurn('agent', '');
   bubble.classList.add('caret');
   const calls = [];
+  // Capturé plutôt que relu sur `conversationId` au moment de persister : reprendre une autre
+  // conversation pendant que ce flux tourne encore réassigne la variable partagée, et le flux
+  // interrompu ne doit pas écrire son tour incomplet dans la conversation qui vient de le remplacer.
+  let ownConversationId = null;
   try {
     for await (const event of serverSentEvents(response)) {
       if (event.name === 'conversation') {
         setConversation(event.data);
+        ownConversationId = event.data;
+        appendTranscript(ownConversationId, { role: 'user', text: message });
+        touchIndex(ownConversationId, message.slice(0, 48));
       } else if (event.name === 'token') {
         bubble.textContent += event.data;
         $('#transcript').scrollTop = $('#transcript').scrollHeight;
@@ -144,6 +218,11 @@ async function sendStreaming(message) {
     }
   } finally {
     bubble.classList.remove('caret');
+    // Le motif d'arrêt n'arrive pas sur ce chemin (voir OBSERVABILITE.md) : rien à consigner ici,
+    // contrairement au chemin bloquant.
+    if (ownConversationId) {
+      appendTranscript(ownConversationId, { role: 'agent', text: bubble.textContent, tools: calls });
+    }
     inFlight = null;
   }
 }
@@ -151,15 +230,93 @@ async function sendStreaming(message) {
 async function sendBlocking(message) {
   const answer = await api('/api/agent/chat', { method: 'POST', body: { conversationId, message } });
   setConversation(answer.conversationId);
+  appendTranscript(answer.conversationId, { role: 'user', text: message });
+  touchIndex(answer.conversationId, message.slice(0, 48));
   const { turn } = addTurn('agent', answer.content);
   renderToolChips(turn, answer.tools || []);
   renderFinishReason(turn, answer.finishReason);
   renderToolLog(answer.tools || []);
+  appendTranscript(answer.conversationId,
+    { role: 'agent', text: answer.content, tools: answer.tools, finishReason: answer.finishReason });
+}
+
+/** Redessine une conversation déjà connue depuis sa transcription locale, sans appel réseau. */
+function replay(id) {
+  $('#transcript').replaceChildren();
+  let lastTools = [];
+  readTranscript(id).forEach((saved) => {
+    const { turn } = addTurn(saved.role, saved.text);
+    if (saved.role === 'agent') {
+      if (saved.tools?.length) {
+        renderToolChips(turn, saved.tools);
+        lastTools = saved.tools;
+      }
+      if (saved.finishReason) renderFinishReason(turn, saved.finishReason);
+    }
+  });
+  renderToolLog(lastTools);
+}
+
+function historyRow(entry) {
+  const card = el('article', 'card');
+  const head = el('header');
+  head.append(el('h3', null, entry.label || 'Conversation'));
+  if (entry.id === conversationId) head.append(el('span', 'muted', 'en cours'));
+  card.append(head);
+  card.append(el('p', 'muted', `${ago(entry.updatedAt) || '—'} · ${entry.id}`));
+
+  const actions = el('div', 'row-end');
+  const remove = el('button', 'ghost danger', 'Supprimer');
+  remove.type = 'button';
+  remove.setAttribute('aria-label', `Supprimer : ${entry.label}`);
+  remove.addEventListener('click', () => busy(remove, async () => {
+    try {
+      await api(`/api/agent/conversations/${encodeURIComponent(entry.id)}`, { method: 'DELETE' });
+    } catch (error) {
+      // Une conversation déjà purgée côté serveur (expiration, redémarrage) n'empêche pas de
+      // nettoyer la trace locale : seul un échec réseau mérite d'être signalé ici.
+      if (error.status !== 404) report(error);
+    }
+    removeFromIndex(entry.id);
+    if (entry.id === conversationId) {
+      setConversation(null);
+      $('#transcript').replaceChildren();
+      renderToolLog([]);
+    }
+    openHistory();
+  }));
+  const resume = el('button', 'primary', 'Reprendre');
+  resume.type = 'button';
+  resume.setAttribute('aria-label', `Reprendre : ${entry.label}`);
+  resume.addEventListener('click', () => {
+    inFlight?.abort();
+    setConversation(entry.id);
+    replay(entry.id);
+    dismissDrawer();
+  });
+  actions.append(remove, resume);
+  card.append(actions);
+  return card;
+}
+
+function openHistory() {
+  setDrawerParam('historique', '1');
+  const list = readIndex();
+  const body = el('div');
+  if (!list.length) {
+    body.append(empty('Aucune conversation récente.', 'Elle apparaît ici après le premier message envoyé.'));
+  } else {
+    const cards = el('div', 'cards wide');
+    list.forEach((entry) => cards.append(historyRow(entry)));
+    body.append(cards);
+  }
+  openDrawer('Conversations récentes', body);
 }
 
 export function wire(onUnauthorized) {
   unauthorized = onUnauthorized;
   setConversation(conversationId);
+  registerDrawer('historique', openHistory);
 
   $('#composer').addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -208,6 +365,7 @@ export function wire(onUnauthorized) {
     if (!conversationId) return;
     try {
       await api(`/api/agent/conversations/${encodeURIComponent(conversationId)}`, { method: 'DELETE' });
+      removeFromIndex(conversationId);
       setConversation(null);
       $('#transcript').replaceChildren();
       renderToolLog([]);
@@ -215,4 +373,6 @@ export function wire(onUnauthorized) {
       report(error);
     }
   });
+
+  $('#open-history').addEventListener('click', openHistory);
 }

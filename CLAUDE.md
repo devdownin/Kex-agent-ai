@@ -242,4 +242,12 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   préfixe est une erreur sans lecture alternative — il ne s'appliquera jamais à aucune requête —
   et c'est le seul cas que `McpBearerTokenCustomizer` signale désormais.
 
+- **Deux `.dump` dans le même panneau : un sélecteur qui n'en cible qu'un tombe sur le premier
+  trouvé.** Le panneau d'invocation d'un outil MCP affiche le schéma (`.dump.muted`) au-dessus du
+  résultat une fois qu'un outil déclare son `inputSchema`. Une vérification Playwright qui ciblait
+  `.invoke .dump` sans autre précision lisait donc le rappel du schéma, pas le résultat de l'appel
+  — un texte plausible, jamais celui attendu, et le test échouait sur un message qui n'avait rien à
+  voir avec le défaut qu'il cherchait à couvrir. Le résultat porte désormais sa propre classe
+  (`.dump.result`), et c'est elle que le test cible.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
