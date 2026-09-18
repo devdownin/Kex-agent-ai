@@ -1377,6 +1377,10 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   .topbar-right { width: 100%; }
   .topbar-right .status { order: -1; }
   .topbar-right .primary { margin-left: auto; }
+  /* Sous 860 px la barre passe sur plusieurs lignes. Un menu absolu reste alors dans son contexte
+     d'empilement et sa première action peut être recouverte par le contenu principal. Le panneau
+     devient une feuille fixe, comme sur mobile étroit, et reste entièrement cliquable. */
+  .action-menu-popover { position: fixed; top: auto; right: 14px; left: 14px; }
   .overview-hero { align-items: flex-start; flex-direction: column; padding: 24px; }
   .hero-health { min-width: 0; }
   main { padding: 14px; }
@@ -1409,7 +1413,6 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   .topbar-right .primary { margin-left: 0; flex: 1; }
   .command-trigger { flex: 1; justify-content: center; }
   .skeleton-kpis { grid-template-columns: minmax(0, 1fr); }
-  .action-menu-popover { position: fixed; top: auto; right: 14px; left: 14px; }
   .overview-hero { min-height: 0; padding: 21px; }
   .overview-hero h1 { font-size: 23px; }
   .attention-head { align-items: stretch; flex-direction: column; }
