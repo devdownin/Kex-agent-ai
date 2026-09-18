@@ -164,11 +164,11 @@
             <h1>Processus surveillés</h1>
             <a class="ghost" href="#/processes">Tout voir</a>
           </div>
-          <div id="overview-processes"></div>
+          <div id="overview-processes" data-skeleton="table"></div>
         </section>
         <section class="panel">
           <div class="panel-head"><h2>Demande une décision</h2></div>
-          <div id="overview-attention"></div>
+          <div id="overview-attention" data-skeleton="list"></div>
         </section>
       </div>
       <section class="panel">
@@ -188,7 +188,7 @@
         </div>
         <button type="button" class="primary" id="refresh-attention">Actualiser</button>
       </section>
-      <div class="attention-columns" id="attention-workspace"></div>
+      <div class="attention-columns" id="attention-workspace" data-skeleton="list"></div>
     </section>
 
     <!-- ══ Agent ══ -->
@@ -249,7 +249,7 @@
             </div>
             <p class="hint">Mesuré sur la fenêtre d'historique conservée en mémoire, pas depuis le
               premier jour : ce sont des tendances récentes.</p>
-            <div id="performance"></div>
+            <div id="performance" data-skeleton="kpis"></div>
           </section>
 
           <section class="panel" data-agent-section="notifications" hidden>
@@ -281,7 +281,7 @@
         </div>
         <label class="sr-only" for="process-search">Rechercher un processus</label>
         <input type="search" id="process-search" placeholder="Rechercher un processus">
-        <div id="processes-table"></div>
+        <div id="processes-table" data-skeleton="table"></div>
       </section>
     </section>
 
@@ -307,17 +307,45 @@
           <button type="button" class="ghost danger" id="decisions-bulk-reject">Refuser la sélection</button>
           <button type="button" class="primary" id="decisions-bulk-approve">Approuver la sélection</button>
         </div>
-        <div id="decisions-list"></div>
+        <div id="decisions-list" data-skeleton="list"></div>
       </section>
     </section>
 
     <!-- ══ Configuration ══ -->
     <section class="view" id="view-settings" hidden>
       <nav class="local-nav" aria-label="Sections de la configuration">
+        <button type="button" data-settings-target="settings-preferences">Apparence et usage</button>
         <button type="button" data-settings-target="settings-model">Modèle</button>
         <button type="button" data-settings-target="settings-detection">Détection</button>
         <button type="button" data-settings-target="settings-monitoring-panel">Surveillance</button>
       </nav>
+      <section class="panel" id="settings-preferences">
+        <div class="panel-head">
+          <div><span class="panel-kicker">Préférences locales</span><h1>Apparence et usage</h1></div>
+          <button type="button" class="ghost" id="reset-preferences">Réinitialiser</button>
+        </div>
+        <p class="hint">Ces choix sont conservés dans ce navigateur et n’affectent pas la configuration de l’agent.</p>
+        <div class="preferences-grid">
+          <label>Thème
+            <select id="preference-theme">
+              <option value="system">Système</option><option value="light">Clair</option><option value="dark">Sombre</option>
+            </select>
+          </label>
+          <label>Densité
+            <select id="preference-density">
+              <option value="comfortable">Confortable</option><option value="compact">Compacte</option>
+            </select>
+          </label>
+          <label>Format des dates
+            <select id="preference-date-format">
+              <option value="absolute">Date et heure</option><option value="relative">Temps relatif</option>
+            </select>
+          </label>
+          <label class="preference-switch"><input type="checkbox" id="preference-auto-refresh"> Actualisation automatique</label>
+          <label class="preference-switch"><input type="checkbox" id="preference-identifiers"> Afficher les identifiants techniques</label>
+          <label class="preference-switch"><input type="checkbox" id="preference-reduced-motion"> Réduire les animations</label>
+        </div>
+      </section>
       <section class="panel" id="settings-model">
         <div class="panel-head">
           <h1>Modèle de langage</h1>
@@ -328,7 +356,7 @@
           seule, le client du modèle étant câblé au démarrage ; un champ modifiable ici accepterait
           une valeur que l'échange suivant ignorerait. Ces réglages se posent en variables
           d'environnement, et prennent effet au redémarrage de l'agent.</p>
-        <div id="llm-config"></div>
+        <div id="llm-config" data-skeleton="list"></div>
       </section>
 
       <div class="split">
@@ -368,7 +396,7 @@
     <section class="view" id="view-alerts" hidden>
       <section class="panel">
         <div class="panel-head"><h1>Alertes</h1></div>
-        <div id="alerts-list"></div>
+        <div id="alerts-list" data-skeleton="list"></div>
       </section>
     </section>
 
@@ -384,7 +412,7 @@
         </div>
         <label class="sr-only" for="audit-search">Filtrer l'audit</label>
         <input type="search" id="audit-search" placeholder="Filtrer par acteur, action, processus ou identifiant">
-        <div id="audit-table"></div>
+        <div id="audit-table" data-skeleton="table"></div>
       </section>
     </section>
 
@@ -430,7 +458,7 @@
           <div class="panel-head">
             <h1>Conversation</h1>
             <div class="panel-actions">
-              <code class="conv-id" id="conversation-id" title="Identifiant de conversation">—</code>
+              <code class="conv-id technical-id" id="conversation-id" title="Identifiant de conversation">—</code>
               <button type="button" class="ghost" id="open-history">Conversations</button>
               <button type="button" class="ghost danger" id="clear-conversation" disabled>Purger</button>
             </div>

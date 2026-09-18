@@ -6,7 +6,7 @@
 import {
   $, ago, api, busy, circuitBreakersValue, clockTime, confirmAction, definition, dismissDrawer,
   downloadCsv, drawerOpen, duration, el, empty, errorState, frag, loading, openDrawer, params,
-  percent, registerDrawer, render, report, setParams, sortable, sparkline, stamp, stateMark,
+  percent, registerDrawer, render, report, setParams, skeleton, sortable, sparkline, stamp, stateMark,
   stateTag, toast,
 } from './core.js';
 
@@ -107,7 +107,7 @@ export const current = () => snapshot;
 
 export async function overview() {
   const host = $('#kpis');
-  host.replaceChildren(loading('Analyse des processus…'));
+  host.replaceChildren(skeleton('kpis', 'Analyse des processus…'));
   try {
     const data = await refresh();
     renderOverviewHero(data);
@@ -476,6 +476,7 @@ function openProcess(row) {
   ask.href = chatDraft(`Analyse le processus « ${row.name} » (${row.processId}) et explique son état ${row.state}.`);
   const copy = el('button', 'ghost', 'Copier l’identifiant');
   copy.type = 'button';
+  copy.classList.add('technical-id');
   copy.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(row.processId);
@@ -906,7 +907,7 @@ async function openDecision(id) {
       body.append(result);
     }
 
-    const technical = el('details', 'decision-technical');
+    const technical = el('details', 'decision-technical technical-id');
     technical.append(el('summary', null, 'Données techniques'));
     const technicalBody = el('div');
     technicalBody.append(definition('Identifiant', el('code', null, decision.id)));

@@ -497,6 +497,21 @@ textarea { resize: vertical; }
 input[type="range"] { padding: 0; }
 input[type="radio"], input[type="checkbox"] { width: auto; }
 
+.preferences-grid { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 16px; margin-top: 18px; }
+.preferences-grid > label { display: flex; flex-direction: column; gap: 7px; color: var(--ink-2); font-size: 12px; }
+.preferences-grid .preference-switch {
+  min-height: 44px;
+  flex-direction: row;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 13px;
+}
+:root[data-identifiers="hidden"] .technical-id { display: none !important; }
+
 .stack { display: flex; flex-direction: column; gap: 6px; }
 .stack label { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
 .stack > button { margin-top: 14px; align-self: flex-start; }
@@ -570,6 +585,32 @@ kbd {
 .onboarding-step .hint { margin: 2px 0 0; }
 .onboarding-step button { margin-left: auto; }
 .decision-filters { margin-bottom: 14px; }
+
+/* Les squelettes conservent l’encombrement du contenu final et évitent les sauts de mise en page. */
+.skeleton { width: 100%; display: grid; gap: 10px; padding: 4px 0; }
+.state.loading.skeleton::before { display: none; }
+.skeleton-item {
+  display: block;
+  min-height: 54px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--line-soft) 45%, var(--surface-2) 65%);
+  background-size: 220% 100%;
+  animation: skeleton-wave 1.25s ease-in-out infinite;
+}
+.skeleton-list .skeleton-item { min-height: 72px; }
+.skeleton-table .skeleton-item { min-height: 42px; }
+.skeleton-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.skeleton-kpis .skeleton-item { min-height: 112px; }
+@keyframes skeleton-wave { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: .001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .001ms !important;
+}
 
 fieldset { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 16px; margin: 10px 0 0; }
 legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; padding: 0 4px; }
@@ -1299,6 +1340,8 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   .local-nav { position: static; max-width: 100%; overflow-x: auto; }
   .decision-preview { grid-template-columns: minmax(0, 1fr); }
   .onboarding-steps { grid-template-columns: minmax(0, 1fr); }
+  .preferences-grid { grid-template-columns: minmax(0, 1fr); }
+  .skeleton-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   /* Mobile : priorité aux actions et aux alertes. Le tableau des processus n'est pas ce qu'on
      regarde d'abord sur un téléphone — on y va pour savoir s'il faut intervenir. */
@@ -1315,6 +1358,7 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   .topbar-right .status { width: 100%; justify-content: center; }
   .topbar-right .primary { margin-left: 0; flex: 1; }
   .command-trigger { flex: 1; justify-content: center; }
+  .skeleton-kpis { grid-template-columns: minmax(0, 1fr); }
   .action-menu-popover { position: fixed; top: auto; right: 14px; left: 14px; }
   .overview-hero { min-height: 0; padding: 21px; }
   .overview-hero h1 { font-size: 23px; }

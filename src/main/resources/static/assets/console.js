@@ -216,6 +216,8 @@ function syncThemeButton() {
   const dark = document.documentElement.dataset.theme === 'dark'
     || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
   themeToggle.setAttribute('aria-pressed', String(dark));
+  const preference = $('#preference-theme');
+  if (preference) preference.value = document.documentElement.dataset.theme || 'system';
 }
 
 themeToggle.addEventListener('click', () => {
@@ -243,6 +245,8 @@ function syncDensityButton() {
   const compact = document.documentElement.dataset.density === 'compact';
   densityToggle.setAttribute('aria-pressed', String(compact));
   $('#density-label').textContent = compact ? 'Affichage compact' : 'Affichage confortable';
+  const preference = $('#preference-density');
+  if (preference) preference.value = compact ? 'compact' : 'comfortable';
 }
 
 densityToggle.addEventListener('click', () => {
@@ -255,6 +259,88 @@ densityToggle.addEventListener('click', () => {
     /* le choix reste valable pour la durée de la page */
   }
   syncDensityButton();
+});
+
+/* ── Préférences d’apparence et d’usage ──────────────────────────────── */
+
+const preference = {
+  get(key, fallback) {
+    try {
+      return localStorage.getItem(`kex.agent.${key}`) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(`kex.agent.${key}`, value);
+    } catch {
+      /* Le choix reste actif pour la page courante. */
+    }
+  },
+};
+
+function applyPreferences() {
+  const autoRefresh = preference.get('auto-refresh', 'true') !== 'false';
+  const identifiers = preference.get('identifiers', 'true') === 'true';
+  const reducedMotion = preference.get('reduced-motion', 'false') === 'true';
+  const dateFormat = preference.get('date-format', 'absolute');
+  document.documentElement.dataset.identifiers = identifiers ? 'visible' : 'hidden';
+  document.documentElement.dataset.motion = reducedMotion ? 'reduced' : 'full';
+  $('#preference-auto-refresh').checked = autoRefresh;
+  $('#preference-identifiers').checked = identifiers;
+  $('#preference-reduced-motion').checked = reducedMotion;
+  $('#preference-date-format').value = dateFormat;
+  syncThemeButton();
+  syncDensityButton();
+}
+
+$('#preference-theme').addEventListener('change', (event) => {
+  const value = event.target.value;
+  if (value === 'system') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = value;
+  try {
+    if (value === 'system') localStorage.removeItem('kex.agent.theme');
+    else localStorage.setItem('kex.agent.theme', value);
+  } catch { /* le thème reste actif pour la page */ }
+  syncThemeButton();
+});
+
+$('#preference-density').addEventListener('change', (event) => {
+  const compact = event.target.value === 'compact';
+  if (compact) document.documentElement.dataset.density = 'compact';
+  else delete document.documentElement.dataset.density;
+  preference.set('density', event.target.value);
+  syncDensityButton();
+});
+
+$('#preference-date-format').addEventListener('change', (event) => {
+  preference.set('date-format', event.target.value);
+  reload();
+});
+
+$('#preference-auto-refresh').addEventListener('change', (event) =>
+  preference.set('auto-refresh', String(event.target.checked)));
+
+$('#preference-identifiers').addEventListener('change', (event) => {
+  preference.set('identifiers', String(event.target.checked));
+  document.documentElement.dataset.identifiers = event.target.checked ? 'visible' : 'hidden';
+});
+
+$('#preference-reduced-motion').addEventListener('change', (event) => {
+  preference.set('reduced-motion', String(event.target.checked));
+  document.documentElement.dataset.motion = event.target.checked ? 'reduced' : 'full';
+});
+
+$('#reset-preferences').addEventListener('click', () => {
+  for (const key of ['theme', 'density', 'date-format', 'auto-refresh', 'identifiers', 'reduced-motion']) {
+    try { localStorage.removeItem(`kex.agent.${key}`); } catch { /* stockage indisponible */ }
+  }
+  delete document.documentElement.dataset.theme;
+  delete document.documentElement.dataset.density;
+  applyPreferences();
+  reload();
+  toast('Préférences réinitialisées.');
 });
 
 /* ── Recherche globale ────────────────────────────────────────────────── */
@@ -363,7 +449,7 @@ function paused() {
 }
 
 async function backgroundRefresh() {
-  if (paused()) return;
+  if (paused() || preference.get('auto-refresh', 'true') === 'false') return;
   await refreshStatus(true);
   const view = currentView();
   if (SELF_REFRESHING.has(view)) await VIEWS[view].load?.();
@@ -473,6 +559,7 @@ addEventListener('hashchange', route);
 
 syncThemeButton();
 syncDensityButton();
+applyPreferences();
 syncConnectivity();
 $('#credential-label').textContent = credentials.get() ? 'Jeton actif' : 'Jeton absent';
 route();

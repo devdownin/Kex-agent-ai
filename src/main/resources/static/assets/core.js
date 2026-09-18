@@ -123,6 +123,16 @@ export const report = (error) => toast(error instanceof Error ? error.message : 
 
 export const loading = (message = 'Chargement…') => el('p', 'state loading', message);
 
+export function skeleton(kind = 'list', message = 'Chargement…') {
+  const node = el('div', `state loading skeleton skeleton-${kind}`);
+  node.setAttribute('role', 'status');
+  node.setAttribute('aria-label', message);
+  node.append(el('span', 'sr-only', message));
+  const count = kind === 'kpis' ? 4 : kind === 'table' ? 5 : 3;
+  for (let index = 0; index < count; index += 1) node.append(el('span', 'skeleton-item'));
+  return node;
+}
+
 export function empty(message, detail, action) {
   const node = el('div', 'state empty');
   node.setAttribute('data-empty-state', 'true');
@@ -176,7 +186,7 @@ export function errorState(error, retry) {
  * L'état de chargement ne s'affiche donc qu'au tout premier rendu, quand l'hôte est encore vide.
  */
 export async function render(host, load, draw) {
-  if (!host.firstChild) host.replaceChildren(loading());
+  if (!host.firstChild) host.replaceChildren(skeleton(host.dataset.skeleton || 'list'));
   try {
     const data = await load();
     const drawn = draw(data);
@@ -192,8 +202,16 @@ const RELATIVE = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
 const CLOCK = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const STAMP = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
 
-export const clockTime = (iso) => (iso ? CLOCK.format(new Date(iso)) : '—');
-export const stamp = (iso) => (iso ? STAMP.format(new Date(iso)) : '—');
+function relativeDates() {
+  try {
+    return localStorage.getItem('kex.agent.date-format') === 'relative';
+  } catch {
+    return false;
+  }
+}
+
+export const clockTime = (iso) => (iso ? (relativeDates() ? ago(iso) : CLOCK.format(new Date(iso))) : '—');
+export const stamp = (iso) => (iso ? (relativeDates() ? ago(iso) : STAMP.format(new Date(iso))) : '—');
 
 export function ago(iso) {
   if (!iso) return null;
