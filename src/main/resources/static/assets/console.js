@@ -18,6 +18,7 @@ const BASE = '/api/agent/supervision';
 
 const VIEWS = {
   overview: { title: 'Vue d’ensemble', load: supervision.overview },
+  attention: { title: 'À traiter', load: supervision.attentionView },
   agent: { title: 'Agent', load: supervision.agent },
   processes: { title: 'Processus', load: supervision.processes },
   decisions: { title: 'Décisions', load: supervision.decisions },
@@ -84,6 +85,7 @@ async function refreshStatus(background = false) {
 function renderBadges(data) {
   badge('#nav-pending', data?.pendingApprovals);
   badge('#nav-alerts', data?.anomaliesDetected);
+  badge('#nav-attention', (data?.pendingApprovals || 0) + (data?.anomaliesDetected || 0));
   if (data?.agent) renderStatus(data.agent);
 }
 
@@ -99,6 +101,7 @@ async function runCycle() {
   const button = $('#run-cycle');
   button.disabled = true;
   button.textContent = 'Analyse en cours…';
+  const stopProgress = pollCycleProgress();
   try {
     const report_ = await api(`${BASE}/cycles`, { method: 'POST' });
     toast(`Cycle terminé : ${report_.anomaliesDetected} anomalie(s), ${report_.pendingApprovals} à valider.`);
@@ -108,8 +111,28 @@ async function runCycle() {
     report(error);
     await refreshStatus();
   } finally {
+    stopProgress();
+    supervision.liveCycle(null);
     button.textContent = 'Exécuter maintenant';
   }
+}
+
+function pollCycleProgress() {
+  let active = true;
+  const read = async () => {
+    try {
+      const progress = await api(`${BASE}/cycles/current`);
+      if (active && progress) supervision.liveCycle(progress);
+    } catch {
+      // Le POST principal porte l'échec ; un sondage d'affichage ne crée pas un second message.
+    }
+  };
+  read();
+  const timer = setInterval(read, 700);
+  return () => {
+    active = false;
+    clearInterval(timer);
+  };
 }
 
 async function togglePause() {
@@ -184,7 +207,7 @@ const TICK_MS = 1_000;
 
 // Les écrans qui portent un formulaire ne se rafraîchissent pas : un rendu par-dessus effacerait
 // ce que quelqu'un est en train de saisir. Le chat non plus, pour la même raison.
-const SELF_REFRESHING = new Set(['overview', 'processes', 'decisions', 'alerts', 'audit', 'tools']);
+const SELF_REFRESHING = new Set(['overview', 'attention', 'processes', 'decisions', 'alerts', 'audit', 'tools']);
 
 /**
  * Un sondage est suspendu quand l'onglet est caché — il n'y a personne pour lire et chaque cycle

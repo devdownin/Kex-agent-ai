@@ -34,6 +34,10 @@
       <a class="nav-item" href="#/overview" data-view="overview">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg>
         Vue d'ensemble</a>
+      <a class="nav-item" href="#/attention" data-view="attention">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 21 19H3Z"/><path d="M12 10.3v3.4"/><circle cx="12" cy="16.4" r=".9" fill="currentColor" stroke="none"/></svg>
+        À traiter
+        <span class="badge" id="nav-attention" hidden>0</span></a>
       <a class="nav-item" href="#/agent" data-view="agent">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="8" width="11" height="10" rx="2.5"/><circle cx="10" cy="13" r=".6" fill="currentColor" stroke="none"/><circle cx="14" cy="13" r=".6" fill="currentColor" stroke="none"/><path d="M12 8V5.5"/><circle cx="12" cy="4.3" r="1.1"/><path d="M4 12.5h2.5M17.5 12.5H20"/></svg>
         Agent</a>
@@ -131,6 +135,16 @@
       </section>
       <div class="kpis" id="kpis"></div>
       <div id="incident-banner"></div>
+      <section class="panel agent-brief-panel">
+        <div class="panel-head">
+          <div>
+            <span class="panel-kicker">Synthèse de l’agent</span>
+            <h2>Situation opérationnelle</h2>
+          </div>
+          <a class="ghost" href="#/attention">Voir ce qui demande une action</a>
+        </div>
+        <div id="agent-brief"></div>
+      </section>
       <div class="split">
         <section class="panel">
           <div class="panel-head">
@@ -146,14 +160,34 @@
       </div>
       <section class="panel">
         <div class="panel-head"><h2>Déroulé du dernier cycle</h2></div>
+        <div class="cycle-live" id="cycle-live" role="status" aria-live="polite" hidden></div>
         <div id="overview-timeline"></div>
       </section>
     </section>
 
+    <!-- ══ À traiter ══ -->
+    <section class="view" id="view-attention" hidden>
+      <section class="attention-head">
+        <div>
+          <span class="panel-kicker">Priorités opérationnelles</span>
+          <h1>À traiter</h1>
+          <p>Décisions, alertes et processus dégradés réunis dans une seule file d’action.</p>
+        </div>
+        <button type="button" class="primary" id="refresh-attention">Actualiser</button>
+      </section>
+      <div class="attention-columns" id="attention-workspace"></div>
+    </section>
+
     <!-- ══ Agent ══ -->
     <section class="view" id="view-agent" hidden>
+      <nav class="local-nav" aria-label="Sections de l’agent">
+        <button type="button" data-agent-tab="general" aria-pressed="true">Général</button>
+        <button type="button" data-agent-tab="capabilities" aria-pressed="false">Autonomie</button>
+        <button type="button" data-agent-tab="performance" aria-pressed="false">Performances</button>
+        <button type="button" data-agent-tab="notifications" aria-pressed="false">Notifications</button>
+      </nav>
       <div class="split">
-        <section class="panel">
+        <section class="panel" data-agent-section="general">
           <div class="panel-head"><h1>Comportement</h1></div>
           <div id="agent-summary"></div>
 
@@ -189,13 +223,13 @@
           </form>
         </section>
 
-        <div class="stack-panels">
-          <section class="panel">
+        <div class="stack-panels" id="agent-sections" hidden>
+          <section class="panel" data-agent-section="capabilities">
             <div class="panel-head"><h2>Ce que l'agent peut faire</h2></div>
             <div id="capability-matrix"></div>
           </section>
 
-          <section class="panel">
+          <section class="panel" data-agent-section="performance" hidden>
             <div class="panel-head">
               <h2>Performance de l'agent</h2>
               <button type="button" class="ghost" id="refresh-performance">Rafraîchir</button>
@@ -205,7 +239,7 @@
             <div id="performance"></div>
           </section>
 
-          <section class="panel">
+          <section class="panel" data-agent-section="notifications" hidden>
             <div class="panel-head"><h2>Notifications</h2></div>
             <p class="hint">Vérifie <code>kex.agent.supervision.notify.webhook-url</code> sans
               attendre qu'une anomalie réelle le découvre en échec — la seule capacité dont le
@@ -260,7 +294,12 @@
 
     <!-- ══ Configuration ══ -->
     <section class="view" id="view-settings" hidden>
-      <section class="panel">
+      <nav class="local-nav" aria-label="Sections de la configuration">
+        <button type="button" data-settings-target="settings-model">Modèle</button>
+        <button type="button" data-settings-target="settings-detection">Détection</button>
+        <button type="button" data-settings-target="settings-monitoring-panel">Surveillance</button>
+      </nav>
+      <section class="panel" id="settings-model">
         <div class="panel-head">
           <h1>Modèle de langage</h1>
           <button type="button" class="ghost" id="refresh-llm">Rafraîchir</button>
@@ -274,7 +313,7 @@
       </section>
 
       <div class="split">
-        <section class="panel">
+        <section class="panel" id="settings-detection">
           <div class="panel-head"><h1>Détection</h1></div>
           <form id="thresholds-form" class="stack">
             <p class="hint">Ces seuils sont transmis au modèle comme critères explicites : une anomalie doit se justifier par une mesure, pas par une impression.</p>
@@ -294,7 +333,7 @@
           </form>
         </section>
 
-        <section class="panel">
+        <section class="panel" id="settings-monitoring-panel">
           <div class="panel-head"><h2>Surveillance</h2></div>
           <div id="settings-monitoring"></div>
 

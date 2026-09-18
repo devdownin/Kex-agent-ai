@@ -93,6 +93,7 @@ export async function overview() {
   try {
     const data = await refresh();
     renderOverviewHero(data);
+    $('#agent-brief').replaceChildren(agentBrief(data));
     host.replaceChildren(kpis(data));
     $('#incident-banner').replaceChildren(...incidentBanners(data.incidents));
     $('#overview-processes').replaceChildren(processTable(data.processes, openProcess, 8, COMPACT));
@@ -109,6 +110,99 @@ export async function overview() {
     $('#overview-attention').replaceChildren();
     $('#overview-timeline').replaceChildren();
   }
+}
+
+function agentBrief(data) {
+  const wrap = el('div', 'agent-brief');
+  const alert = data.alerts?.[0];
+  const pending = data.pending?.length || 0;
+  if (!alert) {
+    const message = data.processesMonitored
+      ? `Le dernier cycle n’a relevé aucune anomalie active sur les ${data.processesMonitored} processus surveillés.`
+      : 'Aucun processus n’est encore configuré : l’agent ne peut pas établir de diagnostic.';
+    wrap.append(el('p', 'brief-lead', message));
+    wrap.append(el('p', 'hint', pending ? `${pending} décision(s) reste(nt) néanmoins à traiter.`
+      : 'Aucune intervention humaine n’est requise.'));
+    return wrap;
+  }
+  const severity = alert.severity === 'ERROR' ? 'critique' : 'à surveiller';
+  wrap.append(el('p', 'brief-lead',
+    `${alert.processName} est ${severity} : ${alert.analysis || alert.title}.`));
+  if (alert.probableCause) wrap.append(el('p', null, `Cause probable : ${alert.probableCause}`));
+  if (alert.recommendation) wrap.append(el('p', 'hint', `Recommandation : ${alert.recommendation}`));
+  const actions = el('div', 'brief-actions');
+  const inspect = el('button', 'ghost', 'Examiner l’alerte');
+  inspect.type = 'button';
+  inspect.addEventListener('click', () => openAnomaly(alert));
+  actions.append(inspect);
+  if (alert.pendingDecisionId) {
+    const decide = el('button', 'primary', 'Ouvrir la décision');
+    decide.type = 'button';
+    decide.addEventListener('click', () => openDecision(alert.pendingDecisionId));
+    actions.append(decide);
+  }
+  wrap.append(actions);
+  return wrap;
+}
+
+export function liveCycle(progress) {
+  const host = $('#cycle-live');
+  if (!progress) {
+    host.hidden = true;
+    host.replaceChildren();
+    return;
+  }
+  host.hidden = false;
+  const heading = el('div', 'cycle-live-head');
+  heading.append(el('span', 'live-pulse'));
+  heading.append(el('strong', null, 'Analyse en cours'));
+  heading.append(el('span', 'muted', `${progress.events?.length || 0} étape(s) atteinte(s)`));
+  host.replaceChildren(heading, timeline(progress));
+}
+
+/* ── File d'action ─────────────────────────────────────────────────────── */
+
+export async function attentionView() {
+  await render($('#attention-workspace'), refresh, (data) => {
+    const workspace = el('div', 'attention-grid');
+    workspace.append(attentionGroup('Décisions à valider', data.pending || [], (decision) =>
+      approvalCard(decision), 'Aucune validation en attente.', '#/decisions', 'Voir les décisions'));
+    workspace.append(attentionGroup('Alertes actives', data.alerts || [], (alert) =>
+      alertCard(alert), 'Aucune alerte active.', '#/alerts', 'Voir les alertes'));
+    const degraded = (data.processes || []).filter((process) =>
+      process.state === 'WARNING' || process.state === 'ERROR' || process.state === 'UNKNOWN');
+    workspace.append(attentionGroup('Processus dégradés', degraded, processAttentionCard,
+      'Tous les processus mesurés sont opérationnels.', '#/processes', 'Voir les processus'));
+    return workspace;
+  });
+}
+
+function attentionGroup(title, items, card, emptyMessage, href, label) {
+  const section = el('section', 'attention-group');
+  const head = el('header');
+  head.append(el('h2', null, title), el('span', 'attention-count', String(items.length)));
+  section.append(head);
+  if (!items.length) {
+    section.append(empty(emptyMessage, null, { href, label }));
+  } else {
+    const list = el('div', 'attention-list');
+    items.forEach((item) => list.append(card(item)));
+    section.append(list);
+  }
+  return section;
+}
+
+function processAttentionCard(process) {
+  const card = el('article', 'card compact-card');
+  card.dataset.state = process.state;
+  const head = el('header');
+  head.append(el('h3', null, process.name), stateTag(process.state));
+  card.append(head, el('p', 'muted', process.note || `Dernier relevé : ${clockTime(process.lastRun)}`));
+  const inspect = el('button', 'ghost', 'Examiner');
+  inspect.type = 'button';
+  inspect.addEventListener('click', () => openProcess(process));
+  card.append(inspect);
+  return card;
 }
 
 function renderOverviewHero(data) {
@@ -206,7 +300,8 @@ function attention(data) {
   const pending = data.pending || [];
   const alerts = data.alerts || [];
   if (!pending.length && !alerts.length) {
-    return empty('Aucune anomalie détectée.', `Dernière analyse : ${clockTime(data.agent.lastCycleAt)}`);
+    return empty('Aucune anomalie détectée.', `Dernière analyse : ${clockTime(data.agent.lastCycleAt)}`,
+      { href: '#/attention', label: 'Ouvrir la file d’action' });
   }
   const list = el('div', 'cards');
   pending.forEach((decision) => list.append(approvalCard(decision)));
@@ -218,7 +313,8 @@ function attention(data) {
 }
 
 function timeline(cycle) {
-  if (!cycle) return empty('Aucun cycle exécuté.', 'Lancez une analyse depuis l’en-tête.');
+  if (!cycle) return empty('Aucun cycle exécuté.', 'Lancez une analyse depuis l’en-tête.',
+    { href: '#/overview', label: 'Revenir au pilotage' });
   const list = el('ol', 'timeline');
   for (const event of cycle.events) {
     const item = el('li');
@@ -260,7 +356,8 @@ const FULL = ['Processus', 'État', 'Dernière exécution', 'Durée', 'Retard', 
 function processTable(rows, onSelect, limit, columns = FULL) {
   if (!rows || !rows.length) {
     return empty('Aucun processus surveillé.',
-      'Déclarez-les dans kex.agent.supervision.processes — rien n’est inventé pour remplir l’écran.');
+      'Déclarez-les dans kex.agent.supervision.processes — rien n’est inventé pour remplir l’écran.',
+      { href: '#/settings', label: 'Voir la configuration' });
   }
   const table = el('table', 'grid');
   const head = el('thead');
@@ -595,7 +692,8 @@ async function resolveDecision(decision, approve) {
 
 export async function decisions() {
   await render($('#decisions-list'), () => api(`${BASE}/decisions`), (rows) => {
-    if (!rows.length) return empty('Aucune décision.', 'Elles apparaîtront après un cycle d’analyse.');
+    if (!rows.length) return empty('Aucune décision.', 'Elles apparaîtront après un cycle d’analyse.',
+      { href: '#/overview', label: 'Lancer une analyse' });
     const list = el('div', 'cards wide');
     rows.forEach((decision) => list.append(decisionRow(decision)));
     return list;
@@ -723,7 +821,8 @@ export async function alerts() {
   await render($('#alerts-list'), () => api(`${BASE}/alerts`), (items) => {
     if (!items.length) {
       return empty('Aucune alerte active.',
-        'Une alerte que le dernier cycle ne revoit plus a cessé d’être vraie et sort de cette liste.');
+        'Une alerte que le dernier cycle ne revoit plus a cessé d’être vraie et sort de cette liste.',
+        { href: '#/overview', label: 'Voir la synthèse' });
     }
     // Le serveur les rend déjà dédupliquées et triées — gravité, puis récurrence, puis fraîcheur.
     // Ne restent ici que le regroupement par processus et l'action à portée de clic.
@@ -807,8 +906,10 @@ export async function audit() {
 /* ── Agent et configuration ────────────────────────────────────────────── */
 
 let policy = null;
+let selectedAgentTab = 'general';
 
 export async function agent() {
+  selectAgentTab(selectedAgentTab);
   const summary = $('#agent-summary');
   summary.replaceChildren(loading());
   try {
@@ -821,6 +922,19 @@ export async function agent() {
     summary.replaceChildren(errorState(error, agent));
   }
   await performance();
+}
+
+function selectAgentTab(tab) {
+  selectedAgentTab = tab;
+  document.querySelectorAll('[data-agent-tab]').forEach((button) =>
+    button.setAttribute('aria-pressed', String(button.dataset.agentTab === tab)));
+  const general = document.querySelector('[data-agent-section="general"]');
+  const collection = $('#agent-sections');
+  general.hidden = tab !== 'general';
+  collection.hidden = tab === 'general';
+  collection.querySelectorAll('[data-agent-section]').forEach((section) => {
+    section.hidden = section.dataset.agentSection !== tab;
+  });
 }
 
 /**
@@ -1142,8 +1256,17 @@ export function wire() {
   });
 
   $('#refresh-decisions').addEventListener('click', decisions);
+  $('#refresh-attention').addEventListener('click', attentionView);
   $('#refresh-performance').addEventListener('click', performance);
   $('#refresh-audit').addEventListener('click', audit);
+
+  document.querySelectorAll('[data-agent-tab]').forEach((button) => {
+    button.addEventListener('click', () => selectAgentTab(button.dataset.agentTab));
+  });
+  document.querySelectorAll('[data-settings-target]').forEach((button) => {
+    button.addEventListener('click', () =>
+      $(`#${button.dataset.settingsTarget}`).scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  });
 
   $('#decisions-bulk-approve').addEventListener('click', (event) => busy(event.currentTarget, () => bulkResolve(true)));
   $('#decisions-bulk-reject').addEventListener('click', (event) => busy(event.currentTarget, () => bulkResolve(false)));

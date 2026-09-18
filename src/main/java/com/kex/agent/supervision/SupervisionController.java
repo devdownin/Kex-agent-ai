@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -75,6 +76,13 @@ class SupervisionController {
     @GetMapping("/cycles")
     List<CycleReport> cycles() {
         return supervision.cycles();
+    }
+
+    /** Étapes réellement atteintes par le cycle actif ; 204 quand aucun cycle ne tourne. */
+    @GetMapping("/cycles/current")
+    ResponseEntity<CycleProgress> currentCycle() {
+        CycleProgress current = supervision.currentCycle();
+        return current == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(current);
     }
 
     /** Déclenchement manuel : c'est le « Exécuter maintenant » de l'en-tête. */

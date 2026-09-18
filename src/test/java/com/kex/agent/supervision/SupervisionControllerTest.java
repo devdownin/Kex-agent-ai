@@ -77,6 +77,23 @@ class SupervisionControllerTest {
     }
 
     @Test
+    void rend_les_etapes_reelles_du_cycle_en_cours() {
+        given(supervision.currentCycle()).willReturn(new CycleProgress("cycle-1", NOW,
+                List.of(new CycleEvent(NOW, "Interrogation des outils", "24 processus à relever"))));
+
+        assertThat(mvc.get().uri("/api/agent/supervision/cycles/current"))
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.events[0].label").isEqualTo("Interrogation des outils");
+    }
+
+    @Test
+    void rend_204_quand_aucun_cycle_ne_tourne() {
+        assertThat(mvc.get().uri("/api/agent/supervision/cycles/current"))
+                .hasStatus(HttpStatus.NO_CONTENT);
+    }
+
+    @Test
     void un_agent_en_pause_refuse_le_cycle_en_conflit_pas_en_erreur_d_appelant() {
         willThrow(new AgentPausedException()).given(supervision).runCycle(anyString());
 

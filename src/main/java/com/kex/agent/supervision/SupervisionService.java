@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
@@ -93,6 +94,10 @@ public class SupervisionService {
 
     private volatile List<ProcessSnapshot> snapshots = List.of();
     private volatile boolean paused;
+    private volatile ActiveCycle activeCycle;
+
+    private record ActiveCycle(String id, Instant startedAt, List<CycleEvent> events) {
+    }
 
     /** Un relevé de processus daté, conservé pour {@link #processHistory} — voir {@link History}. */
     private record SnapshotSet(String cycleId, Instant at, List<ProcessSnapshot> snapshots) {
@@ -138,6 +143,11 @@ public class SupervisionService {
 
     public List<ProcessSnapshot> snapshots() {
         return snapshots;
+    }
+
+    public CycleProgress currentCycle() {
+        ActiveCycle current = activeCycle;
+        return current == null ? null : new CycleProgress(current.id(), current.startedAt(), current.events());
     }
 
     /**
@@ -511,6 +521,7 @@ public class SupervisionService {
             return cycle(actor);
         }
         finally {
+            activeCycle = null;
             cycleLock.unlock();
         }
     }
@@ -518,7 +529,8 @@ public class SupervisionService {
     private CycleReport cycle(String actor) {
         String cycleId = UUID.randomUUID().toString();
         Instant started = clock.instant();
-        List<CycleEvent> events = new ArrayList<>();
+        List<CycleEvent> events = new CopyOnWriteArrayList<>();
+        activeCycle = new ActiveCycle(cycleId, started, events);
         events.add(new CycleEvent(started, "Analyse démarrée", "Déclenchée par " + actor));
 
         List<MonitoredProcess> monitored = properties.processes();

@@ -123,10 +123,16 @@ export const report = (error) => toast(error instanceof Error ? error.message : 
 
 export const loading = (message = 'Chargement…') => el('p', 'state loading', message);
 
-export function empty(message, detail) {
+export function empty(message, detail, action) {
   const node = el('div', 'state empty');
+  node.setAttribute('data-empty-state', 'true');
   node.append(el('p', null, message));
   if (detail) node.append(el('p', 'hint', detail));
+  if (action?.href && action?.label) {
+    const link = el('a', 'ghost empty-action', action.label);
+    link.href = action.href;
+    node.append(link);
+  }
   return node;
 }
 

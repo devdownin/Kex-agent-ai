@@ -306,6 +306,35 @@ class SupervisionServiceTest {
     }
 
     @Test
+    void expose_uniquement_les_etapes_reellement_atteintes_du_cycle_actif() throws Exception {
+        CountDownLatch analysing = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        given(agentService.askStructured(anyString(), anyString(), any())).willAnswer(invocation -> {
+            analysing.countDown();
+            release.await();
+            return new AgentStructuredAnswer("cycle", Map.of("processes",
+                    List.of(Map.of("processId", "order-integration", "state", "OK")),
+                    "anomalies", List.of()), List.of(), null, "end_turn");
+        });
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        Thread cycle = Thread.startVirtualThread(() -> service.runCycle("test"));
+        analysing.await();
+        try {
+            assertThat(service.currentCycle()).isNotNull().satisfies(progress -> {
+                assertThat(progress.id()).isNotBlank();
+                assertThat(progress.events()).extracting(CycleEvent::label)
+                        .containsExactly("Analyse démarrée", "Interrogation des outils");
+            });
+        }
+        finally {
+            release.countDown();
+            cycle.join();
+        }
+        assertThat(service.currentCycle()).isNull();
+    }
+
+    @Test
     void une_demande_de_validation_expire() {
         analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.9));
         SupervisionService service = service(properties(List.of(ORDERS),
