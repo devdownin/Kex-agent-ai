@@ -1244,6 +1244,54 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   z-index: 50;
   max-width: min(380px, calc(100vw - 32px));
 }
+.toast > button { margin-left: 12px; padding: 4px 10px; }
+.action-feedback {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ok);
+  border-radius: var(--radius-sm);
+  background: var(--ok-soft);
+  font-size: 12px;
+}
+
+.notification-trigger { display: inline-flex; align-items: center; gap: 7px; }
+.notifications-dialog { width: min(620px, calc(100vw - 32px)); }
+.notification-list { display: flex; max-height: 60dvh; flex-direction: column; gap: 7px; overflow: auto; }
+.notification-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  text-decoration: none;
+}
+.notification-item.read { border-left-color: var(--line); opacity: .72; }
+
+.comparison-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.comparison-metric { padding: 14px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--bg); }
+.comparison-metric strong { display: block; font: 700 24px var(--mono); }
+.comparison-metric span { color: var(--ink-3); font-size: 12px; }
+.comparison-metric[data-state="OK"] strong { color: var(--ok); }
+.comparison-metric[data-state="WARNING"] strong { color: var(--warn); }
+
+.saved-views { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; gap: 8px; margin: 10px 0; }
+.help-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.help-grid details { padding: 12px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--bg); }
+.help-grid summary { cursor: pointer; font-weight: 650; }
+.help-grid p { margin: 8px 0 0; color: var(--ink-2); font-size: 12px; }
+
+:root[data-presentation="true"] { --rail: 0px; }
+:root[data-presentation="true"] .rail,
+:root[data-presentation="true"] .command-trigger,
+:root[data-presentation="true"] .notification-trigger,
+:root[data-presentation="true"] .technical-id { display: none !important; }
+:root[data-presentation="true"] .shell { grid-template-columns: minmax(0, 1fr); grid-template-areas: "topbar" "main"; }
+:root[data-presentation="true"] main { max-width: 1600px; width: 100%; margin: 0 auto; }
+:root[data-presentation="true"] .overview-hero h1 { font-size: 34px; }
+:root[data-presentation="true"] .kpi-value { font-size: 34px; }
 .toast {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1341,6 +1389,8 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   .decision-preview { grid-template-columns: minmax(0, 1fr); }
   .onboarding-steps { grid-template-columns: minmax(0, 1fr); }
   .preferences-grid { grid-template-columns: minmax(0, 1fr); }
+  .comparison-grid, .help-grid { grid-template-columns: minmax(0, 1fr); }
+  .saved-views { grid-template-columns: minmax(0, 1fr); }
   .skeleton-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   /* Mobile : priorité aux actions et aux alertes. Le tableau des processus n'est pas ce qu'on

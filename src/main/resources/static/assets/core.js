@@ -111,10 +111,25 @@ export async function api(path, options = {}) {
 
 /* ── Notifications ─────────────────────────────────────────────────────── */
 
-export function toast(message, kind) {
+export function toast(message, kind, action) {
   const node = el('div', kind === 'error' ? 'toast error' : 'toast', message);
+  if (action?.label && action?.run) {
+    const button = el('button', 'ghost', action.label);
+    button.type = 'button';
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try { await action.run(); node.remove(); } catch (error) { report(error); }
+    });
+    node.append(button);
+  }
   $('#toasts').append(node);
-  setTimeout(() => node.remove(), 6000);
+  if (kind !== 'error') {
+    try {
+      localStorage.setItem('kex.agent.last-action', JSON.stringify({ message, at: new Date().toISOString() }));
+    } catch { /* retour visible via le toast pour cette session */ }
+    dispatchEvent(new CustomEvent('kex:action', { detail: { message, at: new Date().toISOString() } }));
+  }
+  setTimeout(() => node.remove(), action ? 10_000 : 6000);
 }
 
 export const report = (error) => toast(error instanceof Error ? error.message : String(error), 'error');

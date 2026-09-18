@@ -13,6 +13,8 @@ import {
 const BASE = '/api/agent/supervision';
 const PROCESS_FILTER_STORAGE = 'kex.agent.filters.processes';
 const DECISION_FILTER_STORAGE = 'kex.agent.filters.decisions';
+const FAVORITES_STORAGE = 'kex.agent.favorite-processes';
+const SAVED_VIEWS_STORAGE = 'kex.agent.saved-process-views';
 
 function stored(key, fallback) {
   try {
@@ -114,7 +116,7 @@ export async function overview() {
     $('#agent-brief').replaceChildren(agentBrief(data));
     host.replaceChildren(kpis(data));
     $('#incident-banner').replaceChildren(...incidentBanners(data.incidents));
-    $('#overview-processes').replaceChildren(processTable(data.processes, openProcess, 8, COMPACT));
+    $('#overview-processes').replaceChildren(processTable(prioritized(data.processes), openProcess, 8, COMPACT));
     $('#overview-attention').replaceChildren(attention(data));
     // Un panneau qui attend une décision n'a pas à ressembler à un panneau qui n'a rien à signaler.
     const pendingCount = (data.pending || []).length;
@@ -364,8 +366,15 @@ function filtered(rows) {
       || (state === 'ATTENTION' ? row.state === 'WARNING' || row.state === 'ERROR' : row.state === state);
     const matchesQuery = !query || row.name.toLowerCase().includes(query);
     return matchesState && matchesQuery;
-  });
+  }).sort(favoriteFirst);
 }
+
+function favoriteFirst(left, right) {
+  const favorites = new Set(stored(FAVORITES_STORAGE, []));
+  return Number(favorites.has(right.processId)) - Number(favorites.has(left.processId));
+}
+
+const prioritized = (rows) => [...(rows || [])].sort(favoriteFirst);
 
 /** Colonnes de la vue d'ensemble : l'essentiel d'abord, le relevé technique au second niveau. */
 const COMPACT = ['Processus', 'État', 'Dernière exécution', 'Retard', 'Couverture'];
@@ -472,8 +481,18 @@ function openProcess(row) {
   );
   const extra = el('div');
   const actions = el('div', 'context-actions');
+  const favorites = new Set(stored(FAVORITES_STORAGE, []));
+  const favorite = el('button', 'ghost', favorites.has(row.processId) ? '★ Retirer des favoris' : '☆ Ajouter aux favoris');
+  favorite.type = 'button';
+  favorite.addEventListener('click', () => {
+    if (favorites.has(row.processId)) favorites.delete(row.processId); else favorites.add(row.processId);
+    remember(FAVORITES_STORAGE, [...favorites]);
+    favorite.textContent = favorites.has(row.processId) ? '★ Retirer des favoris' : '☆ Ajouter aux favoris';
+    toast(favorites.has(row.processId) ? `${row.name} ajouté aux favoris.` : `${row.name} retiré des favoris.`);
+    if (!$('#view-processes').hidden) processes();
+  });
   const ask = el('a', 'primary', 'Interroger l’agent');
-  ask.href = chatDraft(`Analyse le processus « ${row.name} » (${row.processId}) et explique son état ${row.state}.`);
+  ask.href = chatDraft(processContext(row, alerts));
   const copy = el('button', 'ghost', 'Copier l’identifiant');
   copy.type = 'button';
   copy.classList.add('technical-id');
@@ -485,7 +504,7 @@ function openProcess(row) {
       toast('Copie indisponible dans ce navigateur', 'error');
     }
   });
-  actions.append(ask, copy);
+  actions.append(favorite, ask, copy);
   extra.append(actions);
   if (row.coverage && !row.coverage.complete && row.coverage.stopReason !== 'NOT_REPORTED') {
     const banner = el('p', 'banner',
@@ -559,7 +578,14 @@ function maintenanceControls(row, maintenance) {
     try {
       await api(`${BASE}/processes/${encodeURIComponent(row.processId)}/maintenance`,
         { method: 'POST', body: { duration: 'PT2H', reason: 'Déclarée depuis la console' } });
-      toast('Maintenance déclarée pour 2 h');
+      toast('Maintenance déclarée pour 2 h', undefined, {
+        label: 'Annuler',
+        run: async () => {
+          await api(`${BASE}/processes/${encodeURIComponent(row.processId)}/maintenance`, { method: 'DELETE' });
+          toast('Maintenance annulée.');
+          await refresh();
+        },
+      });
       dismissDrawer();
       await refresh();
     } catch (error) {
@@ -589,13 +615,30 @@ function alertCard(alert) {
   open.addEventListener('click', () => openAnomaly(alert));
   const actions = el('div', 'card-actions');
   const ask = el('a', 'ghost', 'Demander à l’agent');
-  ask.href = chatDraft(`Analyse l’alerte « ${alert.title} » sur ${alert.processName} et propose les prochaines étapes.`);
+  ask.href = chatDraft(alertContext(alert));
   actions.append(open, ask);
   card.append(actions);
   return card;
 }
 
 const chatDraft = (message) => `#/chat?draft=${encodeURIComponent(message)}`;
+const alertContext = (alert) => [
+  `Analyse l’alerte « ${alert.title} » sur ${alert.processName}.`,
+  `Gravité : ${alert.severity}. Confiance : ${percent(alert.confidence)}. Occurrences : ${alert.occurrences || 1}.`,
+  alert.analysis && `Analyse actuelle : ${alert.analysis}`,
+  alert.probableCause && `Cause probable : ${alert.probableCause}`,
+  alert.recommendation && `Recommandation actuelle : ${alert.recommendation}`,
+  alert.observations?.length && `Observations : ${alert.observations.map((item) => `${item.label}=${item.value}`).join(', ')}.`,
+  'Explique le diagnostic, les risques et les prochaines étapes prioritaires.',
+].filter(Boolean).join('\n');
+
+const processContext = (row, alerts) => [
+  `Analyse le processus « ${row.name} » (${row.processId}).`,
+  `État : ${row.state}. Dernière exécution : ${stamp(row.lastRun)}. Retard : ${duration(row.delayMillis)}.`,
+  row.note && `Dernier relevé : ${row.note}`,
+  alerts.length && `Alertes actives : ${alerts.map((item) => item.title).join(', ')}.`,
+  'Explique la situation, son évolution probable et les actions recommandées.',
+].filter(Boolean).join('\n');
 
 /** Un symptôme qui revient n'est pas un incident de plus : c'est le même, qui dure. */
 function recurrence(alert) {
@@ -613,7 +656,7 @@ function openAnomaly(anomaly) {
   body.append(el('p', 'muted', anomaly.processName));
   const actions = el('div', 'context-actions');
   const ask = el('a', 'primary', 'Poursuivre dans le chat');
-  ask.href = chatDraft(`Analyse l’alerte « ${anomaly.title} » sur ${anomaly.processName} et propose les prochaines étapes.`);
+  ask.href = chatDraft(alertContext(anomaly));
   actions.append(ask);
   body.append(actions);
   if (anomaly.occurrences) body.append(recurrence(anomaly));
@@ -1365,6 +1408,19 @@ export function syncFilters() {
   if ($('#audit-search').value !== auditSearch) $('#audit-search').value = auditSearch;
 }
 
+function syncSavedViews() {
+  const select = $('#saved-process-view');
+  const views = stored(SAVED_VIEWS_STORAGE, []);
+  const placeholder = el('option', null, 'Vues enregistrées');
+  placeholder.value = '';
+  select.replaceChildren(placeholder, ...views.map((view, index) => {
+    const option = el('option', null, view.name);
+    option.value = String(index);
+    return option;
+  }));
+  $('#delete-process-view').disabled = true;
+}
+
 export function wire() {
   registerDrawers();
   $('#drawer-close').addEventListener('click', dismissDrawer);
@@ -1457,6 +1513,37 @@ export function wire() {
       syncFilters();
       decisions();
     });
+  });
+
+  syncSavedViews();
+  $('#save-process-view').addEventListener('click', () => {
+    const name = prompt('Nom de cette vue');
+    if (!name?.trim()) return;
+    const views = stored(SAVED_VIEWS_STORAGE, []);
+    views.push({ name: name.trim(), state: processFilter(), query: $('#process-search').value.trim() });
+    remember(SAVED_VIEWS_STORAGE, views);
+    syncSavedViews();
+    $('#saved-process-view').value = String(views.length - 1);
+    $('#delete-process-view').disabled = false;
+    toast(`Vue « ${name.trim()} » enregistrée.`);
+  });
+  $('#saved-process-view').addEventListener('change', (event) => {
+    const view = stored(SAVED_VIEWS_STORAGE, [])[Number(event.target.value)];
+    $('#delete-process-view').disabled = !view;
+    if (!view) return;
+    remember(PROCESS_FILTER_STORAGE, { state: view.state, query: view.query });
+    setParams({ etat: view.state === 'ALL' ? null : view.state, q: view.query || null });
+    syncFilters();
+    processes();
+  });
+  $('#delete-process-view').addEventListener('click', () => {
+    const value = $('#saved-process-view').value;
+    if (value === '') return;
+    const views = stored(SAVED_VIEWS_STORAGE, []);
+    const [removed] = views.splice(Number(value), 1);
+    remember(SAVED_VIEWS_STORAGE, views);
+    syncSavedViews();
+    if (removed) toast(`Vue « ${removed.name} » supprimée.`);
   });
 
   $('#confidence').addEventListener('input', (event) => {

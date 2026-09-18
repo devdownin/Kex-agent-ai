@@ -88,6 +88,78 @@ function renderBadges(data) {
   badge('#nav-attention', (data?.pendingApprovals || 0) + (data?.anomaliesDetected || 0));
   if (data?.agent) renderStatus(data.agent);
   renderOnboarding(data);
+  renderNotifications(data);
+  renderComparison(data);
+}
+
+/* ── Notifications et comparaison de cycles ──────────────────────────── */
+
+let notificationItems = [];
+
+function readJson(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+}
+
+function writeJson(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* préférence locale facultative */ }
+}
+
+function renderNotifications(data) {
+  const read = new Set(readJson('kex.agent.notifications.read', []));
+  const lastAction = readJson('kex.agent.last-action', null);
+  notificationItems = [
+    ...(data?.pending || []).map((item) => ({ id: `decision:${item.id}`, label: item.action,
+      detail: `Décision à valider · ${item.processName}`, href: `#/decisions?decision=${encodeURIComponent(item.id)}` })),
+    ...(data?.alerts || []).map((item) => ({ id: `alert:${item.id}`, label: item.title,
+      detail: `Alerte ${item.severity === 'ERROR' ? 'critique' : 'active'} · ${item.processName}`,
+      href: `#/alerts?alerte=${encodeURIComponent(item.id)}` })),
+    ...(lastAction ? [{ id: `action:${lastAction.at}`, label: lastAction.message,
+      detail: `Action terminée · ${ago(lastAction.at)}`, href: '#/audit' }] : []),
+  ];
+  const unread = notificationItems.filter((item) => !read.has(item.id)).length;
+  $('#notification-count').textContent = String(unread);
+  $('#notification-count').hidden = unread === 0;
+  const list = $('#notifications-list');
+  list.replaceChildren(...notificationItems.map((item) => {
+    const link = el('a', read.has(item.id) ? 'notification-item read' : 'notification-item');
+    link.href = item.href;
+    link.append(el('strong', null, item.label), el('span', 'muted', item.detail));
+    link.addEventListener('click', () => $('#notifications').close());
+    return link;
+  }));
+  if (!notificationItems.length) list.append(el('p', 'state empty', 'Aucune notification active.'));
+}
+
+function renderComparison(data) {
+  if (!data?.agent?.lastCycleAt) return;
+  const previous = readJson('kex.agent.previous-cycle', null);
+  const currentCycle = {
+    at: data.agent.lastCycleAt,
+    alerts: (data.alerts || []).map((item) => item.id),
+    processes: Object.fromEntries((data.processes || []).map((item) => [item.processId, item.state])),
+  };
+  if (previous?.at && previous.at !== currentCycle.at) {
+    const previousAlerts = previous.alerts || [];
+    const newAlerts = currentCycle.alerts.filter((id) => !previousAlerts.includes(id)).length;
+    const resolved = previousAlerts.filter((id) => !currentCycle.alerts.includes(id)).length;
+    const changed = Object.entries(currentCycle.processes)
+      .filter(([id, state]) => previous.processes?.[id] && previous.processes[id] !== state).length;
+    $('#comparison-grid').replaceChildren(
+      comparisonMetric('Nouvelles alertes', newAlerts, newAlerts ? 'WARNING' : 'OK'),
+      comparisonMetric('Alertes résolues', resolved, resolved ? 'OK' : null),
+      comparisonMetric('États modifiés', changed, changed ? 'WARNING' : null),
+    );
+    $('#comparison-time').textContent = stamp(previous.at);
+    $('#cycle-comparison').hidden = false;
+  }
+  if (!previous || previous.at !== currentCycle.at) writeJson('kex.agent.previous-cycle', currentCycle);
+}
+
+function comparisonMetric(label, value, state) {
+  const node = el('div', 'comparison-metric');
+  if (state) node.dataset.state = state;
+  node.append(el('strong', null, value), el('span', null, label));
+  return node;
 }
 
 function renderOnboarding(data) {
@@ -357,7 +429,11 @@ function commandItems() {
     ['Processus', 'Navigation', '#/processes'],
     ['Décisions', 'Navigation', '#/decisions'],
     ['Configuration', 'Navigation', '#/settings'],
+    ['Ouvrir les notifications', 'Action', null],
+    ['Activer le mode présentation', 'Action', null],
   ].map(([label, kind, href]) => ({ label, kind, href }));
+  commands[6].action = () => $('#notifications').showModal();
+  commands[7].action = togglePresentation;
   for (const process of snapshot?.processes || []) {
     commands.push({ label: process.name, kind: `Processus · ${process.state}`,
       href: `#/processes?processus=${encodeURIComponent(process.processId)}` });
@@ -427,6 +503,37 @@ addEventListener('keydown', (event) => {
     openCommand();
   }
 });
+
+const notificationsDialog = $('#notifications');
+$('#open-notifications').addEventListener('click', () => notificationsDialog.showModal());
+$('#close-notifications').addEventListener('click', () => notificationsDialog.close());
+$('#mark-notifications-read').addEventListener('click', () => {
+  writeJson('kex.agent.notifications.read', notificationItems.map((item) => item.id));
+  renderNotifications(supervision.current());
+});
+
+function togglePresentation() {
+  const enabled = document.documentElement.dataset.presentation !== 'true';
+  document.documentElement.dataset.presentation = String(enabled);
+  $('#presentation-toggle').setAttribute('aria-pressed', String(enabled));
+  $('#presentation-toggle').textContent = enabled ? 'Quitter la présentation' : 'Mode présentation';
+  toast(enabled ? 'Mode présentation activé.' : 'Mode présentation désactivé.');
+}
+
+$('#presentation-toggle').addEventListener('click', togglePresentation);
+
+function showActionFeedback(detail) {
+  const host = $('#action-feedback');
+  if (!detail?.message) return;
+  host.replaceChildren(el('strong', null, 'Dernière action · '), document.createTextNode(detail.message),
+    el('span', 'muted', ` ${ago(detail.at) || ''}`));
+  host.hidden = false;
+}
+addEventListener('kex:action', (event) => {
+  showActionFeedback(event.detail);
+  renderNotifications(supervision.current());
+});
+showActionFeedback(readJson('kex.agent.last-action', null));
 
 /* ── Rafraîchissement ──────────────────────────────────────────────────── */
 

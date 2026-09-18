@@ -91,6 +91,9 @@
       <button type="button" class="ghost command-trigger" id="open-command" aria-keyshortcuts="Control+K Meta+K">
         Rechercher <kbd>⌘K</kbd>
       </button>
+      <button type="button" class="ghost notification-trigger" id="open-notifications" aria-label="Ouvrir les notifications">
+        Notifications <span class="badge" id="notification-count" hidden>0</span>
+      </button>
       <button type="button" class="primary" id="run-cycle">Exécuter maintenant</button>
       <details class="action-menu">
         <summary class="ghost" aria-label="Ouvrir les actions secondaires">Actions</summary>
@@ -102,6 +105,7 @@
           <button type="button" class="menu-action" id="density-toggle" aria-pressed="false">
             <span id="density-label">Affichage confortable</span>
           </button>
+          <button type="button" class="menu-action" id="presentation-toggle" aria-pressed="false">Mode présentation</button>
           <a class="menu-action" href="swagger-ui.html" target="_blank" rel="noopener">Documentation API</a>
         </div>
       </details>
@@ -113,6 +117,7 @@
   <p class="sr-only" id="announcer" role="status" aria-live="polite"></p>
 
   <main id="main" tabindex="-1">
+    <div class="action-feedback" id="action-feedback" hidden></div>
 
     <!-- Hors ligne, tout se lit comme d'habitude alors que plus rien n'est à jour : c'est la même
          règle que la fraîcheur, un cran plus haut. Dans le flux plutôt qu'en surimpression, pour
@@ -148,6 +153,10 @@
         <div class="onboarding-steps" id="onboarding-steps"></div>
       </section>
       <div id="incident-banner"></div>
+      <section class="panel cycle-comparison" id="cycle-comparison" hidden>
+        <div class="panel-head"><h2>Depuis le cycle précédent</h2><span class="muted" id="comparison-time"></span></div>
+        <div class="comparison-grid" id="comparison-grid"></div>
+      </section>
       <section class="panel agent-brief-panel">
         <div class="panel-head">
           <div>
@@ -281,6 +290,12 @@
         </div>
         <label class="sr-only" for="process-search">Rechercher un processus</label>
         <input type="search" id="process-search" placeholder="Rechercher un processus">
+        <div class="saved-views">
+          <label class="sr-only" for="saved-process-view">Vue enregistrée</label>
+          <select id="saved-process-view"><option value="">Vues enregistrées</option></select>
+          <button type="button" class="ghost" id="save-process-view">Enregistrer la vue</button>
+          <button type="button" class="ghost danger" id="delete-process-view" disabled>Supprimer</button>
+        </div>
         <div id="processes-table" data-skeleton="table"></div>
       </section>
     </section>
@@ -344,6 +359,15 @@
           <label class="preference-switch"><input type="checkbox" id="preference-auto-refresh"> Actualisation automatique</label>
           <label class="preference-switch"><input type="checkbox" id="preference-identifiers"> Afficher les identifiants techniques</label>
           <label class="preference-switch"><input type="checkbox" id="preference-reduced-motion"> Réduire les animations</label>
+        </div>
+      </section>
+      <section class="panel contextual-help">
+        <div class="panel-head"><h2>Aide contextuelle</h2></div>
+        <div class="help-grid">
+          <details><summary>État inconnu</summary><p>Le processus n’a pas été suffisamment mesuré. Cela ne signifie ni sain ni en erreur.</p></details>
+          <details><summary>Couverture partielle</summary><p>Le cycle n’a pas lu toutes les sources prévues ; une absence d’anomalie ne peut donc pas être affirmée.</p></details>
+          <details><summary>Confiance</summary><p>Indique la solidité du diagnostic à partir des observations disponibles, pas une garantie de réussite.</p></details>
+          <details><summary>Autonomie</summary><p>Détermine si une capacité est automatique, soumise à validation humaine ou interdite.</p></details>
         </div>
       </section>
       <section class="panel" id="settings-model">
@@ -527,6 +551,15 @@
   </div>
   <div class="command-results" id="command-results" role="listbox" aria-label="Résultats"></div>
   <p class="command-hint">Entrée pour ouvrir · ↑↓ pour naviguer</p>
+</dialog>
+
+<dialog id="notifications" class="notifications-dialog">
+  <div class="panel-head">
+    <div><span class="panel-kicker">Activité récente</span><h2>Notifications</h2></div>
+    <button type="button" class="ghost" id="close-notifications">Fermer</button>
+  </div>
+  <div id="notifications-list" class="notification-list"></div>
+  <div class="row-end"><button type="button" class="ghost" id="mark-notifications-read">Tout marquer comme lu</button></div>
 </dialog>
 
 <div class="toasts" id="toasts" aria-live="assertive"></div>
