@@ -4,6 +4,10 @@ package com.kex.agent.supervision;
 
 import java.time.Duration;
 
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.PositiveOrZero;
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
@@ -12,17 +16,17 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  */
 public record Thresholds(
 
-        @DefaultValue("1000") long consumerLag,
+        @DefaultValue("1000") @PositiveOrZero long consumerLag,
 
         /** Taux d'erreur en pourcentage, pas en fraction : c'est l'unité affichée à l'écran. */
-        @DefaultValue("2.0") double errorRatePercent,
+        @DefaultValue("2.0") @DecimalMin("0.0") @DecimalMax("100.0") double errorRatePercent,
 
-        @DefaultValue("5m") Duration processingTime,
+        @DefaultValue("5m") @DurationMin(millis = 1) Duration processingTime,
 
-        @DefaultValue("50") long blockedMessages,
+        @DefaultValue("50") @PositiveOrZero long blockedMessages,
 
         /** Fenêtre sur laquelle une tendance est jugée : en deçà, un pic isolé passe pour une dérive. */
-        @DefaultValue("15m") Duration observationWindow) {
+        @DefaultValue("15m") @DurationMin(millis = 1) Duration observationWindow) {
 
     /**
      * Un processus à faible trafic et un à fort débit partagent sinon les mêmes seuils, trop

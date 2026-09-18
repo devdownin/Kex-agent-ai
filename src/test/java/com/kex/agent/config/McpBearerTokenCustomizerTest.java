@@ -67,13 +67,45 @@ class McpBearerTokenCustomizerTest {
     }
 
     @Test
+    void ne_diffuse_pas_le_jeton_vers_un_hote_qui_commence_par_le_meme_texte() {
+        List<McpAuthProperties.BearerToken> tokens = List.of(
+                new McpAuthProperties.BearerToken("https://mcp.example.com", "secret"));
+
+        assertThat(authorizationFor("https://mcp.example.com.attacker.test/mcp", tokens)).isEmpty();
+    }
+
+    @Test
+    void respecte_la_frontiere_du_chemin_et_les_ports_par_defaut() {
+        List<McpAuthProperties.BearerToken> tokens = List.of(
+                new McpAuthProperties.BearerToken("https://mcp.example.com/api", "chemin"));
+
+        assertThat(authorizationFor("https://mcp.example.com:443/api/tools", tokens))
+                .contains("Bearer chemin");
+        assertThat(authorizationFor("https://mcp.example.com/apiv2", tokens)).isEmpty();
+    }
+
+    @Test
+    void retient_le_prefixe_de_chemin_le_plus_specifique() {
+        List<McpAuthProperties.BearerToken> tokens = List.of(
+                new McpAuthProperties.BearerToken("https://mcp.example.com", "racine"),
+                new McpAuthProperties.BearerToken("https://mcp.example.com/admin", "admin"));
+
+        assertThat(authorizationFor("https://mcp.example.com/admin/tools", tokens))
+                .contains("Bearer admin");
+    }
+
+    @Test
     void ignore_une_entree_sans_jeton() {
         assertThat(authorizationFor("https://vide.example.com/mcp")).isEmpty();
     }
 
     private static Optional<String> authorizationFor(String url) {
+        return authorizationFor(url, TOKENS);
+    }
+
+    private static Optional<String> authorizationFor(String url, List<McpAuthProperties.BearerToken> tokens) {
         HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url));
-        new McpBearerTokenCustomizer(TOKENS).customize(builder, "POST", URI.create(url), null, null);
+        new McpBearerTokenCustomizer(tokens).customize(builder, "POST", URI.create(url), null, null);
         return builder.build().headers().firstValue("Authorization");
     }
 }

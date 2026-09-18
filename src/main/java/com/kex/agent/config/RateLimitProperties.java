@@ -2,8 +2,10 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.config;
 
+import jakarta.validation.constraints.Positive;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Limite les routes qui appellent le modèle, par principal authentifié : avec le seul bearer
@@ -13,13 +15,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * en conséquence.
  */
 @ConfigurationProperties("kex.agent.rate-limit")
+@Validated
 public record RateLimitProperties(
 
         @DefaultValue("true") boolean enabled,
 
         /** Débit soutenu autorisé. */
-        @DefaultValue("60") int requestsPerMinute,
+        @DefaultValue("60") @Positive int requestsPerMinute,
 
         /** Pointe tolérée au-delà du débit soutenu. */
-        @DefaultValue("20") int burst) {
+        @DefaultValue("20") @Positive int burst) {
 }

@@ -5,10 +5,15 @@ package com.kex.agent.config;
 import java.time.Duration;
 import java.util.Map;
 
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 @ConfigurationProperties("kex.agent")
+@Validated
 public record AgentProperties(
 
         @DefaultValue("""
@@ -34,7 +39,7 @@ public record AgentProperties(
         String systemPrompt,
 
         /** Fenêtre de contexte conservée par conversation (messages, pas tokens). */
-        @DefaultValue("40") int maxHistoryMessages,
+        @DefaultValue("40") @Positive int maxHistoryMessages,
 
         /**
          * Plafond de taille d'un message <em>relu</em> des tours suivants. La fenêtre ci-dessus ne
@@ -42,7 +47,7 @@ public record AgentProperties(
          * conversation repart dans le prompt de chaque tour jusqu'à sortir de la fenêtre. {@code 0}
          * lève la borne.
          */
-        @DefaultValue("4000") int maxMessageCharacters,
+        @DefaultValue("4000") @PositiveOrZero int maxMessageCharacters,
 
         /** Journalise prompts et réponses : à laisser à false hors debug (données sensibles). */
         @DefaultValue("false") boolean logInteractions,
@@ -72,5 +77,5 @@ public record AgentProperties(
          * Attente maximale d'un échange complet, tours d'outils compris. Sans elle, 20 appels
          * d'outils à 60s chacun gardent une connexion HTTP ouverte vingt minutes.
          */
-        @DefaultValue("120s") Duration requestTimeout) {
+        @DefaultValue("120s") @DurationMin(millis = 1) Duration requestTimeout) {
 }

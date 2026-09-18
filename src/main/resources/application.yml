@@ -81,7 +81,9 @@ spring:
     mcp:
       client:
         name: kex-agent
-        version: 0.1.0
+        # Filtrée par Maven depuis la même source que build-info et le JAR. Un tag de release
+        # réaligne cette version via versions:set avant le packaging (voir publish.yml).
+        version: "@project.version@"
         type: sync
         request-timeout: 60s
         # Initialisation paresseuse : un serveur MCP distant indisponible ferait sinon échouer

@@ -2,9 +2,15 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.agent;
 
+import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.networknt.schema.InputFormat;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SpecificationVersion;
 import org.springframework.ai.converter.StructuredOutputConverter;
 
 /**
@@ -15,15 +21,24 @@ import org.springframework.ai.converter.StructuredOutputConverter;
 class JsonSchemaOutputConverter implements StructuredOutputConverter<Map<String, Object>> {
 
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final SchemaRegistry SCHEMAS =
+            SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12);
 
     private final String schema;
+    private final Schema validator;
 
     JsonSchemaOutputConverter(Map<String, Object> schema) {
         try {
-            this.schema = JSON.writeValueAsString(schema);
+            JsonNode schemaNode = JSON.valueToTree(schema);
+            rejectRemoteReferences(schemaNode);
+            if (!"object".equals(schemaNode.path("type").asText())) {
+                throw new IllegalArgumentException("le type racine doit être object");
+            }
+            this.schema = JSON.writeValueAsString(schemaNode);
+            this.validator = SCHEMAS.getSchema(this.schema, InputFormat.JSON);
         }
-        catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
-            throw new InvalidJsonSchemaException("Schéma illisible : " + ex.getOriginalMessage());
+        catch (RuntimeException | com.fasterxml.jackson.core.JsonProcessingException ex) {
+            throw new InvalidJsonSchemaException("Schéma JSON invalide : " + ex.getMessage());
         }
     }
 
@@ -45,12 +60,39 @@ class JsonSchemaOutputConverter implements StructuredOutputConverter<Map<String,
     @SuppressWarnings("unchecked")
     public Map<String, Object> convert(String source) {
         try {
-            return JSON.readValue(source, Map.class);
+            JsonNode value = JSON.readTree(source);
+            List<com.networknt.schema.Error> errors = validator.validate(source, InputFormat.JSON);
+            if (!errors.isEmpty()) {
+                String detail = errors.stream().map(com.networknt.schema.Error::getMessage).sorted()
+                        .limit(3).collect(java.util.stream.Collectors.joining(" ; "));
+                throw new StructuredOutputException(detail);
+            }
+            return JSON.convertValue(value, Map.class);
         }
         catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
             // Le modèle n'a pas respecté le contrat : c'est une panne amont, pas une erreur
             // d'appelant, et la distinction compte pour qui lit les codes de retour.
             throw new StructuredOutputException(ex);
         }
+    }
+
+    /** Les références distantes transformeraient un schéma fourni par l'appelant en requête SSRF. */
+    private static void rejectRemoteReferences(JsonNode node) {
+        if (node.isObject()) {
+            node.fields().forEachRemaining(entry -> {
+                if (isReference(entry.getKey()) && entry.getValue().isTextual()
+                        && !entry.getValue().textValue().startsWith("#")) {
+                    throw new IllegalArgumentException("les références JSON Schema distantes ne sont pas autorisées");
+                }
+                rejectRemoteReferences(entry.getValue());
+            });
+        }
+        else if (node.isArray()) {
+            node.forEach(JsonSchemaOutputConverter::rejectRemoteReferences);
+        }
+    }
+
+    private static boolean isReference(String key) {
+        return "$ref".equals(key) || "$dynamicRef".equals(key) || "$recursiveRef".equals(key);
     }
 }

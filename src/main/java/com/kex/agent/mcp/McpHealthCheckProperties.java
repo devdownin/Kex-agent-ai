@@ -4,8 +4,10 @@ package com.kex.agent.mcp;
 
 import java.time.Duration;
 
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Retente périodiquement l'initialisation des clients MCP encore muets, plutôt que d'attendre le
@@ -13,5 +15,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * détecte un serveur revenu que si quelqu'un regarde entre-temps.
  */
 @ConfigurationProperties("kex.mcp.health-check")
-public record McpHealthCheckProperties(@DefaultValue("true") boolean enabled, @DefaultValue("1m") Duration interval) {
+@Validated
+public record McpHealthCheckProperties(@DefaultValue("true") boolean enabled,
+                                       @DefaultValue("1m") @DurationMin(millis = 1) Duration interval) {
 }

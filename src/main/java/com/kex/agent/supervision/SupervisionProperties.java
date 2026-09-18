@@ -5,8 +5,14 @@ package com.kex.agent.supervision;
 import java.util.List;
 import java.util.Map;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Positive;
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Configuration de départ de la supervision. Ce qui se règle depuis l'interface (mode, autonomie,
@@ -19,6 +25,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                  répond 503 sans clé plutôt que de s'ouvrir
  */
 @ConfigurationProperties("kex.agent.supervision")
+@Validated
 public record SupervisionProperties(
 
         @DefaultValue("true") boolean enabled,
@@ -28,9 +35,9 @@ public record SupervisionProperties(
         @DefaultValue("SUPERVISED") ExecutionMode mode,
 
         /** En deçà, une action automatique repasse en validation humaine plutôt que de s'exécuter. */
-        @DefaultValue("0.85") double confidenceThreshold,
+        @DefaultValue("0.85") @DecimalMin("0.0") @DecimalMax("1.0") double confidenceThreshold,
 
-        @DefaultValue Thresholds thresholds,
+        @DefaultValue @Valid Thresholds thresholds,
 
         @DefaultValue Map<Capability, Autonomy> autonomy,
 
@@ -43,22 +50,22 @@ public record SupervisionProperties(
         @DefaultValue Map<Capability, ActionBinding> actions,
 
         /** Rétention en mémoire. Au-delà, les entrées les plus anciennes sortent. */
-        @DefaultValue("200") int historySize,
+        @DefaultValue("200") @Positive int historySize,
 
         /**
          * Délai d'expiration d'une demande de validation. Une action approuvée trois heures après
          * les faits agirait sur une situation qui n'existe plus.
          */
-        @DefaultValue("30m") java.time.Duration approvalTimeout,
+        @DefaultValue("30m") @DurationMin(millis = 1) java.time.Duration approvalTimeout,
 
         /** Au-delà, l'interface signale des données potentiellement obsolètes. */
-        @DefaultValue("15m") java.time.Duration staleAfter,
+        @DefaultValue("15m") @DurationMin(millis = 1) java.time.Duration staleAfter,
 
-        @DefaultValue Schedule schedule,
+        @DefaultValue @Valid Schedule schedule,
 
-        @DefaultValue AutoAdjust autoAdjust,
+        @DefaultValue @Valid AutoAdjust autoAdjust,
 
-        @DefaultValue Correlation correlation,
+        @DefaultValue @Valid Correlation correlation,
 
         /**
          * Une capacité sans outil MCP lié échoue par défaut ({@code FAILED}) plutôt que de
@@ -81,8 +88,8 @@ public record SupervisionProperties(
      *                      plus aucune autre ne pourrait jamais relancer l'analyse
      */
     public record Schedule(@DefaultValue("false") boolean enabled,
-                           @DefaultValue("5m") java.time.Duration interval,
-                           @DefaultValue("10m") java.time.Duration lockAtMostFor) {
+                           @DefaultValue("5m") @DurationMin(millis = 1) java.time.Duration interval,
+                           @DefaultValue("10m") @DurationMin(millis = 1) java.time.Duration lockAtMostFor) {
     }
 
     /**
@@ -98,9 +105,10 @@ public record SupervisionProperties(
      * @param increment    ce qui est ajouté à chaque relèvement, jamais au-delà de {@code 1.0}
      */
     public record AutoAdjust(@DefaultValue("true") boolean enabled,
-                             @DefaultValue("5") int minSamples,
-                             @DefaultValue("0.5") double minRelevance,
-                             @DefaultValue("0.05") double increment) {
+                             @DefaultValue("5") @Positive int minSamples,
+                             @DefaultValue("0.5") @DecimalMin("0.0") @DecimalMax("1.0") double minRelevance,
+                             @DefaultValue("0.05") @DecimalMin(value = "0.0", inclusive = false)
+                             @DecimalMax("1.0") double increment) {
     }
 
     /**
@@ -111,6 +119,7 @@ public record SupervisionProperties(
      * @param minProcesses nombre de processus distincts en anomalie dans le même cycle à partir
      *                     duquel un incident corrélé est signalé
      */
-    public record Correlation(@DefaultValue("true") boolean enabled, @DefaultValue("3") int minProcesses) {
+    public record Correlation(@DefaultValue("true") boolean enabled,
+                              @DefaultValue("3") @Positive int minProcesses) {
     }
 }

@@ -11,7 +11,7 @@
 
   <groupId>com.kex</groupId>
   <artifactId>kex-agent-ai</artifactId>
-  <version>0.3.2</version>
+  <version>0.6.1-SNAPSHOT</version>
   <name>kex-agent-ai</name>
   <description>Agent IA Spring Boot / Spring AI, client de serveurs MCP</description>
 
@@ -24,6 +24,7 @@
     <maven.compiler.release>25</maven.compiler.release>
     <spring-ai.version>2.0.1</spring-ai.version>
     <resilience4j.version>2.4.0</resilience4j.version>
+    <json-schema-validator.version>2.0.7</json-schema-validator.version>
     <!-- CVE-2026-65182, CVE-2026-65905, CVE-2026-68525 : Spring Boot 4.1.1 gère 11.0.24, corrigé
          en 11.0.25. Propriété documentée par Spring Boot pour avancer un composant géré sans
          attendre une version mineure du parent — publish.yml bloquait dessus, à raison. -->
@@ -50,6 +51,11 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.networknt</groupId>
+      <artifactId>json-schema-validator</artifactId>
+      <version>${json-schema-validator.version}</version>
     </dependency>
     <!-- Le contrat de l'API décrit depuis le code : une spécification écrite à la main diverge. -->
     <dependency>

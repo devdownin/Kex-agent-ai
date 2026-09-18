@@ -4,8 +4,13 @@ package com.kex.agent.config;
 
 import java.time.Duration;
 
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Positive;
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Disjoncteur et réessai partagés par les intégrations externes (serveurs MCP, fournisseur du
@@ -14,26 +19,27 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * configuration qui romprait en silence à un renommage.
  */
 @ConfigurationProperties("kex.resilience")
+@Validated
 public record ResilienceProperties(
 
         /** Nombre d'appels glissants sur lesquels le taux d'échec est calculé. */
-        @DefaultValue("10") int slidingWindowSize,
+        @DefaultValue("10") @Positive int slidingWindowSize,
 
         /** En deçà, le taux d'échec n'est pas encore significatif : le disjoncteur reste fermé. */
-        @DefaultValue("5") int minimumNumberOfCalls,
+        @DefaultValue("5") @Positive int minimumNumberOfCalls,
 
         /** Au-delà, le disjoncteur s'ouvre et les appels échouent immédiatement. */
-        @DefaultValue("50") float failureRateThreshold,
+        @DefaultValue("50") @DecimalMin("1.0") @DecimalMax("100.0") float failureRateThreshold,
 
         /** Attente avant de retenter un appel une fois le disjoncteur ouvert. */
-        @DefaultValue("30s") Duration waitDurationInOpenState,
+        @DefaultValue("30s") @DurationMin(millis = 1) Duration waitDurationInOpenState,
 
         /** Appels d'essai autorisés pour décider si le disjoncteur referme. */
-        @DefaultValue("3") int permittedCallsInHalfOpenState,
+        @DefaultValue("3") @Positive int permittedCallsInHalfOpenState,
 
         /** Tentatives totales pour un appel MCP explicitement injoignable. */
-        @DefaultValue("3") int retryMaxAttempts,
+        @DefaultValue("3") @Positive int retryMaxAttempts,
 
         /** Attente entre deux tentatives, doublée à chaque fois. */
-        @DefaultValue("500ms") Duration retryWaitDuration) {
+        @DefaultValue("500ms") @DurationMin(millis = 1) Duration retryWaitDuration) {
 }

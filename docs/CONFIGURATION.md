@@ -383,8 +383,9 @@ git tag v0.2.0
 git push origin main --follow-tags
 ```
 
-Rien de plus : le pom n'a pas à être bumpé avant de taguer, le workflow s'en charge dans son propre
-checkout (`versions:set`, jamais commité). Le tag reste refusé s'il porte `SNAPSHOT` : un tag n'est
+Rien de plus : `main` porte la prochaine version `-SNAPSHOT`, puis le workflow réaligne le pom sur le
+tag dans son propre checkout (`versions:set`, jamais commité). La même version alimente le JAR,
+`/actuator/info` et l'identité du client MCP. Le tag reste refusé s'il porte `SNAPSHOT` : un tag n'est
 pas récupérable une fois poussé, et une image dont le contenu change sous le même nom ne veut rien
 dire.
 

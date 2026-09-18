@@ -17,6 +17,7 @@ import org.springframework.ai.mcp.ToolContextToMcpMetaConverter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
+import org.springframework.core.env.Environment;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,11 +42,20 @@ class KexAgentApplicationTests {
     @Autowired
     ToolContextToMcpMetaConverter metaConverter;
 
+    @Autowired
+    Environment environment;
+
     @Test
     void charge_le_contexte_sans_serveur_mcp() {
         assertThat(chatClient).isNotNull();
         assertThat(agentService).isNotNull();
         assertThat(toolCatalog.servers()).isEmpty();
+    }
+
+    @Test
+    void annonce_la_version_maven_au_client_mcp() {
+        assertThat(environment.getProperty("spring.ai.mcp.client.version"))
+                .isEqualTo("0.6.1-SNAPSHOT");
     }
 
     @Test

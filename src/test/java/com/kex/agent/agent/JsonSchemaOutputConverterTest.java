@@ -13,7 +13,9 @@ class JsonSchemaOutputConverterTest {
 
     private static final Map<String, Object> SCHEMA = Map.of(
             "type", "object",
-            "properties", Map.of("total", Map.of("type", "integer")));
+            "properties", Map.of("total", Map.of("type", "integer")),
+            "required", java.util.List.of("total"),
+            "additionalProperties", false);
 
     @Test
     void decrit_le_schema_au_modele() {
@@ -37,5 +39,29 @@ class JsonSchemaOutputConverterTest {
 
         assertThatThrownBy(() -> converter.convert("je ne sais pas"))
                 .isInstanceOf(StructuredOutputException.class);
+    }
+
+    @Test
+    void refuse_un_objet_json_qui_ne_respecte_pas_le_schema() {
+        JsonSchemaOutputConverter converter = new JsonSchemaOutputConverter(SCHEMA);
+
+        assertThatThrownBy(() -> converter.convert("{\"total\":\"huit\"}"))
+                .isInstanceOf(StructuredOutputException.class)
+                .hasMessageContaining("conforme au schéma");
+        assertThatThrownBy(() -> converter.convert("{}"))
+                .isInstanceOf(StructuredOutputException.class);
+        assertThatThrownBy(() -> converter.convert("{\"total\":8,\"inattendu\":true}"))
+                .isInstanceOf(StructuredOutputException.class);
+    }
+
+    @Test
+    void refuse_un_schema_non_objet_ou_une_reference_distante() {
+        assertThatThrownBy(() -> new JsonSchemaOutputConverter(Map.of("type", "array")))
+                .isInstanceOf(InvalidJsonSchemaException.class)
+                .hasMessageContaining("type racine");
+        assertThatThrownBy(() -> new JsonSchemaOutputConverter(Map.of(
+                "type", "object", "$ref", "https://example.com/schema.json")))
+                .isInstanceOf(InvalidJsonSchemaException.class)
+                .hasMessageContaining("distantes");
     }
 }

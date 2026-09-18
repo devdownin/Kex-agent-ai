@@ -2,8 +2,10 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.kafka;
 
+import jakarta.validation.constraints.Positive;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Vue technique Kafka, adossée aux outils de Kafka SQL Explorer.
@@ -16,6 +18,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                   lieu d'afficher un écran vide qu'on lirait comme « aucun topic »
  */
 @ConfigurationProperties("kex.agent.kafka")
+@Validated
 public record KafkaProperties(
 
         @DefaultValue("kafka-explorer") String connection,
@@ -25,5 +28,5 @@ public record KafkaProperties(
         @DefaultValue("kex_consumer_lag") String lagTool,
 
         /** Plafond passé à l'outil ; il applique le sien, plus bas, s'il en a un. */
-        @DefaultValue("200") int maxTopics) {
+        @DefaultValue("200") @Positive int maxTopics) {
 }

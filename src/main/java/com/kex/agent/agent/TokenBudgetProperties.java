@@ -2,8 +2,10 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.agent;
 
+import jakarta.validation.constraints.PositiveOrZero;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Plafond de jetons journalier, toutes conversations confondues. {@code 0} lève la borne : une
@@ -13,5 +15,6 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * multi-instance, chaque réplique a son propre budget, à diviser le seuil en conséquence.
  */
 @ConfigurationProperties("kex.agent.token-budget")
-public record TokenBudgetProperties(@DefaultValue("0") long dailyLimit) {
+@Validated
+public record TokenBudgetProperties(@DefaultValue("0") @PositiveOrZero long dailyLimit) {
 }

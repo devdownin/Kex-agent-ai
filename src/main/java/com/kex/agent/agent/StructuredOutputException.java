@@ -7,4 +7,8 @@ public class StructuredOutputException extends RuntimeException {
     public StructuredOutputException(Throwable cause) {
         super("Le modèle n'a pas rendu un JSON conforme au schéma demandé", cause);
     }
+
+    public StructuredOutputException(String detail) {
+        super("Le modèle n'a pas rendu un JSON conforme au schéma demandé : " + detail);
+    }
 }

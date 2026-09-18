@@ -4,8 +4,11 @@ package com.kex.agent.memory;
 
 import java.time.Duration;
 
+import jakarta.validation.constraints.Positive;
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Mémoire long-terme, distincte de la fenêtre de conversation ({@code max-history-messages}) : ce
@@ -15,16 +18,17 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * plafonds décident combien en rester.
  */
 @ConfigurationProperties("kex.agent.memory")
+@Validated
 public record MemoryProperties(
 
         @DefaultValue("true") boolean enabled,
 
         /** Souvenirs actifs conservés au-delà de cette limite, le plus ancien évincé en premier. */
-        @DefaultValue("200") int capacity,
+        @DefaultValue("200") @Positive int capacity,
 
         /** Un souvenir plus long est tronqué : l'outil retient un fait, pas un paragraphe. */
-        @DefaultValue("500") int maxContentLength,
+        @DefaultValue("500") @Positive int maxContentLength,
 
         /** Un souvenir non réécrit depuis cette durée n'est plus relu, sans être supprimé. */
-        @DefaultValue("30d") Duration retention) {
+        @DefaultValue("30d") @DurationMin(millis = 1) Duration retention) {
 }
