@@ -11,6 +11,24 @@ import {
 } from './core.js';
 
 const BASE = '/api/agent/supervision';
+const PROCESS_FILTER_STORAGE = 'kex.agent.filters.processes';
+const DECISION_FILTER_STORAGE = 'kex.agent.filters.decisions';
+
+function stored(key, fallback) {
+  try {
+    return JSON.parse(localStorage.getItem(key)) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function remember(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* Le filtrage reste utilisable sans stockage persistant. */
+  }
+}
 
 const CAPABILITIES = {
   NOTIFY: 'Notifier',
@@ -335,8 +353,8 @@ export async function processes() {
 
 // Lus dans l'URL, pas dans une variable de module : un rechargement ou un lien partagé retrouve
 // l'écran tel qu'il était.
-const processFilter = () => params().get('etat') || 'ALL';
-const processQuery = () => (params().get('q') || '').toLowerCase();
+const processFilter = () => params().get('etat') || stored(PROCESS_FILTER_STORAGE, {}).state || 'ALL';
+const processQuery = () => (params().get('q') ?? stored(PROCESS_FILTER_STORAGE, {}).query ?? '').toLowerCase();
 
 function filtered(rows) {
   const state = processFilter();
@@ -453,6 +471,21 @@ function openProcess(row) {
     definition('Couverture', coverageTag(row.coverage)),
   );
   const extra = el('div');
+  const actions = el('div', 'context-actions');
+  const ask = el('a', 'primary', 'Interroger l’agent');
+  ask.href = chatDraft(`Analyse le processus « ${row.name} » (${row.processId}) et explique son état ${row.state}.`);
+  const copy = el('button', 'ghost', 'Copier l’identifiant');
+  copy.type = 'button';
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(row.processId);
+      toast('Identifiant copié');
+    } catch {
+      toast('Copie indisponible dans ce navigateur', 'error');
+    }
+  });
+  actions.append(ask, copy);
+  extra.append(actions);
   if (row.coverage && !row.coverage.complete && row.coverage.stopReason !== 'NOT_REPORTED') {
     const banner = el('p', 'banner',
       `Relevé partiel : ${coverageReason(row.coverage)}. Une passe incomplète peut prouver une `
@@ -553,9 +586,15 @@ function alertCard(alert) {
   // Répété une fois par carte : sans libellé, un lecteur d'écran n'entend qu'« Examiner ».
   open.setAttribute('aria-label', `Examiner : ${alert.title}`);
   open.addEventListener('click', () => openAnomaly(alert));
-  card.append(open);
+  const actions = el('div', 'card-actions');
+  const ask = el('a', 'ghost', 'Demander à l’agent');
+  ask.href = chatDraft(`Analyse l’alerte « ${alert.title} » sur ${alert.processName} et propose les prochaines étapes.`);
+  actions.append(open, ask);
+  card.append(actions);
   return card;
 }
+
+const chatDraft = (message) => `#/chat?draft=${encodeURIComponent(message)}`;
 
 /** Un symptôme qui revient n'est pas un incident de plus : c'est le même, qui dure. */
 function recurrence(alert) {
@@ -571,6 +610,11 @@ function openAnomaly(anomaly) {
   // Le titre est déjà celui du panneau : la pastille n'y ajoute que la gravité, en français.
   body.append(stateTag(anomaly.severity));
   body.append(el('p', 'muted', anomaly.processName));
+  const actions = el('div', 'context-actions');
+  const ask = el('a', 'primary', 'Poursuivre dans le chat');
+  ask.href = chatDraft(`Analyse l’alerte « ${anomaly.title} » sur ${anomaly.processName} et propose les prochaines étapes.`);
+  actions.append(ask);
+  body.append(actions);
   if (anomaly.occurrences) body.append(recurrence(anomaly));
 
   body.append(el('h3', 'drawer-sub', 'Ce que l’agent observe'));
@@ -697,10 +741,16 @@ async function resolveDecision(decision, approve) {
 
 export async function decisions() {
   await render($('#decisions-list'), () => api(`${BASE}/decisions`), (rows) => {
+    const state = params().get('decisionEtat') || stored(DECISION_FILTER_STORAGE, 'ALL');
+    const matching = rows.filter((decision) => state === 'ALL'
+      || (state === 'PENDING' && decision.status === 'PENDING_APPROVAL')
+      || (state === 'FAILED' && ['FAILED', 'EXPIRED'].includes(decision.status))
+      || (state === 'RESOLVED' && ['EXECUTED', 'REJECTED', 'BLOCKED', 'SIMULATED'].includes(decision.status)));
     if (!rows.length) return empty('Aucune décision.', 'Elles apparaîtront après un cycle d’analyse.',
       { href: '#/overview', label: 'Lancer une analyse' });
+    if (!matching.length) return empty('Aucune décision dans cette vue.', 'Choisissez un autre filtre.');
     const list = el('div', 'cards wide');
-    rows.forEach((decision) => list.append(decisionRow(decision)));
+    matching.forEach((decision) => list.append(decisionRow(decision)));
     return list;
   });
   // Un rendu neuf n'a aucune case cochée : la barre doit redevenir cachée avec lui, pas rester
@@ -1303,11 +1353,15 @@ const snapshotFor = () => Promise.resolve(current() || refresh().catch(() => nul
 /** Remet les contrôles en accord avec l'adresse : c'est l'URL qui fait foi, pas l'inverse. */
 export function syncFilters() {
   const state = processFilter();
-  document.querySelectorAll('.chip-toggle').forEach((button) =>
+  document.querySelectorAll('.chip-toggle[data-filter]').forEach((button) =>
     button.setAttribute('aria-pressed', String(button.dataset.filter === state)));
-  const query = params().get('q') || '';
-  if ($('#process-search').value !== query) $('#process-search').value = query;
-  if ($('#audit-search').value !== query) $('#audit-search').value = query;
+  const decisionState = params().get('decisionEtat') || stored(DECISION_FILTER_STORAGE, 'ALL');
+  document.querySelectorAll('.chip-toggle[data-decision-filter]').forEach((button) =>
+    button.setAttribute('aria-pressed', String(button.dataset.decisionFilter === decisionState)));
+  const processSearch = params().get('q') ?? stored(PROCESS_FILTER_STORAGE, {}).query ?? '';
+  if ($('#process-search').value !== processSearch) $('#process-search').value = processSearch;
+  const auditSearch = params().get('q') || '';
+  if ($('#audit-search').value !== auditSearch) $('#audit-search').value = auditSearch;
 }
 
 export function wire() {
@@ -1378,15 +1432,29 @@ export function wire() {
   });
 
   $('#process-search').addEventListener('input', (event) => {
-    setParams({ q: event.target.value.trim() });
+    const query = event.target.value.trim();
+    remember(PROCESS_FILTER_STORAGE, { state: processFilter(), query });
+    setParams({ q: query || null });
     processes();
   });
 
-  document.querySelectorAll('.chip-toggle').forEach((button) => {
+  document.querySelectorAll('.chip-toggle[data-filter]').forEach((button) => {
     button.addEventListener('click', () => {
-      setParams({ etat: button.dataset.filter === 'ALL' ? null : button.dataset.filter });
+      const state = button.dataset.filter;
+      remember(PROCESS_FILTER_STORAGE, { state, query: $('#process-search').value.trim() });
+      setParams({ etat: state === 'ALL' ? null : state });
       syncFilters();
       processes();
+    });
+  });
+
+  document.querySelectorAll('.chip-toggle[data-decision-filter]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const state = button.dataset.decisionFilter;
+      remember(DECISION_FILTER_STORAGE, state);
+      setParams({ decisionEtat: state === 'ALL' ? null : state });
+      syncFilters();
+      decisions();
     });
   });
 

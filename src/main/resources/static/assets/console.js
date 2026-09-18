@@ -6,7 +6,7 @@
 // chaînes pour une poignée de fichiers statiques.
 
 import {
-  $, ago, api, confirmAction, credentials, drawerOpen, onCredentialChange, onUnauthorized, report,
+  $, ago, api, confirmAction, credentials, drawerOpen, el, onCredentialChange, onUnauthorized, report,
   restoreDrawerFromUrl, stamp, toast, viewName,
 } from './core.js';
 import * as chat from './chat.js';
@@ -31,7 +31,7 @@ const VIEWS = {
   alerts: { title: 'Alertes', load: supervision.alerts },
   audit: { title: 'Audit', load: supervision.audit },
   tools: { title: 'Technique', load: tools.view },
-  chat: { title: 'Conversation', load: null },
+  chat: { title: 'Conversation', load: chat.prefill },
 };
 
 /* ── En-tête ───────────────────────────────────────────────────────────── */
@@ -87,6 +87,37 @@ function renderBadges(data) {
   badge('#nav-alerts', data?.anomaliesDetected);
   badge('#nav-attention', (data?.pendingApprovals || 0) + (data?.anomaliesDetected || 0));
   if (data?.agent) renderStatus(data.agent);
+  renderOnboarding(data);
+}
+
+function renderOnboarding(data) {
+  const host = $('#onboarding');
+  if (!host || !data) return;
+  const steps = [
+    { done: Boolean(credentials.get()), label: 'Connecter le jeton API', href: null, action: openCredentials },
+    { done: data.processesMonitored > 0, label: 'Déclarer les processus surveillés', href: '#/settings' },
+    { done: Boolean(data.agent?.lastCycleAt), label: 'Exécuter le premier cycle', action: runCycle },
+  ];
+  const complete = steps.filter((step) => step.done).length;
+  host.hidden = complete === steps.length;
+  if (host.hidden) return;
+  $('#onboarding-progress').textContent = `${complete}/${steps.length}`;
+  const list = $('#onboarding-steps');
+  list.replaceChildren(...steps.map((step, index) => {
+    const item = el('div', step.done ? 'onboarding-step done' : 'onboarding-step');
+    item.append(el('span', 'onboarding-mark', step.done ? '✓' : String(index + 1)));
+    item.append(el('span', 'strong', step.label));
+    if (!step.done) {
+      const action = el(step.href ? 'a' : 'button', 'ghost', 'Configurer');
+      if (step.href) action.href = step.href;
+      else {
+        action.type = 'button';
+        action.addEventListener('click', step.action);
+      }
+      item.append(action);
+    }
+    return item;
+  }));
 }
 
 function badge(selector, count) {
@@ -224,6 +255,91 @@ densityToggle.addEventListener('click', () => {
     /* le choix reste valable pour la durée de la page */
   }
   syncDensityButton();
+});
+
+/* ── Recherche globale ────────────────────────────────────────────────── */
+
+const commandDialog = $('#command-palette');
+const commandQuery = $('#command-query');
+
+function commandItems() {
+  const snapshot = supervision.current();
+  const commands = [
+    ['Vue d’ensemble', 'Navigation', '#/overview'],
+    ['À traiter', 'Navigation', '#/attention'],
+    ['Conversation', 'Navigation', '#/chat'],
+    ['Processus', 'Navigation', '#/processes'],
+    ['Décisions', 'Navigation', '#/decisions'],
+    ['Configuration', 'Navigation', '#/settings'],
+  ].map(([label, kind, href]) => ({ label, kind, href }));
+  for (const process of snapshot?.processes || []) {
+    commands.push({ label: process.name, kind: `Processus · ${process.state}`,
+      href: `#/processes?processus=${encodeURIComponent(process.processId)}` });
+  }
+  for (const alert of snapshot?.alerts || []) {
+    commands.push({ label: alert.title, kind: `Alerte · ${alert.processName}`,
+      href: `#/alerts?alerte=${encodeURIComponent(alert.id)}` });
+  }
+  for (const decision of snapshot?.pending || []) {
+    commands.push({ label: decision.action, kind: `Décision · ${decision.processName}`,
+      href: `#/decisions?decision=${encodeURIComponent(decision.id)}` });
+  }
+  commands.unshift({ label: 'Exécuter une analyse maintenant', kind: 'Action', action: runCycle });
+  return commands;
+}
+
+function renderCommands() {
+  const query = commandQuery.value.trim().toLowerCase();
+  const matches = commandItems().filter((item) => !query
+    || `${item.label} ${item.kind}`.toLowerCase().includes(query)).slice(0, 12);
+  const results = $('#command-results');
+  results.replaceChildren(...matches.map((item, index) => {
+    const button = el('button', 'command-result');
+    button.type = 'button';
+    button.dataset.index = String(index);
+    button.append(el('span', 'strong', item.label), el('span', 'hint', item.kind));
+    button.addEventListener('click', () => {
+      commandDialog.close();
+      if (item.href) location.hash = item.href;
+      else item.action?.();
+    });
+    return button;
+  }));
+  results.querySelector('button')?.classList.add('selected');
+}
+
+function openCommand() {
+  renderCommands();
+  commandDialog.showModal();
+  commandQuery.focus();
+}
+
+$('#open-command').addEventListener('click', openCommand);
+commandQuery.addEventListener('input', renderCommands);
+commandQuery.addEventListener('keydown', (event) => {
+  const buttons = [...$('#command-results').querySelectorAll('button')];
+  if (!buttons.length) return;
+  const current = Math.max(0, buttons.findIndex((button) => button.classList.contains('selected')));
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    buttons[current].classList.remove('selected');
+    const next = (current + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[next].classList.add('selected');
+    buttons[next].scrollIntoView({ block: 'nearest' });
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    buttons[current].click();
+  }
+});
+addEventListener('keydown', (event) => {
+  const editing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault();
+    if (!commandDialog.open) openCommand();
+  } else if (event.key === '/' && !editing && !commandDialog.open) {
+    event.preventDefault();
+    openCommand();
+  }
 });
 
 /* ── Rafraîchissement ──────────────────────────────────────────────────── */

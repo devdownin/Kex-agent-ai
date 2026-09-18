@@ -88,6 +88,9 @@
         <span class="status-mark" aria-hidden="true">●</span>
         <span id="agent-status-label">ÉTAT INCONNU</span>
       </span>
+      <button type="button" class="ghost command-trigger" id="open-command" aria-keyshortcuts="Control+K Meta+K">
+        Rechercher <kbd>⌘K</kbd>
+      </button>
       <button type="button" class="primary" id="run-cycle">Exécuter maintenant</button>
       <details class="action-menu">
         <summary class="ghost" aria-label="Ouvrir les actions secondaires">Actions</summary>
@@ -137,6 +140,13 @@
         </div>
       </section>
       <div class="kpis" id="kpis"></div>
+      <section class="panel onboarding" id="onboarding" hidden>
+        <div class="panel-head">
+          <div><span class="panel-kicker">Premiers pas</span><h2>Configurer votre centre de contrôle</h2></div>
+          <span class="onboarding-progress" id="onboarding-progress"></span>
+        </div>
+        <div class="onboarding-steps" id="onboarding-steps"></div>
+      </section>
       <div id="incident-banner"></div>
       <section class="panel agent-brief-panel">
         <div class="panel-head">
@@ -284,6 +294,12 @@
             <button type="button" class="ghost" id="export-decisions">Exporter (CSV)</button>
             <button type="button" class="ghost" id="refresh-decisions">Rafraîchir</button>
           </div>
+        </div>
+        <div class="filters decision-filters" role="group" aria-label="Filtrer les décisions">
+          <button type="button" class="chip-toggle" data-decision-filter="ALL" aria-pressed="true">Toutes</button>
+          <button type="button" class="chip-toggle" data-decision-filter="PENDING" aria-pressed="false">À valider</button>
+          <button type="button" class="chip-toggle" data-decision-filter="RESOLVED" aria-pressed="false">Terminées</button>
+          <button type="button" class="chip-toggle" data-decision-filter="FAILED" aria-pressed="false">En échec</button>
         </div>
         <!-- N'apparaît qu'avec au moins une décision cochée — voir wire() dans supervision.js. -->
         <div class="row-end bulk-bar" id="decisions-bulk-bar" hidden>
@@ -473,6 +489,16 @@
       <button type="submit" class="primary" value="save">Enregistrer</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="command-palette" class="command-palette">
+  <div class="command-search">
+    <label class="sr-only" for="command-query">Rechercher dans Kex Agent</label>
+    <input type="search" id="command-query" placeholder="Processus, alerte, décision ou action…" autocomplete="off">
+    <kbd>Esc</kbd>
+  </div>
+  <div class="command-results" id="command-results" role="listbox" aria-label="Résultats"></div>
+  <p class="command-hint">Entrée pour ouvrir · ↑↓ pour naviguer</p>
 </dialog>
 
 <div class="toasts" id="toasts" aria-live="assertive"></div>

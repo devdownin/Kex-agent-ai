@@ -6,7 +6,7 @@
 
 import {
   $, ago, api, busy, dismissDrawer, el, empty, failure, headers, openDrawer, registerDrawer, report,
-  setDrawerParam,
+  params, setDrawerParam, setParams,
 } from './core.js';
 
 const CONVERSATION_STORAGE = 'kex.agent.conversation';
@@ -311,6 +311,16 @@ function openHistory() {
     body.append(cards);
   }
   openDrawer('Conversations récentes', body);
+}
+
+/** Reprend un diagnostic contextuel préparé depuis une alerte ou un processus. */
+export function prefill() {
+  const draft = params().get('draft');
+  if (!draft) return;
+  const field = $('#prompt');
+  if (!field.value) field.value = draft;
+  setParams({ draft: null });
+  field.focus();
 }
 
 export function wire(onUnauthorized) {
