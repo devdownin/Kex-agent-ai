@@ -224,6 +224,8 @@ body {
 
 .topbar {
   grid-area: topbar;
+  /* Le flou crée un contexte d'empilement : relever la barre, pas seulement son menu. */
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1181,7 +1183,7 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   .rail nav hr, .nav-section { display: none; }
   .nav-item { white-space: nowrap; }
   .brand, .rail-foot { display: none; }
-  .topbar { position: sticky; top: 0; z-index: 20; }
+  .topbar { position: sticky; top: 0; }
   .topbar-right { width: 100%; }
   .topbar-right .status { order: -1; }
   .topbar-right .primary { margin-left: auto; }

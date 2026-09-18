@@ -122,7 +122,9 @@ jobs:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/pw/node_modules/playwright/index.mjs
           KEX_AGENT_URL: http://localhost:8081
           KEX_AGENT_API_KEY: ci-secret
-        run: node src/test/browser/console.mjs
+        run: |
+          node src/test/browser/actions-menu.mjs
+          node src/test/browser/console.mjs
 
       - name: Agent logs on failure
         if: failure()
