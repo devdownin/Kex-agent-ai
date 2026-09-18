@@ -2,12 +2,15 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.agent;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
@@ -32,6 +35,8 @@ import reactor.core.publisher.Sinks;
 
 @Service
 public class AgentService {
+
+    private static final String INTERNAL_OWNER = "kex-internal";
 
     /**
      * Clé dans le {@code ToolContext} portant l'identité de conversation, lue par les outils
@@ -64,10 +69,15 @@ public class AgentService {
      * jetons consommés n'existent nulle part ailleurs à l'échelle d'un échange.
      */
     public AgentAnswer ask(String conversationId, String message) {
-        Conversation conversation = conversation(conversationId);
+        return ask(INTERNAL_OWNER, conversationId, message);
+    }
+
+    public AgentAnswer ask(String owner, String conversationId, String message) {
+        Conversation conversation = conversation(owner, conversationId);
         ToolCallRecorder recorder = new ToolCallRecorder();
-        ChatResponse response = bounded(conversation, CircuitBreaker.decorateSupplier(modelCircuitBreaker,
-                () -> request(conversation.id(), message, recorder).call().chatResponse()));
+        AgentExecution execution = new AgentExecution();
+        ChatResponse response = bounded(conversation, execution, CircuitBreaker.decorateSupplier(modelCircuitBreaker,
+                () -> request(conversation, message, recorder, execution).call().chatResponse()));
         AgentUsage usage = AgentUsage.from(response);
         tokenBudget.record(usage);
         return new AgentAnswer(conversation.id(), text(response), recorder.calls(), usage, finishReason(response));
@@ -75,14 +85,20 @@ public class AgentService {
 
     public AgentStructuredAnswer askStructured(String conversationId, String message,
                                                Map<String, Object> schema) {
+        return askStructured(INTERNAL_OWNER, conversationId, message, schema);
+    }
+
+    public AgentStructuredAnswer askStructured(String owner, String conversationId, String message,
+                                               Map<String, Object> schema) {
         if (CollectionUtils.isEmpty(schema)) {
             throw new InvalidJsonSchemaException("Un schéma JSON non vide est requis");
         }
-        Conversation conversation = conversation(conversationId);
+        Conversation conversation = conversation(owner, conversationId);
         ToolCallRecorder recorder = new ToolCallRecorder();
-        ResponseEntity<ChatResponse, Map<String, Object>> answer = bounded(conversation,
+        AgentExecution execution = new AgentExecution();
+        ResponseEntity<ChatResponse, Map<String, Object>> answer = bounded(conversation, execution,
                 CircuitBreaker.decorateSupplier(modelCircuitBreaker,
-                        () -> request(conversation.id(), message, recorder).call()
+                        () -> request(conversation, message, recorder, execution).call()
                                 .responseEntity(new JsonSchemaOutputConverter(schema))));
         AgentUsage usage = AgentUsage.from(answer.response());
         tokenBudget.record(usage);
@@ -100,9 +116,15 @@ public class AgentService {
      * continuait d'envoyer des prompts, et de dépenser, vers un fournisseur déjà constaté en panne.
      */
     public AgentStream stream(String conversationId, String message) {
-        String id = conversation(conversationId).id();
+        return stream(INTERNAL_OWNER, conversationId, message);
+    }
+
+    public AgentStream stream(String owner, String conversationId, String message) {
+        Conversation conversation = conversation(owner, conversationId);
+        String id = conversation.id();
         Sinks.Many<AgentEvent> tools = Sinks.many().unicast().onBackpressureBuffer();
         ToolCallRecorder recorder = new ToolCallRecorder(tools);
+        AgentExecution execution = new AgentExecution();
 
         // Un plafond de durée, pas de silence : `timeout(Duration)` ne borne que l'attente entre
         // deux jetons, si bien que vingt tours d'outils restant chacun sous le plafond tiendraient
@@ -110,7 +132,7 @@ public class AgentService {
         // que spring.mvc.async.request-timeout suppose déjà empêché. Le compte à rebours part de
         // la souscription et couvre tout l'échange, comme sur le chemin bloquant ; contrairement à
         // lui, il annule réellement l'amont.
-        Flux<AgentEvent> tokens = request(id, message, recorder)
+        Flux<AgentEvent> tokens = request(conversation, message, recorder, execution)
                 .stream()
                 .content()
                 .<AgentEvent>map(AgentEvent.Token::new)
@@ -120,38 +142,59 @@ public class AgentService {
                 // fournisseur, comme il le fait déjà sur le chemin bloquant. `transformDeferred` :
                 // l'état du disjoncteur se lit à la souscription, pas à l'assemblage.
                 .transformDeferred(CircuitBreakerOperator.of(modelCircuitBreaker))
-                .doFinally(signal -> tools.tryEmitComplete());
+                .doFinally(signal -> {
+                    execution.cancel();
+                    tools.tryEmitComplete();
+                });
 
         return new AgentStream(id, Flux.merge(tools.asFlux(), tokens));
     }
 
     public void clear(String conversationId) {
-        chatMemory.clear(conversationId);
+        clear(INTERNAL_OWNER, conversationId);
     }
 
-    private ChatClient.ChatClientRequestSpec request(String id, String message, ToolCallRecorder recorder) {
+    public void clear(String owner, String conversationId) {
+        chatMemory.clear(memoryId(owner, conversationId));
+    }
+
+    private ChatClient.ChatClientRequestSpec request(Conversation conversation, String message,
+                                                     ToolCallRecorder recorder, AgentExecution execution) {
         return chatClient.prompt()
                 .user(message)
-                .toolContext(Map.of(ToolCallRecorder.CONTEXT_KEY, recorder, CONVERSATION_ID_CONTEXT_KEY, id))
-                .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, id));
+                .toolContext(Map.of(ToolCallRecorder.CONTEXT_KEY, recorder,
+                        CONVERSATION_ID_CONTEXT_KEY, conversation.id(), AgentExecution.CONTEXT_KEY, execution))
+                .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, conversation.memoryId()));
     }
 
     /**
-     * Le plafond borne l'attente de l'appelant, pas le travail en cours : l'appel bloquant de
-     * Spring AI n'est pas interruptible, la tâche continue donc en arrière-plan jusqu'à son terme.
-     * Elle tourne sur un thread virtuel, où un tel orphelin coûte une pile, pas un thread noyau.
+     * Le travail tourne sur un thread virtuel dédié : le plafond peut ainsi l'interrompre et
+     * invalider la garde transmise aux outils, qui refusent tout nouvel effet après expiration.
      */
-    private <T> T bounded(Conversation conversation, Supplier<T> call) {
-        CompletableFuture<T> result = CompletableFuture.supplyAsync(call,
-                task -> Thread.ofVirtual().name("kex-agent-chat-", 0).start(task));
+    private <T> T bounded(Conversation conversation, AgentExecution execution, Supplier<T> call) {
+        FutureTask<T> result = new FutureTask<>(() -> {
+            execution.ensureActive();
+            return call.get();
+        });
+        Thread worker = Thread.ofVirtual().name("kex-agent-chat-", 0).start(result);
         try {
             return result.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         }
         catch (TimeoutException ex) {
-            // L'advisor de mémoire écrit la réponse à la fin de la tâche orpheline, donc après
-            // ce que l'appelant a reçu : purger tout de suite la ferait revenir juste après.
+            execution.cancel();
+            result.cancel(true);
             if (conversation.generated()) {
-                result.whenComplete((ignored, failure) -> chatMemory.clear(conversation.id()));
+                Thread.startVirtualThread(() -> {
+                    try {
+                        worker.join();
+                    }
+                    catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                    finally {
+                        chatMemory.clear(conversation.memoryId());
+                    }
+                });
             }
             throw new AgentTimeoutException(timeout, conversation.id());
         }
@@ -176,18 +219,32 @@ public class AgentService {
      */
     private void discardIfUnreachable(Conversation conversation) {
         if (conversation.generated()) {
-            chatMemory.clear(conversation.id());
+            chatMemory.clear(conversation.memoryId());
         }
     }
 
     /** @param generated l'appelant n'a pas fourni d'identifiant : celui-ci a été tiré ici */
-    private record Conversation(String id, boolean generated) {
+    private record Conversation(String id, String memoryId, boolean generated) {
     }
 
-    private static Conversation conversation(String conversationId) {
-        return StringUtils.hasText(conversationId)
-                ? new Conversation(conversationId, false)
-                : new Conversation(UUID.randomUUID().toString(), true);
+    private static Conversation conversation(String owner, String conversationId) {
+        boolean generated = !StringUtils.hasText(conversationId);
+        String id = generated ? UUID.randomUUID().toString() : conversationId;
+        return new Conversation(id, memoryId(owner, id), generated);
+    }
+
+    private static String memoryId(String owner, String conversationId) {
+        if (!StringUtils.hasText(owner) || !StringUtils.hasText(conversationId)) {
+            throw new IllegalArgumentException("Un propriétaire et un identifiant de conversation sont requis");
+        }
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest((owner + "\u0000" + conversationId).getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        }
+        catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 indisponible", ex);
+        }
     }
 
     private static String text(ChatResponse response) {

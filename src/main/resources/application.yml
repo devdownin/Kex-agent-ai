@@ -135,6 +135,12 @@ kex:
     api-keys: {}
       # ops-console: ${KEX_AGENT_API_KEY_OPS:}
       # ci-pipeline: ${KEX_AGENT_API_KEY_CI:}
+    # Une clé nommée absente de cette map est limitée au chat. OPERATOR peut piloter les cycles et
+    # décisions ; ADMIN peut en plus modifier la politique, la connaissance et appeler MCP en direct.
+    # La clé historique api-key reste ADMIN pour compatibilité.
+    api-key-roles: {}
+      # ops-console: OPERATOR
+      # ci-pipeline: CHAT
 
     kafka:
       # Vue technique du cluster, adossée aux outils de Kafka SQL Explorer. Les noms d'outils sont

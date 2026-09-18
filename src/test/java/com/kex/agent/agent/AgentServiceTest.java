@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import com.kex.agent.config.AgentProperties;
@@ -70,7 +71,7 @@ class AgentServiceTest {
     TokenBudgetService tokenBudget;
 
     private static AgentProperties properties(Duration timeout) {
-        return new AgentProperties("prompt", 40, 4000, false, "", Map.of(), timeout);
+        return new AgentProperties("prompt", 40, 4000, false, "", Map.of(), Map.of(), timeout);
     }
 
     private static ChatResponse response(String text) {
@@ -140,14 +141,38 @@ class AgentServiceTest {
         verify(requestSpec).advisors(captor.capture());
         captor.getValue().accept(advisorSpec);
 
-        assertThat(params).containsEntry(ChatMemory.CONVERSATION_ID, "conv-42");
+        assertThat(params.get(ChatMemory.CONVERSATION_ID)).isInstanceOf(String.class).isNotEqualTo("conv-42");
+    }
+
+    @Test
+    void isole_une_meme_conversation_entre_deux_principaux() {
+        Map<String, Object> params = new HashMap<>();
+        given(advisorSpec.param(anyString(), any())).willAnswer(invocation -> {
+            params.put(invocation.getArgument(0), invocation.getArgument(1));
+            return advisorSpec;
+        });
+
+        AgentService service = agentService();
+        service.ask("alice", "conv-partagee", "ping");
+        ArgumentCaptor<Consumer<ChatClient.AdvisorSpec>> alice = ArgumentCaptor.forClass(Consumer.class);
+        verify(requestSpec).advisors(alice.capture());
+        alice.getValue().accept(advisorSpec);
+        Object aliceMemory = params.get(ChatMemory.CONVERSATION_ID);
+
+        params.clear();
+        service.ask("bob", "conv-partagee", "ping");
+        ArgumentCaptor<Consumer<ChatClient.AdvisorSpec>> calls = ArgumentCaptor.forClass(Consumer.class);
+        verify(requestSpec, org.mockito.Mockito.times(2)).advisors(calls.capture());
+        calls.getAllValues().getLast().accept(advisorSpec);
+
+        assertThat(params.get(ChatMemory.CONVERSATION_ID)).isNotEqualTo(aliceMemory);
     }
 
     @Test
     void purge_la_memoire_de_la_conversation() {
         service(Duration.ofSeconds(10)).clear("conv-1");
 
-        verify(chatMemory).clear("conv-1");
+        verify(chatMemory).clear(anyString());
     }
 
     @Test
@@ -232,8 +257,15 @@ class AgentServiceTest {
     @Test
     void borne_l_attente_d_un_appel_bloquant() {
         blockingCall();
+        AtomicBoolean interrupted = new AtomicBoolean();
         given(callSpec.chatResponse()).willAnswer(invocation -> {
-            Thread.sleep(5_000);
+            try {
+                Thread.sleep(5_000);
+            }
+            catch (InterruptedException ex) {
+                interrupted.set(true);
+                throw ex;
+            }
             return response("trop tard");
         });
 
@@ -241,9 +273,8 @@ class AgentServiceTest {
 
         assertThatThrownBy(() -> service.ask("conv-1", "ping"))
                 .isInstanceOf(AgentTimeoutException.class)
-                // L'échange continue en arrière-plan : sans cet identifiant, l'appelant ne sait
-                // pas dans quelle conversation la réponse tardive va atterrir.
                 .extracting(ex -> ((AgentTimeoutException) ex).conversationId()).isEqualTo("conv-1");
+        assertThat(interrupted).isTrue();
     }
 
     /**
@@ -275,9 +306,8 @@ class AgentServiceTest {
     }
 
     /**
-     * L'appel n'est pas interruptible : la réponse tardive est écrite en mémoire après le 504.
-     * Purger au moment du timeout la ferait revenir juste après — d'où l'attente de la fin de la
-     * tâche orpheline.
+     * Même interrompu, le worker est rejoint avant la purge finale : un fournisseur qui tarde à
+     * honorer l'interruption ne peut pas réécrire ensuite une conversation générée.
      */
     @Test
     void purge_une_conversation_generee_quand_l_appel_orphelin_se_termine() {

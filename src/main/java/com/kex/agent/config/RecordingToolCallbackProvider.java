@@ -5,6 +5,7 @@ package com.kex.agent.config;
 import java.util.Arrays;
 import java.util.function.Supplier;
 
+import com.kex.agent.agent.AgentExecution;
 import com.kex.agent.agent.ToolCallRecorder;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.springframework.ai.chat.model.ToolContext;
@@ -71,7 +72,10 @@ class RecordingToolCallbackProvider implements ToolCallbackProvider {
         public String call(String toolInput, ToolContext toolContext) {
             String name = getToolDefinition().name();
             return wrapUntrusted(name, ToolCallRecorder.timed(toolContext, name,
-                    () -> protect(() -> delegate.call(toolInput, toolContext))));
+                    () -> {
+                        AgentExecution.ensureActive(toolContext);
+                        return protect(() -> delegate.call(toolInput, toolContext));
+                    }));
         }
 
         private String protect(Supplier<String> call) {
@@ -85,7 +89,19 @@ class RecordingToolCallbackProvider implements ToolCallbackProvider {
          */
         private static String wrapUntrusted(String toolName, String content) {
             return "<tool_result tool=\"%s\" trust=\"untrusted\">\n%s\n</tool_result>"
-                    .formatted(toolName, content);
+                    .formatted(xml(toolName), xml(content));
+        }
+
+        /** Empêche une donnée externe de fermer la balise de confiance ou d'en injecter une autre. */
+        private static String xml(String value) {
+            if (value == null) {
+                return "";
+            }
+            return value.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace("\"", "&quot;")
+                    .replace("'", "&apos;");
         }
     }
 }

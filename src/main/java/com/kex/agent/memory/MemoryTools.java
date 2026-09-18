@@ -5,6 +5,7 @@ package com.kex.agent.memory;
 import java.util.List;
 
 import com.kex.agent.agent.AgentService;
+import com.kex.agent.agent.AgentExecution;
 import com.kex.agent.agent.ToolCallRecorder;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
@@ -34,6 +35,7 @@ public class MemoryTools {
                     + "souvenir que ce fait corrige. À renseigner dès que le nouveau fait contredit "
                     + "un souvenir existant, sans quoi les deux seront relus ensemble.") String replaces,
             ToolContext toolContext) {
+        AgentExecution.ensureActive(toolContext);
         return ToolCallRecorder.timed(toolContext, "remember_fact",
                 () -> memory.remember(content, replaces, conversationId(toolContext)));
     }

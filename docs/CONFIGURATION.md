@@ -50,6 +50,7 @@ arrive.
 | `log-interactions` | `false` | Journalise prompts et réponses — le niveau `DEBUG` que `SimpleLoggerAdvisor` exige est déjà posé, la propriété suffit. Debug uniquement : données sensibles |
 | `api-key` | *(vide)* | Bearer de l'API sous le principal anonyme `kex-agent-api`. Vide = API fermée (`503`) |
 | `api-keys.<nom>` | *(vide)* | Bearers nommés, en plus ou à la place d'`api-key` : chaque nom devient le principal authentifié, donc l'acteur inscrit à l'audit de supervision |
+| `api-key-roles.<nom>` | `CHAT` | Rôle d'un bearer nommé : `CHAT`, `OPERATOR` ou `ADMIN`. La clé historique `api-key` reste administrateur |
 | `request-timeout` | `120s` | Attente maximale d'un échange, tours d'outils compris |
 | `rate-limit.enabled` | `true` | Limite de débit sur `/api/agent/chat`, `/chat/stream` et l'invocation directe `POST /mcp/servers/{connection}/tools/{tool}` — l'introspection MCP en lecture reste libre |
 | `rate-limit.requests-per-minute` | `60` | Débit soutenu, **par principal authentifié** — un seau par nom d'`api-keys`, un seul avec `api-key` |

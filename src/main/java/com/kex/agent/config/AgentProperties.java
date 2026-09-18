@@ -63,6 +63,12 @@ public record AgentProperties(
         @DefaultValue Map<String, String> apiKeys,
 
         /**
+         * Rôle de chaque clé nommée. Une clé absente de cette map reste limitée au chat ; la clé
+         * historique {@code apiKey} conserve le rôle administrateur pour compatibilité.
+         */
+        @DefaultValue Map<String, ApiRole> apiKeyRoles,
+
+        /**
          * Attente maximale d'un échange complet, tours d'outils compris. Sans elle, 20 appels
          * d'outils à 60s chacun gardent une connexion HTTP ouverte vingt minutes.
          */

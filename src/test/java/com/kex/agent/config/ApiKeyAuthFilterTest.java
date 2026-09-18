@@ -5,6 +5,7 @@ package com.kex.agent.config;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
@@ -33,6 +34,8 @@ class ApiKeyAuthFilterTest {
                 request("Bearer jeton-ci"), new MockHttpServletResponse(), chain);
 
         assertThat(SecurityContextHolder.getContext().getAuthentication().getName()).isEqualTo("ci-pipeline");
+        assertThat(SecurityContextHolder.getContext().getAuthentication().getAuthorities())
+                .extracting("authority").containsExactly("ROLE_CHAT");
     }
 
     @Test
@@ -61,9 +64,10 @@ class ApiKeyAuthFilterTest {
     }
 
     private static ApiKeyAuthFilter filter(Map<String, String> tokens) {
-        Map<String, byte[]> bytes = new LinkedHashMap<>();
-        tokens.forEach((name, token) -> bytes.put(name, token.getBytes(StandardCharsets.UTF_8)));
-        return new ApiKeyAuthFilter(bytes);
+        Map<String, ApiKeyAuthFilter.Credential> credentials = new LinkedHashMap<>();
+        tokens.forEach((name, token) -> credentials.put(name, new ApiKeyAuthFilter.Credential(
+                token.getBytes(StandardCharsets.UTF_8), Set.of(ApiRole.CHAT))));
+        return new ApiKeyAuthFilter(credentials);
     }
 
     private static MockHttpServletRequest request(String authorization) {

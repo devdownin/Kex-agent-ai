@@ -72,13 +72,13 @@ class AgentController {
     }
 
     @PostMapping("/chat")
-    AgentAnswer chat(@Valid @RequestBody ChatRequest request) {
-        return agentService.ask(request.conversationId(), request.message());
+    AgentAnswer chat(@Valid @RequestBody ChatRequest request, Principal principal) {
+        return agentService.ask(actor(principal), request.conversationId(), request.message());
     }
 
     @PostMapping("/chat/structured")
-    AgentStructuredAnswer chatStructured(@Valid @RequestBody StructuredChatRequest request) {
-        return agentService.askStructured(request.conversationId(), request.message(), request.schema());
+    AgentStructuredAnswer chatStructured(@Valid @RequestBody StructuredChatRequest request, Principal principal) {
+        return agentService.askStructured(actor(principal), request.conversationId(), request.message(), request.schema());
     }
 
     /**
@@ -89,8 +89,8 @@ class AgentController {
      * indiscernable d'une réponse complète.
      */
     @PostMapping(path = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    Flux<ServerSentEvent<String>> stream(@Valid @RequestBody ChatRequest request) {
-        AgentStream stream = agentService.stream(request.conversationId(), request.message());
+    Flux<ServerSentEvent<String>> stream(@Valid @RequestBody ChatRequest request, Principal principal) {
+        AgentStream stream = agentService.stream(actor(principal), request.conversationId(), request.message());
         return Flux.concat(
                         Flux.just(event("conversation", stream.conversationId())),
                         stream.events().map(AgentController::event))
@@ -129,8 +129,8 @@ class AgentController {
 
     @DeleteMapping("/conversations/{conversationId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void clear(@PathVariable String conversationId) {
-        agentService.clear(conversationId);
+    void clear(@PathVariable String conversationId, Principal principal) {
+        agentService.clear(actor(principal), conversationId);
     }
 
     @GetMapping("/mcp/servers")

@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Map;
+import java.util.Set;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -33,10 +34,17 @@ class ApiKeyAuthFilter extends OncePerRequestFilter {
 
     private static final String PREFIX = "Bearer ";
 
-    private final Map<String, byte[]> tokensByName;
+    record Credential(byte[] token, Set<ApiRole> roles) {
+        Credential {
+            token = token.clone();
+            roles = Set.copyOf(roles);
+        }
+    }
 
-    ApiKeyAuthFilter(Map<String, byte[]> tokensByName) {
-        this.tokensByName = Map.copyOf(tokensByName);
+    private final Map<String, Credential> credentialsByName;
+
+    ApiKeyAuthFilter(Map<String, Credential> credentialsByName) {
+        this.credentialsByName = Map.copyOf(credentialsByName);
     }
 
     @Override
@@ -51,10 +59,12 @@ class ApiKeyAuthFilter extends OncePerRequestFilter {
     }
 
     private void authenticate(byte[] presented) {
-        for (Map.Entry<String, byte[]> candidate : tokensByName.entrySet()) {
-            if (MessageDigest.isEqual(candidate.getValue(), presented)) {
+        for (Map.Entry<String, Credential> candidate : credentialsByName.entrySet()) {
+            if (MessageDigest.isEqual(candidate.getValue().token(), presented)) {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                        candidate.getKey(), null, AuthorityUtils.NO_AUTHORITIES));
+                        candidate.getKey(), null, AuthorityUtils.createAuthorityList(candidate.getValue().roles().stream()
+                                .map(role -> "ROLE_" + role.name())
+                                .toArray(String[]::new))));
                 return;
             }
         }

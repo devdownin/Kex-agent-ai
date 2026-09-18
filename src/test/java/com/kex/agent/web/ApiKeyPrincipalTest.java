@@ -21,6 +21,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {"kex.agent.api-keys.ops-console=jeton-ops", "kex.agent.api-keys.ci-pipeline=jeton-ci",
+                "kex.agent.api-keys.chat-client=jeton-chat", "kex.agent.api-keys.admin=jeton-admin",
+                "kex.agent.api-key-roles.ops-console=OPERATOR", "kex.agent.api-key-roles.ci-pipeline=OPERATOR",
+                "kex.agent.api-key-roles.admin=ADMIN",
                 "kex.agent.rate-limit.enabled=false"})
 @ActiveProfiles("test")
 class ApiKeyPrincipalTest {
@@ -43,13 +46,28 @@ class ApiKeyPrincipalTest {
         assertThat(status("/api/agent/mcp/servers", "Bearer inconnu")).isEqualTo(401);
     }
 
+    @Test
+    void une_clef_de_chat_ne_peut_pas_piloter_la_supervision() throws Exception {
+        assertThat(postStatus("/api/agent/supervision/pause", "Bearer jeton-chat")).isEqualTo(403);
+    }
+
+    @Test
+    void un_operateur_ne_peut_pas_invoquer_directement_un_outil_mcp() throws Exception {
+        assertThat(postStatus("/api/agent/mcp/servers/inconnu/tools/x", "Bearer jeton-ops")).isEqualTo(403);
+        assertThat(postStatus("/api/agent/mcp/servers/inconnu/tools/x", "Bearer jeton-admin")).isEqualTo(404);
+    }
+
     private void post(String path, String authorization) throws IOException, InterruptedException {
+        postStatus(path, authorization);
+    }
+
+    private int postStatus(String path, String authorization) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .header("Authorization", authorization)
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
         try (HttpClient client = HttpClient.newHttpClient()) {
-            client.send(request, HttpResponse.BodyHandlers.discarding());
+            return client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
         }
     }
 

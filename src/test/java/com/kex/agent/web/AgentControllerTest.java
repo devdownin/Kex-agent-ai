@@ -63,7 +63,8 @@ class AgentControllerTest {
 
     @Test
     void repond_avec_le_contenu_de_l_agent() {
-        given(agentService.ask("conv-1", "bonjour")).willReturn(new AgentAnswer("conv-1", "salut", List.of(), null, "end_turn"));
+        given(agentService.ask("Anonyme", "conv-1", "bonjour"))
+                .willReturn(new AgentAnswer("conv-1", "salut", List.of(), null, "end_turn"));
 
         var response = mvc.post().uri("/api/agent/chat")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -220,7 +221,7 @@ class AgentControllerTest {
 
     @Test
     void le_flux_annonce_la_conversation_puis_les_tokens() throws Exception {
-        given(agentService.stream(null, "bonjour")).willReturn(new AgentStream("conv-9",
+        given(agentService.stream("Anonyme", null, "bonjour")).willReturn(new AgentStream("conv-9",
                 Flux.just(new AgentEvent.Token("sa"), new AgentEvent.ToolCall("echo", 12, false),
                         new AgentEvent.Token("lut"))));
 
@@ -240,7 +241,7 @@ class AgentControllerTest {
 
     @Test
     void le_flux_emet_un_evenement_error_au_lieu_de_se_taire() throws Exception {
-        given(agentService.stream("conv-1", "bonjour")).willReturn(new AgentStream("conv-1",
+        given(agentService.stream("Anonyme", "conv-1", "bonjour")).willReturn(new AgentStream("conv-1",
                 Flux.error(new AgentTimeoutException(Duration.ofSeconds(120), "conv-1"))));
 
         var response = mvc.post().uri("/api/agent/chat/stream")
@@ -262,7 +263,7 @@ class AgentControllerTest {
     /** La même panne ne se raconte pas de deux façons selon la route empruntée. */
     @Test
     void le_flux_dit_le_disjoncteur_ouvert_comme_le_chemin_bloquant() throws Exception {
-        given(agentService.stream("conv-1", "bonjour")).willReturn(new AgentStream("conv-1",
+        given(agentService.stream("Anonyme", "conv-1", "bonjour")).willReturn(new AgentStream("conv-1",
                 Flux.error(CallNotPermittedException.createCallNotPermittedException(
                         CircuitBreaker.ofDefaults("agent-model")))));
 
@@ -293,7 +294,7 @@ class AgentControllerTest {
 
     @Test
     void rend_une_sortie_structuree() {
-        given(agentService.askStructured("conv-1", "combien de topics ?", Map.of("type", "object")))
+        given(agentService.askStructured("Anonyme", "conv-1", "combien de topics ?", Map.of("type", "object")))
                 .willReturn(new AgentStructuredAnswer("conv-1", Map.of("total", 8), List.of(), null, "end_turn"));
 
         var response = mvc.post().uri("/api/agent/chat/structured")
@@ -376,7 +377,7 @@ class AgentControllerTest {
 
     @Test
     void expose_les_outils_utilises_par_une_reponse() {
-        given(agentService.ask("conv-1", "bonjour")).willReturn(new AgentAnswer("conv-1", "salut",
+        given(agentService.ask("Anonyme", "conv-1", "bonjour")).willReturn(new AgentAnswer("conv-1", "salut",
                 List.of(new AgentEvent.ToolCall("kex_list_topics", 42, false)), null, "end_turn"));
 
         var response = mvc.post().uri("/api/agent/chat")

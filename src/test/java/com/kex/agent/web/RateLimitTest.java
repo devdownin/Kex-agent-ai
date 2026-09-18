@@ -31,6 +31,7 @@ import static org.mockito.BDDMockito.given;
         // même seau par principal — réutiliser "secret" ou "jeton-ops" ici dépendrait de l'ordre
         // d'exécution des méthodes.
         "kex.agent.api-keys.mcp-console=jeton-mcp",
+        "kex.agent.api-key-roles.mcp-console=ADMIN",
         "kex.agent.rate-limit.enabled=true",
         // Débit lent : le seau ne doit pas se recharger pendant la rafale du test.
         "kex.agent.rate-limit.requests-per-minute=1",
@@ -47,7 +48,8 @@ class RateLimitTest {
 
     @Test
     void refuse_au_dela_de_la_pointe_autorisee() throws Exception {
-        given(agentService.ask(any(), anyString())).willReturn(new AgentAnswer("conv-1", "ok", java.util.List.of(), null, "end_turn"));
+        given(agentService.ask(anyString(), any(), anyString()))
+                .willReturn(new AgentAnswer("conv-1", "ok", java.util.List.of(), null, "end_turn"));
 
         List<Integer> codes = IntStream.range(0, 5).mapToObj(i -> chat("Bearer secret")).toList();
 
@@ -60,7 +62,8 @@ class RateLimitTest {
      */
     @Test
     void isole_le_debit_entre_deux_clefs_nommees() throws Exception {
-        given(agentService.ask(any(), anyString())).willReturn(new AgentAnswer("conv-1", "ok", java.util.List.of(), null, "end_turn"));
+        given(agentService.ask(anyString(), any(), anyString()))
+                .willReturn(new AgentAnswer("conv-1", "ok", java.util.List.of(), null, "end_turn"));
 
         List<Integer> ci = IntStream.range(0, 5).mapToObj(i -> chat("Bearer jeton-ci")).toList();
         assertThat(ci).startsWith(200, 200, 200).endsWith(429, 429);

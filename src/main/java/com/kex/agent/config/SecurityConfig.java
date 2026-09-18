@@ -5,6 +5,7 @@ package com.kex.agent.config;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,8 +30,8 @@ class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, AgentProperties properties,
                                             RateLimitProperties rateLimit) throws Exception {
-        Map<String, byte[]> tokensByName = tokensByName(properties);
-        if (tokensByName.isEmpty()) {
+        Map<String, ApiKeyAuthFilter.Credential> credentialsByName = credentialsByName(properties);
+        if (credentialsByName.isEmpty()) {
             log.warn("kex.agent.api-key est vide : /api/** répondra 503. Définir KEX_AGENT_API_KEY.");
         }
         http
@@ -59,11 +60,30 @@ class SecurityConfig {
                         // chemins sont énumérés plutôt que laissés à un joker de racine, pour
                         // qu'une future route servie ici n'hérite pas de l'ouverture.
                         .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/agent/chat", "/api/agent/chat/structured",
+                                "/api/agent/chat/stream").hasAnyRole("CHAT", "OPERATOR", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/agent/conversations/**")
+                                .hasAnyRole("CHAT", "OPERATOR", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/agent/supervision/cycles",
+                                "/api/agent/supervision/processes/*/maintenance",
+                                "/api/agent/supervision/decisions/*/approve",
+                                "/api/agent/supervision/decisions/*/reject",
+                                "/api/agent/supervision/pause", "/api/agent/supervision/resume",
+                                "/api/agent/supervision/notify/test").hasAnyRole("OPERATOR", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/agent/supervision/processes/*/maintenance")
+                                .hasAnyRole("OPERATOR", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/agent/mcp/servers/*/tools/*",
+                                "/api/agent/knowledge").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/agent/supervision/policy").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/agent/memory/*", "/api/agent/knowledge")
+                                .hasRole("ADMIN")
+                        .requestMatchers("/api/agent/**").hasAnyRole("OPERATOR", "ADMIN")
+                        .requestMatchers(EndpointRequest.toAnyEndpoint()).hasRole("ADMIN")
                         .anyRequest().authenticated())
-                .addFilterBefore(new ApiKeyAuthFilter(tokensByName),
+                .addFilterBefore(new ApiKeyAuthFilter(credentialsByName),
                         UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(handling -> handling
-                        .authenticationEntryPoint(new ApiKeyAuthenticationEntryPoint(!tokensByName.isEmpty())));
+                        .authenticationEntryPoint(new ApiKeyAuthenticationEntryPoint(!credentialsByName.isEmpty())));
 
         if (rateLimit.enabled()) {
             // Après l'autorisation : un appel non authentifié doit être refusé, pas consommer
@@ -78,16 +98,20 @@ class SecurityConfig {
      * ajoute des jetons nommés qui deviennent chacun un principal distinct. Un ordre stable évite
      * qu'un doublon de nom entre les deux sources dépende de l'ordre d'itération d'une Map.
      */
-    private static Map<String, byte[]> tokensByName(AgentProperties properties) {
-        Map<String, byte[]> tokens = new LinkedHashMap<>();
+    private static Map<String, ApiKeyAuthFilter.Credential> credentialsByName(AgentProperties properties) {
+        Map<String, ApiKeyAuthFilter.Credential> credentials = new LinkedHashMap<>();
         if (StringUtils.hasText(properties.apiKey())) {
-            tokens.put("kex-agent-api", properties.apiKey().getBytes(StandardCharsets.UTF_8));
+            credentials.put("kex-agent-api", credential(properties.apiKey(), ApiRole.ADMIN));
         }
         properties.apiKeys().forEach((name, token) -> {
             if (StringUtils.hasText(token)) {
-                tokens.put(name, token.getBytes(StandardCharsets.UTF_8));
+                credentials.put(name, credential(token, properties.apiKeyRoles().getOrDefault(name, ApiRole.CHAT)));
             }
         });
-        return tokens;
+        return credentials;
+    }
+
+    private static ApiKeyAuthFilter.Credential credential(String token, ApiRole role) {
+        return new ApiKeyAuthFilter.Credential(token.getBytes(StandardCharsets.UTF_8), Set.of(role));
     }
 }
