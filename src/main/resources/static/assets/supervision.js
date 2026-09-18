@@ -640,10 +640,15 @@ function approvalCard(decision) {
   card.append(definition('Pourquoi', el('span', null, decision.context || decision.objective || '—')));
   card.append(definition('Impact estimé', el('span', null, decision.estimatedImpact || '—')));
   card.append(confidenceBar(decision.confidence, decision.observations?.length));
-  if (decision.expiresAt) {
-    card.append(el('p', 'hint', `La demande expire ${ago(decision.expiresAt)}`));
-  }
+  card.append(decisionActions(decision));
+  return card;
+}
 
+function decisionActions(decision) {
+  const wrap = el('div', 'decision-actions');
+  if (decision.expiresAt) {
+    wrap.append(el('p', 'hint', `La demande expire ${ago(decision.expiresAt)}`));
+  }
   const actions = el('div', 'row-end');
   const reject = el('button', 'ghost danger', 'Refuser');
   reject.type = 'button';
@@ -654,8 +659,8 @@ function approvalCard(decision) {
   approve.setAttribute('aria-label', `Approuver : ${decision.action}`);
   approve.addEventListener('click', () => busy(approve, () => resolveDecision(decision, true)));
   actions.append(reject, approve);
-  card.append(actions);
-  return card;
+  wrap.append(actions);
+  return wrap;
 }
 
 async function resolveDecision(decision, approve) {
@@ -704,7 +709,7 @@ export async function decisions() {
 }
 
 function decisionRow(decision) {
-  const card = el('article', 'card');
+  const card = el('article', 'card decision-card');
   card.dataset.state = DECISION_STATES[decision.status] || 'UNKNOWN';
   const head = el('header');
   // Seule une décision encore en attente se sélectionne : les autres sont déjà tranchées, cocher
@@ -719,16 +724,31 @@ function decisionRow(decision) {
     head.append(checkbox);
   }
   head.append(el('span', 'time', clockTime(decision.decidedAt)));
-  head.append(el('h3', null, decision.action));
+  head.append(el('h3', null, decision.objective || decision.action));
   head.append(stateTag(DECISION_STATES[decision.status], DECISION_LABELS[decision.status] || decision.status));
   card.append(head);
-  card.append(el('p', 'muted', `${decision.processName} · confiance ${percent(decision.confidence)}`));
-  const open = el('button', 'ghost', 'Détail');
+  const meta = el('div', 'decision-meta');
+  meta.append(el('span', null, decision.processName));
+  meta.append(el('span', null, CAPABILITIES[decision.capability] || decision.capability));
+  meta.append(el('span', null, `Confiance ${percent(decision.confidence)}`));
+  card.append(meta);
+  const preview = el('div', 'decision-preview');
+  preview.append(decisionFact('Diagnostic', decision.context || 'Aucun diagnostic détaillé fourni.'));
+  preview.append(decisionFact('Action proposée', decision.action));
+  preview.append(decisionFact('Impact estimé', decision.estimatedImpact || 'Non renseigné'));
+  card.append(preview);
+  const open = el('button', 'ghost', 'Comprendre la décision');
   open.type = 'button';
-  open.setAttribute('aria-label', `Détail : ${decision.action}`);
+  open.setAttribute('aria-label', `Comprendre la décision : ${decision.action}`);
   open.addEventListener('click', () => openDecision(decision.id));
   card.append(open);
   return card;
+}
+
+function decisionFact(label, value) {
+  const fact = el('div', 'decision-fact');
+  fact.append(el('span', 'label', label), el('span', null, value));
+  return fact;
 }
 
 function updateBulkBar() {
@@ -780,39 +800,81 @@ async function openDecision(id) {
   openDrawer('Décision', loading());
   try {
     const decision = await api(`${BASE}/decisions/${encodeURIComponent(id)}`);
-    const body = el('div');
-    body.append(el('code', 'muted', `Décision ${decision.id}`));
-    body.append(definition('Objectif', el('span', null, decision.objective || '—')));
-    body.append(definition('Contexte', el('span', null, decision.context || '—')));
-    body.append(definition('Décision', el('span', null, decision.action)));
-    body.append(definition('Capacité', el('span', null, CAPABILITIES[decision.capability] || decision.capability)));
-    body.append(definition('Impact estimé', el('span', null, decision.estimatedImpact || '—')));
-    body.append(confidenceBar(decision.confidence, decision.observations?.length));
+    const body = el('div', 'decision-detail');
+    const hero = el('section', 'decision-hero');
+    const meta = el('div', 'decision-meta');
+    meta.append(stateTag(DECISION_STATES[decision.status], DECISION_LABELS[decision.status] || decision.status));
+    meta.append(el('span', null, decision.processName));
+    meta.append(el('span', null, stamp(decision.decidedAt)));
+    hero.append(meta, el('h3', null, decision.objective || decision.action));
+    if (decision.context) hero.append(el('p', null, decision.context));
+    body.append(hero);
 
+    const evidence = decisionSection('Ce que l’agent a observé');
     if (decision.observations?.length) {
-      body.append(el('h3', 'drawer-sub', 'Observations'));
       const list = el('ul', 'observations');
       decision.observations.forEach((observation) => {
         const item = el('li');
         item.append(el('span', 'label', observation.label), el('span', 'value', observation.value));
         list.append(item);
       });
-      body.append(list);
+      evidence.append(list);
+    } else {
+      evidence.append(el('p', 'hint', 'Aucune mesure structurée n’accompagne cette décision.'));
+    }
+    body.append(evidence);
+
+    const proposed = decisionSection('Action proposée');
+    proposed.append(el('p', 'decision-action-text', decision.action));
+    proposed.append(definition('Capacité', el('span', null,
+      CAPABILITIES[decision.capability] || decision.capability)));
+    body.append(proposed);
+
+    const impact = decisionSection('Impact et risques');
+    impact.append(el('p', null, decision.estimatedImpact || 'Aucun impact estimé n’a été fourni.'));
+    impact.append(el('p', 'hint', 'Les risques spécifiques ne sont pas structurés séparément par '
+      + 'le contrat actuel ; ils ne sont donc pas déduits par l’interface.'));
+    body.append(impact);
+
+    const confidence = decisionSection('Niveau de confiance');
+    confidence.append(confidenceBar(decision.confidence, decision.observations?.length));
+    body.append(confidence);
+
+    if (decision.status === 'PENDING_APPROVAL') {
+      const consequence = el('section', 'decision-consequence');
+      consequence.append(el('strong', null, 'Conséquence de l’approbation'));
+      consequence.append(el('p', null,
+        'L’action est transmise immédiatement à l’outil MCP lié à cette capacité.'));
+      consequence.append(decisionActions(decision));
+      body.append(consequence);
     }
 
-    body.append(el('h3', 'drawer-sub', 'Résultat'));
-    body.append(definition('État', stateTag(DECISION_STATES[decision.status],
-      DECISION_LABELS[decision.status] || decision.status)));
-    body.append(definition('Détail', el('span', null, decision.result || '—')));
-    body.append(definition('Politique', el('span', null, decision.policyVersion)));
-    body.append(definition('Corrélation', el('code', null, decision.correlationId)));
-    body.append(definition('Tranchée', el('span', null, stamp(decision.resolvedAt))));
+    if (decision.status !== 'PENDING_APPROVAL') {
+      const result = decisionSection('Résultat');
+      result.append(el('p', null, decision.result || 'Aucun détail fourni.'));
+      if (decision.resolvedAt) result.append(el('p', 'hint', `Tranchée ${stamp(decision.resolvedAt)}`));
+      body.append(result);
+    }
 
-    if (decision.status === 'PENDING_APPROVAL') body.append(approvalCard(decision));
+    const technical = el('details', 'decision-technical');
+    technical.append(el('summary', null, 'Données techniques'));
+    const technicalBody = el('div');
+    technicalBody.append(definition('Identifiant', el('code', null, decision.id)));
+    technicalBody.append(definition('Politique', el('span', null, decision.policyVersion)));
+    technicalBody.append(definition('Corrélation', el('code', null, decision.correlationId)));
+    technicalBody.append(definition('Cycle', el('code', null, decision.cycleId)));
+    technical.append(technicalBody);
+    body.append(technical);
     openDrawer(decision.action, body);
   } catch (error) {
     openDrawer('Décision', errorState(error, () => openDecision(id)));
   }
+}
+
+function decisionSection(title) {
+  const section = el('section', 'decision-section');
+  section.append(el('h3', null, title));
+  return section;
 }
 
 /* ── Alertes ───────────────────────────────────────────────────────────── */
