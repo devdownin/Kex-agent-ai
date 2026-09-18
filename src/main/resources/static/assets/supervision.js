@@ -92,6 +92,7 @@ export async function overview() {
   host.replaceChildren(loading('Analyse des processus…'));
   try {
     const data = await refresh();
+    renderOverviewHero(data);
     host.replaceChildren(kpis(data));
     $('#incident-banner').replaceChildren(...incidentBanners(data.incidents));
     $('#overview-processes').replaceChildren(processTable(data.processes, openProcess, 8, COMPACT));
@@ -110,19 +111,35 @@ export async function overview() {
   }
 }
 
+function renderOverviewHero(data) {
+  const agent = agentState(data.agent?.state);
+  const total = data.processesMonitored || 0;
+  const healthy = data.processesOk || 0;
+  const attention = (data.processesWarning || 0) + (data.processesError || 0);
+  const summary = total
+    ? `${healthy} processus opérationnel${healthy === 1 ? '' : 's'} sur ${total}`
+      + (attention ? ` · ${attention} nécessite${attention > 1 ? 'nt' : ''} votre attention` : ' · aucune intervention requise')
+    : 'Aucun processus n’est encore déclaré pour la supervision.';
+  $('#overview-summary').textContent = summary;
+  const health = $('#overview-health');
+  health.dataset.state = agent.tag;
+  health.querySelector('.hero-health-mark').textContent = agent.mark;
+  $('#overview-health-label').textContent = agent.label;
+}
+
 function kpis(data) {
   const wrap = el('div', 'kpis-grid');
   wrap.append(
-    kpi('Processus surveillés', data.processesMonitored, subtitle(data), '#/processes'),
+    kpi('Processus surveillés', data.processesMonitored, subtitle(data), '#/processes', null, 'processes'),
     kpi('Dernière analyse', clockTime(data.agent.lastCycleAt),
       data.agent.staleSince ? 'Données potentiellement obsolètes' : ago(data.agent.lastCycleAt) || 'Jamais',
-      '#/audit', data.agent.staleSince ? 'WARNING' : null),
+      '#/audit', data.agent.staleSince ? 'WARNING' : null, 'cycle'),
     kpi('Alertes actives', data.anomaliesDetected,
       data.anomaliesDetected ? 'Encore vues au dernier cycle' : 'Aucune au dernier cycle',
-      '#/alerts', data.anomaliesDetected ? 'WARNING' : null),
+      '#/alerts', data.anomaliesDetected ? 'WARNING' : null, 'alerts'),
     kpi('Actions en attente', data.pendingApprovals,
       data.pendingApprovals ? 'À valider' : 'Rien à valider',
-      '#/decisions', data.pendingApprovals ? 'PENDING' : null),
+      '#/decisions', data.pendingApprovals ? 'PENDING' : null, 'decisions'),
   );
   return wrap;
 }
@@ -133,10 +150,12 @@ const subtitle = (data) =>
     data.processesUnknown && `${data.processesUnknown} inconnu`]
     .filter(Boolean).join(' · ') || 'Aucun déclaré';
 
-function kpi(label, value, detail, href, state) {
+function kpi(label, value, detail, href, state, kind) {
   // Chaque KPI conduit au détail qu'il annonce : un compteur sans issue oblige à chercher.
   const card = el('a', 'kpi');
   card.href = href;
+  card.dataset.kind = kind;
+  card.append(kpiIcon(kind));
   const valueLine = el('span', 'kpi-value-line');
   // Même règle que les pastilles : la couleur de la bordure ne porte jamais le sens seule,
   // le glyphe l'accompagne jusque dans le chiffre.
@@ -147,6 +166,26 @@ function kpi(label, value, detail, href, state) {
   valueLine.append(el('strong', 'kpi-value', value));
   card.append(el('span', 'kpi-label', label), valueLine, el('span', 'kpi-detail', detail));
   return card;
+}
+
+function kpiIcon(kind) {
+  const paths = {
+    processes: ['M5 6.5h14v11H5z', 'M5 10.2h14M5 13.8h14'],
+    cycle: ['M12 7v5l3 2', 'M19 12a7 7 0 1 1-2.05-4.95'],
+    alerts: ['M12 4 21 19H3Z', 'M12 9.5v4M12 16.5h.01'],
+    decisions: ['M12 4 20 12 12 20 4 12Z', 'm9.5 12 1.6 1.6 3.4-3.7'],
+  };
+  const wrap = el('span', 'kpi-icon');
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const value of paths[kind] || []) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', value);
+    svg.append(path);
+  }
+  wrap.append(svg);
+  return wrap;
 }
 
 /**

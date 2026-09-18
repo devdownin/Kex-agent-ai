@@ -8,17 +8,23 @@
    data-theme sur <html> et doit gagner dans les deux sens, d'où la garde :not([data-theme]). */
 :root {
   color-scheme: light;
-  --bg: #f3f4f7;
+  --bg: #f4f6f8;
   --surface: #ffffff;
-  --surface-2: #eef0f4;
-  --line: #d8dce4;
-  --line-soft: #e6e9ef;
-  --ink: #15171c;
-  --ink-2: #4b515d;
-  --ink-3: #79808e;
-  --accent: #0f766e;
+  --surface-2: #eef2f5;
+  --line: #d9e0e7;
+  --line-soft: #e8edf2;
+  --ink: #162033;
+  --ink-2: #526071;
+  --ink-3: #7a8797;
+  --accent: #0d9488;
   --accent-ink: #ffffff;
-  --accent-soft: #d8efec;
+  --accent-soft: #d9f3ef;
+  --agent: #4f46e5;
+  --agent-soft: #e9e8ff;
+  --rail-bg: #111827;
+  --rail-surface: #1f2937;
+  --rail-ink: #f8fafc;
+  --rail-muted: #94a3b8;
   --ok: #15803d;
   --ok-soft: #ddf3e4;
   --warn: #b45309;
@@ -32,8 +38,8 @@
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --rail: 232px;
-  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 8px 24px rgb(16 24 40 / 5%);
-  --shadow-hover: 0 6px 18px rgb(16 24 40 / 10%);
+  --shadow: 0 1px 2px rgb(15 23 42 / 4%), 0 10px 30px rgb(15 23 42 / 5%);
+  --shadow-hover: 0 10px 26px rgb(15 23 42 / 10%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -50,6 +56,12 @@
     --accent: #2dd4bf;
     --accent-ink: #06231f;
     --accent-soft: #11312d;
+    --agent: #a5b4fc;
+    --agent-soft: #242441;
+    --rail-bg: #090d16;
+    --rail-surface: #171e2b;
+    --rail-ink: #f8fafc;
+    --rail-muted: #8894a7;
     --ok: #4ade80;
     --ok-soft: #10281a;
     --warn: #fbbf24;
@@ -76,6 +88,12 @@
   --accent: #2dd4bf;
   --accent-ink: #06231f;
   --accent-soft: #11312d;
+  --agent: #a5b4fc;
+  --agent-soft: #242441;
+  --rail-bg: #090d16;
+  --rail-surface: #171e2b;
+  --rail-ink: #f8fafc;
+  --rail-muted: #8894a7;
   --ok: #4ade80;
   --ok-soft: #10281a;
   --warn: #fbbf24;
@@ -93,7 +111,9 @@ html, body { height: 100%; }
 
 body {
   margin: 0;
-  background: var(--bg);
+  background:
+    radial-gradient(circle at 84% 0, color-mix(in srgb, var(--agent) 7%, transparent), transparent 28rem),
+    var(--bg);
   color: var(--ink);
   font: 14px/1.5 var(--sans);
   -webkit-font-smoothing: antialiased;
@@ -137,8 +157,10 @@ body {
   flex-direction: column;
   gap: 20px;
   padding: calc(18px + env(safe-area-inset-top, 0px)) 14px calc(14px + env(safe-area-inset-bottom, 0px));
-  background: var(--surface);
-  border-right: 1px solid var(--line);
+  background: var(--rail-bg);
+  border-right: 0;
+  color: var(--rail-ink);
+  box-shadow: 8px 0 28px rgb(15 23 42 / 8%);
 }
 
 .brand { display: flex; align-items: center; gap: 10px; }
@@ -148,13 +170,14 @@ body {
   width: 32px; height: 32px;
   border-radius: 8px;
   object-fit: cover;
+  box-shadow: 0 6px 18px rgb(13 148 136 / 28%);
 }
 
 .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
-.brand-text small { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.brand-text small { color: var(--rail-muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 
 .rail nav { display: flex; flex-direction: column; gap: 2px; }
-.rail nav hr { border: 0; border-top: 1px solid var(--line-soft); margin: 12px 6px; }
+.rail nav hr { border: 0; border-top: 1px solid rgb(255 255 255 / 10%); margin: 12px 6px; }
 
 /* Un court libellé au-dessus de chaque groupe (déjà séparé par un <hr>) : la nav se scanne par
    intention — vue d'ensemble, agent, système — plutôt qu'en une seule liste plate de huit liens. */
@@ -163,7 +186,7 @@ body {
   margin: 2px 0 2px;
   font-size: 10px;
   font-weight: 700;
-  color: var(--ink-3);
+  color: var(--rail-muted);
   letter-spacing: .08em;
   text-transform: uppercase;
 }
@@ -174,13 +197,14 @@ body {
   gap: 10px;
   padding: 9px 12px;
   border-radius: var(--radius-sm);
-  color: var(--ink-2);
+  color: #cbd5e1;
   text-decoration: none;
   font-weight: 600;
   transition: background-color .12s ease;
 }
-.nav-item:hover { background: var(--surface-2); color: var(--ink); }
-.nav-item[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+.nav-item:hover { background: rgb(255 255 255 / 7%); color: var(--rail-ink); }
+.nav-item[aria-current="page"] { background: rgb(45 212 191 / 14%); color: #5eead4; }
+.nav-item[aria-current="page"] .nav-ico { filter: drop-shadow(0 0 5px rgb(45 212 191 / 38%)); }
 .nav-ico { flex: none; width: 18px; height: 18px; opacity: .85; }
 
 .badge {
@@ -196,6 +220,7 @@ body {
 
 .rail-foot { margin-top: auto; display: flex; gap: 8px; }
 .rail-foot > * { flex: 1; text-align: center; text-decoration: none; }
+.rail-foot .ghost { color: #cbd5e1; background: var(--rail-surface); border-color: rgb(255 255 255 / 10%); }
 
 .topbar {
   grid-area: topbar;
@@ -206,7 +231,8 @@ body {
   flex-wrap: wrap;
   padding: 12px 20px;
   padding-top: calc(12px + env(safe-area-inset-top, 0px));
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line);
 }
 
@@ -227,6 +253,39 @@ body {
 }
 
 .topbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.action-menu { position: relative; }
+.action-menu > summary { list-style: none; user-select: none; }
+.action-menu > summary::-webkit-details-marker { display: none; }
+.action-menu > summary::after { content: "⌄"; margin-left: 7px; color: var(--ink-3); }
+.action-menu[open] > summary { border-color: var(--accent); }
+.action-menu-popover {
+  position: absolute;
+  z-index: 25;
+  top: calc(100% + 8px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 210px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: 0 18px 45px rgb(15 23 42 / 18%);
+}
+.menu-action {
+  display: block;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  text-decoration: none;
+  font-weight: 600;
+}
+.menu-action:hover { background: var(--surface-2); }
 
 .status {
   display: inline-flex;
@@ -257,18 +316,70 @@ main {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 20px;
-  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  padding: 24px;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
 }
 main:focus { outline: none; }
 .view { display: flex; flex-direction: column; gap: 16px; }
+
+/* Une entrée plus éditoriale donne le contexte avant les chiffres sans transformer la console
+   en page marketing. Le dégradé porte l'identité de l'agent, jamais un état métier. */
+.overview-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 148px;
+  padding: 28px 30px;
+  border-radius: calc(var(--radius) + 4px);
+  color: #f8fafc;
+  background: linear-gradient(125deg, #111827 0%, #172554 58%, #164e63 100%);
+  box-shadow: 0 18px 40px rgb(15 23 42 / 16%);
+}
+.overview-hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 280px;
+  height: 280px;
+  right: -70px;
+  top: -125px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(45 212 191 / 34%), transparent 68%);
+}
+.hero-copy { max-width: 720px; }
+.hero-eyebrow { color: #5eead4; font-size: 11px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.overview-hero h1 { margin: 8px 0 5px; font-size: clamp(22px, 2.5vw, 32px); line-height: 1.15; letter-spacing: -.025em; }
+.overview-hero p { margin: 0; color: #cbd5e1; font-size: 14px; }
+.hero-health {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 170px;
+  padding: 13px 16px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: var(--radius);
+  background: rgb(255 255 255 / 8%);
+  backdrop-filter: blur(8px);
+}
+.hero-health-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: rgb(255 255 255 / 10%); font: 700 15px var(--mono); }
+.hero-health span:last-child { display: flex; flex-direction: column; }
+.hero-health small { color: #94a3b8; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+.hero-health strong { font-size: 12px; letter-spacing: .03em; }
+.hero-health[data-state="OK"] .hero-health-mark { color: #86efac; background: rgb(34 197 94 / 18%); }
+.hero-health[data-state="WARNING"] .hero-health-mark { color: #fde68a; background: rgb(245 158 11 / 18%); }
+.hero-health[data-state="ERROR"] .hero-health-mark { color: #fca5a5; background: rgb(239 68 68 / 18%); }
+.hero-health[data-state="RUNNING"] .hero-health-mark { color: #5eead4; background: rgb(20 184 166 / 18%); }
 
 /* ── Primitives ─────────────────────────────────────────────────────── */
 
 .panel {
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line);
+  border: 1px solid var(--line-soft);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 20px;
@@ -277,7 +388,7 @@ main:focus { outline: none; }
 /* Même accent que les KPI et les cartes, posé sur le panneau lui-même quand il porte une
    attente réelle : sans lui, « Demande une décision » a le même aspect plat qu'un panneau
    qui n'a rien à signaler, alors que l'un demande une action et l'autre non. */
-.panel[data-state="PENDING"] { border-left-color: var(--pending); }
+.panel[data-state="PENDING"] { border-left: 3px solid var(--pending); }
 
 .panel-head {
   display: flex;
@@ -452,13 +563,14 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
 .kpis-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
 
 .kpi {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "icon label" "icon value" "icon detail";
+  column-gap: 14px;
+  row-gap: 3px;
+  padding: 18px;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line);
+  border: 1px solid var(--line-soft);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   text-decoration: none;
@@ -470,20 +582,35 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
    la seule couleur pleine, qui friserait l'alerte pour un simple avertissement. Un KPI sans état
    déclaré (`OK`, ou rien à signaler) garde le fond neutre : lui inventer une teinte affirmerait
    une mesure qui n'a pas été prise. */
-.kpi[data-state="WARNING"] { border-left-color: var(--warn); background: var(--warn-soft); }
-.kpi[data-state="ERROR"] { border-left-color: var(--danger); background: var(--danger-soft); }
-.kpi[data-state="PENDING"] { border-left-color: var(--pending); background: var(--pending-soft); }
-.kpi-label { font-size: 11px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+.kpi[data-state="WARNING"] { border-color: color-mix(in srgb, var(--warn) 28%, var(--line)); background: var(--warn-soft); }
+.kpi[data-state="ERROR"] { border-color: color-mix(in srgb, var(--danger) 28%, var(--line)); background: var(--danger-soft); }
+.kpi[data-state="PENDING"] { border-color: color-mix(in srgb, var(--pending) 28%, var(--line)); background: var(--pending-soft); }
+.kpi-icon {
+  grid-area: icon;
+  align-self: start;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.kpi-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.kpi[data-kind="cycle"] .kpi-icon { color: var(--agent); background: var(--agent-soft); }
+.kpi[data-kind="alerts"] .kpi-icon { color: var(--warn); background: var(--warn-soft); }
+.kpi[data-kind="decisions"] .kpi-icon { color: var(--pending); background: var(--pending-soft); }
+.kpi-label { grid-area: label; font-size: 11px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
 .kpi[data-state="WARNING"] .kpi-label { color: var(--warn); }
 .kpi[data-state="ERROR"] .kpi-label { color: var(--danger); }
 .kpi[data-state="PENDING"] .kpi-label { color: var(--pending); }
-.kpi-value-line { display: flex; align-items: baseline; gap: 6px; }
-.kpi-value { font: 700 30px/1.1 var(--mono); letter-spacing: -.02em; }
+.kpi-value-line { grid-area: value; display: flex; align-items: baseline; gap: 6px; }
+.kpi-value { font: 750 28px/1.1 var(--sans); font-variant-numeric: tabular-nums; letter-spacing: -.025em; }
 .kpi-mark { font-family: var(--mono); font-size: 15px; }
 .kpi[data-state="WARNING"] .kpi-mark { color: var(--warn); }
 .kpi[data-state="ERROR"] .kpi-mark { color: var(--danger); }
 .kpi[data-state="PENDING"] .kpi-mark { color: var(--pending); }
-.kpi-detail { font-size: 12px; color: var(--ink-3); }
+.kpi-detail { grid-area: detail; font-size: 12px; color: var(--ink-3); }
 
 /* ── Tableaux ────────────────────────────────────────────────────────── */
 
@@ -898,6 +1025,9 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   .topbar { position: sticky; top: 0; z-index: 20; }
   .topbar-right { width: 100%; }
   .topbar-right .status { order: -1; }
+  .topbar-right .primary { margin-left: auto; }
+  .overview-hero { align-items: flex-start; flex-direction: column; padding: 24px; }
+  .hero-health { min-width: 0; }
   main { padding: 14px; }
   .drawer { width: 100vw; border-left: 0; }
   .definition { flex-direction: column; gap: 2px; }
@@ -916,6 +1046,12 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
 }
 
 @media (max-width: 520px) {
+  .topbar-right { align-items: stretch; }
+  .topbar-right .status { width: 100%; justify-content: center; }
+  .topbar-right .primary { margin-left: 0; flex: 1; }
+  .action-menu-popover { position: fixed; top: auto; right: 14px; left: 14px; }
+  .overview-hero { min-height: 0; padding: 21px; }
+  .overview-hero h1 { font-size: 23px; }
   .composer { grid-template-columns: minmax(0, 1fr); }
   .composer-side { justify-content: space-between; }
   .kpi-value { font-size: 22px; }

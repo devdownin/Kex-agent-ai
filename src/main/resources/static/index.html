@@ -68,7 +68,6 @@
 
     <div class="rail-foot">
       <button type="button" class="ghost" id="theme-toggle" aria-pressed="false">Thème</button>
-      <a class="ghost" href="swagger-ui.html" target="_blank" rel="noopener">API</a>
     </div>
   </aside>
 
@@ -85,11 +84,17 @@
         <span class="status-mark" aria-hidden="true">●</span>
         <span id="agent-status-label">ÉTAT INCONNU</span>
       </span>
-      <button type="button" class="ghost" id="toggle-pause">Pause agent</button>
       <button type="button" class="primary" id="run-cycle">Exécuter maintenant</button>
-      <button type="button" class="ghost" id="open-credentials">
-        <span id="credential-label">Jeton absent</span>
-      </button>
+      <details class="action-menu">
+        <summary class="ghost" aria-label="Ouvrir les actions secondaires">Actions</summary>
+        <div class="action-menu-popover">
+          <button type="button" class="menu-action" id="toggle-pause">Pause agent</button>
+          <button type="button" class="menu-action" id="open-credentials">
+            <span id="credential-label">Jeton absent</span>
+          </button>
+          <a class="menu-action" href="swagger-ui.html" target="_blank" rel="noopener">Documentation API</a>
+        </div>
+      </details>
     </div>
   </header>
 
@@ -110,6 +115,20 @@
 
     <!-- ══ Vue d'ensemble ══ -->
     <section class="view" id="view-overview" hidden>
+      <section class="overview-hero" aria-labelledby="overview-title">
+        <div class="hero-copy">
+          <span class="hero-eyebrow">Centre de supervision</span>
+          <h1 id="overview-title">Kex veille sur vos processus</h1>
+          <p id="overview-summary">Connectez l’agent pour obtenir une synthèse opérationnelle.</p>
+        </div>
+        <div class="hero-health" id="overview-health" data-state="UNKNOWN">
+          <span class="hero-health-mark" aria-hidden="true">?</span>
+          <span>
+            <small>État global</small>
+            <strong id="overview-health-label">Non mesuré</strong>
+          </span>
+        </div>
+      </section>
       <div class="kpis" id="kpis"></div>
       <div id="incident-banner"></div>
       <div class="split">

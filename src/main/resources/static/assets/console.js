@@ -286,6 +286,9 @@ chat.wire(openCredentials);
 $('#run-cycle').addEventListener('click', runCycle);
 $('#toggle-pause').addEventListener('click', togglePause);
 $('#open-credentials').addEventListener('click', openCredentials);
+document.querySelector('.action-menu').addEventListener('click', (event) => {
+  if (event.target.closest('.menu-action')) event.currentTarget.removeAttribute('open');
+});
 
 $('#credentials-form').addEventListener('submit', () => {
   credentials.set($('#api-key').value.trim());
