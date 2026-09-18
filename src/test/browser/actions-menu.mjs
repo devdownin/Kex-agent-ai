@@ -25,7 +25,7 @@ try {
       await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
 
       const actions = page.locator('.action-menu-popover .menu-action');
-      assert.equal(await actions.count(), 3);
+      assert.equal(await actions.count(), 4);
       for (const action of await actions.all()) {
         // isVisible() seul ne détecte pas un élément recouvert par un autre bloc.
         const unobscured = await action.evaluate((node) => {
@@ -38,7 +38,7 @@ try {
       }
       await page.locator('.action-menu > summary').click();
       assert.equal(await page.locator('.action-menu').getAttribute('open'), null);
-      console.log(`✓ ${width}px : les trois actions sont accessibles et le menu se referme`);
+      console.log(`✓ ${width}px : les quatre actions sont accessibles et le menu se referme`);
     } finally {
       await page.close();
     }

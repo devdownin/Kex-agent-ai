@@ -41,6 +41,9 @@
       <a class="nav-item" href="#/agent" data-view="agent">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="8" width="11" height="10" rx="2.5"/><circle cx="10" cy="13" r=".6" fill="currentColor" stroke="none"/><circle cx="14" cy="13" r=".6" fill="currentColor" stroke="none"/><path d="M12 8V5.5"/><circle cx="12" cy="4.3" r="1.1"/><path d="M4 12.5h2.5M17.5 12.5H20"/></svg>
         Agent</a>
+      <a class="nav-item" href="#/chat" data-view="chat">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 5.5h15v11h-9.2L6 20v-3.5H4.5Z"/></svg>
+        Conversation</a>
       <a class="nav-item" href="#/processes" data-view="processes">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 10.5h16M4 15h16"/></svg>
         Processus</a>
@@ -65,9 +68,6 @@
       <a class="nav-item" href="#/tools" data-view="tools">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 12h16M12 4v16"/></svg>
         Technique</a>
-      <a class="nav-item" href="#/chat" data-view="chat">
-        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 5.5h15v11h-9.2L6 20v-3.5H4.5Z"/></svg>
-        Conversation</a>
     </nav>
 
     <div class="rail-foot">
@@ -95,6 +95,9 @@
           <button type="button" class="menu-action" id="toggle-pause">Pause agent</button>
           <button type="button" class="menu-action" id="open-credentials">
             <span id="credential-label">Jeton absent</span>
+          </button>
+          <button type="button" class="menu-action" id="density-toggle" aria-pressed="false">
+            <span id="density-label">Affichage confortable</span>
           </button>
           <a class="menu-action" href="swagger-ui.html" target="_blank" rel="noopener">Documentation API</a>
         </div>

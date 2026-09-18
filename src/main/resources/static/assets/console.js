@@ -198,6 +198,34 @@ themeToggle.addEventListener('click', () => {
   syncThemeButton();
 });
 
+/* ── Densité ──────────────────────────────────────────────────────────── */
+
+const densityToggle = $('#density-toggle');
+try {
+  const stored = localStorage.getItem('kex.agent.density');
+  if (stored === 'compact') document.documentElement.dataset.density = stored;
+} catch {
+  /* sans stockage, l'affichage confortable reste la valeur par défaut */
+}
+
+function syncDensityButton() {
+  const compact = document.documentElement.dataset.density === 'compact';
+  densityToggle.setAttribute('aria-pressed', String(compact));
+  $('#density-label').textContent = compact ? 'Affichage compact' : 'Affichage confortable';
+}
+
+densityToggle.addEventListener('click', () => {
+  const compact = densityToggle.getAttribute('aria-pressed') !== 'true';
+  if (compact) document.documentElement.dataset.density = 'compact';
+  else delete document.documentElement.dataset.density;
+  try {
+    localStorage.setItem('kex.agent.density', compact ? 'compact' : 'comfortable');
+  } catch {
+    /* le choix reste valable pour la durée de la page */
+  }
+  syncDensityButton();
+});
+
 /* ── Rafraîchissement ──────────────────────────────────────────────────── */
 
 // Sans lui, un onglet laissé ouvert affiche des données de dix minutes sous un libellé qui dit
@@ -328,6 +356,7 @@ $('#forget-key').addEventListener('click', () => {
 addEventListener('hashchange', route);
 
 syncThemeButton();
+syncDensityButton();
 syncConnectivity();
 $('#credential-label').textContent = credentials.get() ? 'Jeton actif' : 'Jeton absent';
 route();

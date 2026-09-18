@@ -1157,6 +1157,39 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
    confirmation dans la pile de notifications. */
 .toast.error::before { content: "✕ "; font-family: var(--mono); font-weight: 600; color: var(--danger); }
 
+/* ── Densité ──────────────────────────────────────────────────────────── */
+
+/* Le mode compact vise les grands écrans d'exploitation. Les tailles de boutons et la navigation
+   mobile restent inchangées afin de conserver des cibles tactiles confortables. */
+@media (min-width: 861px) {
+  :root[data-density="compact"] { --rail: 216px; }
+  :root[data-density="compact"] .rail { gap: 14px; padding: 14px 11px; }
+  :root[data-density="compact"] .nav-item { padding: 7px 10px; }
+  :root[data-density="compact"] .rail nav hr { margin: 8px 6px; }
+  :root[data-density="compact"] .topbar { padding: 8px 16px; }
+  :root[data-density="compact"] main { gap: 12px; padding: 16px; padding-bottom: 16px; }
+  :root[data-density="compact"] .view { gap: 12px; }
+  :root[data-density="compact"] .overview-hero { min-height: 118px; padding: 20px 24px; }
+  :root[data-density="compact"] .overview-hero h1 { font-size: 24px; }
+  :root[data-density="compact"] .kpis-grid,
+  :root[data-density="compact"] .split,
+  :root[data-density="compact"] .attention-grid { gap: 10px; }
+  :root[data-density="compact"] .kpi { padding: 13px 15px; }
+  :root[data-density="compact"] .kpi-icon { width: 36px; height: 36px; }
+  :root[data-density="compact"] .kpi-value { font-size: 24px; }
+  :root[data-density="compact"] .panel { padding: 14px; }
+  :root[data-density="compact"] .panel-head { margin-bottom: 10px; }
+  :root[data-density="compact"] .card { gap: 6px; padding: 12px; }
+  :root[data-density="compact"] table.grid th { padding: 7px 10px; }
+  :root[data-density="compact"] table.grid td { padding: 7px 10px; }
+  :root[data-density="compact"] .attention-group { padding: 12px; }
+  :root[data-density="compact"] .attention-list { gap: 7px; }
+  :root[data-density="compact"] .decision-preview { gap: 7px; }
+  :root[data-density="compact"] .decision-fact { padding: 8px 10px; }
+  :root[data-density="compact"] .timeline li { padding-top: 5px; padding-bottom: 5px; }
+  :root[data-density="compact"] fieldset { padding: 12px; }
+}
+
 /* ── Tablette ────────────────────────────────────────────────────────── */
 
 @media (max-width: 1100px) {
