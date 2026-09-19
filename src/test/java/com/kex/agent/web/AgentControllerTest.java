@@ -94,7 +94,7 @@ class AgentControllerTest {
     void purge_une_conversation() {
         assertThat(mvc.delete().uri("/api/agent/conversations/conv-1")).hasStatus(204);
 
-        verify(agentService).clear("conv-1");
+        verify(agentService).clear("Anonyme", "conv-1");
     }
 
     @Test
@@ -122,7 +122,8 @@ class AgentControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"connection":"runbook","url":"https://mcp.example.net",
-                         "endpoint":"/mcp","bearerToken":"secret"} """);
+                         "endpoint":"/mcp","bearerToken":"secret"} """)
+                .exchange();
 
         assertThat(response).hasStatus(201);
         assertThat(response).bodyJson().extractingPath("$.connection").isEqualTo("runbook");
@@ -160,7 +161,7 @@ class AgentControllerTest {
                 Set.of(), Map.of(), true, null);
         given(toolCatalog.setEnabled("runbook", true)).willReturn(view);
 
-        var response = mvc.post().uri("/api/agent/mcp/servers/runbook/enabled?enabled=true");
+        var response = mvc.post().uri("/api/agent/mcp/servers/runbook/enabled?enabled=true").exchange();
 
         assertThat(response).hasStatusOk();
         assertThat(response).bodyJson().extractingPath("$.enabled").isEqualTo(true);
@@ -354,7 +355,7 @@ class AgentControllerTest {
     @Test
     void retourne_504_avec_l_identifiant_de_conversation_quand_l_appel_depasse_le_plafond() {
         willThrow(new AgentTimeoutException(Duration.ofSeconds(120), "conv-9"))
-                .given(agentService).ask("conv-1", "bonjour");
+                .given(agentService).ask("Anonyme", "conv-1", "bonjour");
 
         var response = mvc.post().uri("/api/agent/chat")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -392,7 +393,7 @@ class AgentControllerTest {
     @Test
     void retourne_502_quand_le_modele_ne_respecte_pas_le_schema() {
         willThrow(new StructuredOutputException(new IllegalStateException("pas du json")))
-                .given(agentService).askStructured(null, "bonjour", Map.of("type", "object"));
+                .given(agentService).askStructured("Anonyme", null, "bonjour", Map.of("type", "object"));
 
         assertThat(mvc.post().uri("/api/agent/chat/structured")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -410,7 +411,7 @@ class AgentControllerTest {
     @Test
     void retourne_502_et_non_401_quand_le_fournisseur_anthropic_refuse_la_cle() {
         willThrow(new AnthropicException("invalid x-api-key"))
-                .given(agentService).ask("conv-1", "bonjour");
+                .given(agentService).ask("Anonyme", "conv-1", "bonjour");
 
         assertThat(mvc.post().uri("/api/agent/chat")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -423,7 +424,7 @@ class AgentControllerTest {
     @Test
     void retourne_502_et_non_401_quand_la_passerelle_openai_refuse_la_cle() {
         willThrow(new OpenAIException("invalid api key"))
-                .given(agentService).askStructured("conv-1", "bonjour", Map.of("type", "object"));
+                .given(agentService).askStructured("Anonyme", "conv-1", "bonjour", Map.of("type", "object"));
 
         assertThat(mvc.post().uri("/api/agent/chat/structured")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -439,7 +440,7 @@ class AgentControllerTest {
     @Test
     void retourne_503_quand_le_disjoncteur_du_modele_est_ouvert() {
         willThrow(CallNotPermittedException.createCallNotPermittedException(CircuitBreaker.ofDefaults("agent-model")))
-                .given(agentService).ask("conv-1", "bonjour");
+                .given(agentService).ask("Anonyme", "conv-1", "bonjour");
 
         assertThat(mvc.post().uri("/api/agent/chat")
                 .contentType(MediaType.APPLICATION_JSON)

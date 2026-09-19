@@ -28,11 +28,24 @@ import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.mcp.ToolContextToMcpMetaConverter;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
 class AgentConfig {
+
+    /**
+     * Spring Boot 4 auto-configure Jackson 3 ({@code tools.jackson}), tandis que le SDK MCP
+     * s'appuie encore sur Jackson 2 ({@code com.fasterxml.jackson}). Ce mapper dédié conserve les
+     * modules découverts sur le classpath, notamment celui de {@link java.time.Instant} utilisé
+     * par l'historique de santé persistant.
+     */
+    @Bean
+    @ConditionalOnMissingBean(ObjectMapper.class)
+    ObjectMapper mcpObjectMapper() {
+        return new ObjectMapper().findAndRegisterModules();
+    }
 
     @Bean
     McpSyncHttpClientRequestCustomizer mcpBearerTokenCustomizer(McpAuthProperties properties) {
