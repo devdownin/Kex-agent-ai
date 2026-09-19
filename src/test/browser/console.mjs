@@ -292,6 +292,10 @@ await check('la carte d’un serveur MCP unique occupe toute la largeur du panne
 });
 
 await check('le diagnostic MCP distingue ajout, suppression et changement de schéma', async () => {
+  const serversUrl = /\/api\/agent\/mcp\/servers$/;
+  const runtimeServersUrl = /\/api\/agent\/mcp\/runtime-servers$/;
+  const diagnosticsUrl = /\/api\/agent\/mcp\/servers\/runtime-demo\/diagnostics$/;
+  let diagnosticRequested = false;
   const server = {
     connection: 'runtime-demo', serverName: 'demo-mcp', version: '1.0.0',
     protocolVersion: '2025-11-25', initialized: true,
@@ -302,32 +306,37 @@ await check('le diagnostic MCP distingue ajout, suppression et changement de sch
     command: null, args: [], headerNames: [], environmentNames: [], enabled: true, allowedTools: [],
     capabilityMappings: {}, hasBearerToken: false, secretRotatedAt: null,
   };
-  await page.route('**/api/agent/mcp/servers', (route) => route.fulfill({
+  await page.route(serversUrl, (route) => route.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify([server]),
   }));
-  await page.route('**/api/agent/mcp/runtime-servers', (route) => route.fulfill({
+  await page.route(runtimeServersUrl, (route) => route.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify([runtime]),
   }));
-  await page.route('**/api/agent/mcp/servers/runtime-demo/diagnostics', (route) => route.fulfill({
-    status: 200, contentType: 'application/json', body: JSON.stringify({
-      connection: 'runtime-demo', transport: 'HTTP', enabled: true, connected: true, toolCount: 1,
-      toolDiff: { comparedAt: new Date().toISOString(), added: ['search_v2'], removed: ['search'],
-        schemaChanged: ['summarize'] },
-      conflicts: [], capabilityMappings: {}, healthHistory: [],
-    }),
-  }));
+  await page.route(diagnosticsUrl, (route) => {
+    diagnosticRequested = true;
+    return route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({
+        connection: 'runtime-demo', transport: 'HTTP', enabled: true, connected: true, toolCount: 1,
+        toolDiff: { comparedAt: new Date().toISOString(), added: ['search_v2'], removed: ['search'],
+          schemaChanged: ['summarize'] },
+        conflicts: [], capabilityMappings: {}, healthHistory: [],
+      }),
+    });
+  });
 
   await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
   await page.waitForSelector('#servers .server');
-  await page.getByRole('button', { name: 'Diagnostic' }).click();
+  await page.locator('#servers .server').getByRole('button', { name: 'Diagnostic', exact: true }).click();
+  await page.waitForSelector('.mcp-diagnostics');
+  assert.ok(diagnosticRequested, 'la requête de diagnostic doit viser le serveur sélectionné');
   const diff = await page.$eval('.mcp-tool-diff', (node) => node.innerText);
   assert.match(diff, /Ajoutés · 1[\s\S]*search_v2/);
   assert.match(diff, /Supprimés · 1[\s\S]*search/);
   assert.match(diff, /Schéma modifié · 1[\s\S]*summarize/);
 
-  await page.unroute('**/api/agent/mcp/servers');
-  await page.unroute('**/api/agent/mcp/runtime-servers');
-  await page.unroute('**/api/agent/mcp/servers/runtime-demo/diagnostics');
+  await page.unroute(serversUrl);
+  await page.unroute(runtimeServersUrl);
+  await page.unroute(diagnosticsUrl);
 });
 
 await check('un tableau déjà rendu ne clignote pas au sondage de fond', async () => {
