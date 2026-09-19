@@ -1,0 +1,211 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
+package com.kex.agent.mcp.server;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kex.agent.supervision.SupervisionService;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * Stateless MCP Streamable HTTP with JSON responses. No sessions, SSE, sampling or human-approval
+ * tools are advertised. Every request authenticates independently using the existing API keys.
+ */
+@RestController
+@RequestMapping("/api/agent/mcp-server")
+@ConditionalOnProperty(prefix = "kex.mcp.server", name = "enabled", havingValue = "true")
+public class KexMcpServerController {
+
+    private static final String PROTOCOL = "2025-06-18";
+    private static final Set<String> PROTOCOLS = Set.of(PROTOCOL, "2025-03-26");
+    private static final int MAX_REQUEST_LENGTH = 65_536;
+    private static final Map<String, Object> EMPTY_SCHEMA = Map.of(
+            "type", "object", "properties", Map.of(), "additionalProperties", false);
+    private static final List<Map<String, Object>> TOOLS = List.of(
+            tool("kex_status", "Read Kex supervision status.", true),
+            tool("kex_pending_decisions", "Read decisions awaiting human review. Cannot approve them.", true),
+            tool("kex_run_cycle", "Run a supervision cycle under the existing policy, confidence thresholds, "
+                    + "capability permissions and shared execution lock. May execute policy-authorized actions.", false),
+            tool("kex_pause", "Pause subsequent agent actions; the change is audited.", false));
+
+    private final ObjectMapper mapper;
+    private final ObjectProvider<SupervisionService> supervision;
+    private final KexMcpServerProperties properties;
+
+    public KexMcpServerController(ObjectMapper mapper, ObjectProvider<SupervisionService> supervision,
+                                  KexMcpServerProperties properties) {
+        this.mapper = mapper;
+        this.supervision = supervision;
+        this.properties = properties;
+    }
+
+    @GetMapping
+    ResponseEntity<Object> stream(@RequestHeader HttpHeaders headers, Authentication authentication) {
+        ResponseEntity<Object> rejected = authorize(headers, authentication);
+        return rejected != null ? rejected : ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .allow(HttpMethod.POST).build();
+    }
+
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<Object> receive(@RequestBody String body, @RequestHeader HttpHeaders headers,
+                                    Authentication authentication) {
+        ResponseEntity<Object> rejected = authorize(headers, authentication);
+        if (rejected != null) return rejected;
+        if (!accepts(headers, MediaType.APPLICATION_JSON) || !accepts(headers, MediaType.TEXT_EVENT_STREAM)) {
+            return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build();
+        }
+        if (body.length() > MAX_REQUEST_LENGTH) return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).build();
+
+        JsonNode request;
+        try {
+            request = mapper.readTree(body);
+        }
+        catch (JsonProcessingException ex) {
+            return error(null, -32700, "Parse error");
+        }
+        if (request == null || !request.isObject() || !"2.0".equals(request.path("jsonrpc").asText())
+                || (request.has("id") && !request.get("id").isTextual() && !request.get("id").isIntegralNumber())) {
+            return error(null, -32600, "Invalid Request");
+        }
+        Object id = request.has("id") ? mapper.convertValue(request.get("id"), Object.class) : null;
+        String method = request.path("method").asText("");
+        String version = headers.getFirst("MCP-Protocol-Version");
+        if (version != null && !PROTOCOLS.contains(version)) {
+            return ResponseEntity.badRequest().body(envelope(id, "error",
+                    Map.of("code", -32600, "message", "Unsupported MCP protocol version")));
+        }
+        // A server that does not issue client requests has no response to process. Acknowledge
+        // valid client responses and notifications without issuing a JSON-RPC response of our own.
+        if (!request.has("method")) {
+            if (id != null && (request.has("result") ^ request.has("error"))) {
+                return ResponseEntity.accepted().build();
+            }
+            return error(id, -32600, "Invalid Request");
+        }
+        if (!request.get("method").isTextual() || method.isBlank()
+                || (request.has("params") && !request.get("params").isObject())) {
+            return error(id, -32600, "Invalid Request");
+        }
+        if (id == null) {
+            // Notifications MUST NOT execute request methods, even when a caller omits the id.
+            return method.startsWith("notifications/") ? ResponseEntity.accepted().build()
+                    : ResponseEntity.badRequest().build();
+        }
+        JsonNode params = request.path("params");
+        return switch (method) {
+            case "initialize" -> initialize(id, params);
+            case "ping" -> result(id, Map.of());
+            case "tools/list" -> params.has("cursor")
+                    ? error(id, -32602, "This server does not use pagination cursors")
+                    : result(id, Map.of("tools", TOOLS));
+            case "tools/call" -> call(id, params, authentication.getName());
+            default -> error(id, -32601, "Method not found");
+        };
+    }
+
+    private ResponseEntity<Object> initialize(Object id, JsonNode params) {
+        if (!params.path("protocolVersion").isTextual() || !params.path("capabilities").isObject()
+                || !params.path("clientInfo").path("name").isTextual()
+                || !params.path("clientInfo").path("version").isTextual()) {
+            return error(id, -32602, "Invalid initialization parameters");
+        }
+        String requested = params.path("protocolVersion").asText();
+        return result(id, Map.of("protocolVersion", PROTOCOLS.contains(requested) ? requested : PROTOCOL,
+                "serverInfo", Map.of("name", "kex-agent-ai", "version", "1.0.0"),
+                "capabilities", Map.of("tools", Map.of("listChanged", false)),
+                "instructions", "Human approvals stay in Kex's operator console. "
+                        + "This endpoint never approves decisions or changes governance."));
+    }
+
+    private ResponseEntity<Object> call(Object id, JsonNode params, String actor) {
+        String name = params.path("name").asText("");
+        if (TOOLS.stream().noneMatch(tool -> tool.get("name").equals(name))) {
+            return error(id, -32602, "Unknown tool");
+        }
+        if (params.has("arguments") && (!params.get("arguments").isObject() || !params.get("arguments").isEmpty())) {
+            return error(id, -32602, "This tool accepts an empty arguments object");
+        }
+        SupervisionService service = supervision.getIfAvailable();
+        if (service == null) return toolResult(id, "Supervision is disabled", true);
+        try {
+            Object value = switch (name) {
+                case "kex_status" -> service.status();
+                case "kex_pending_decisions" -> service.pending();
+                case "kex_run_cycle" -> service.runCycle(actor);
+                case "kex_pause" -> service.pause(actor);
+                default -> throw new IllegalStateException("Unreachable tool");
+            };
+            return toolResult(id, mapper.writeValueAsString(value), false);
+        }
+        catch (RuntimeException | JsonProcessingException ex) {
+            // Provider errors can contain URLs or credentials. They belong in existing audited
+            // services, not in a response passed to another model.
+            return toolResult(id, "Kex could not complete the operation. Inspect the operator console.", true);
+        }
+    }
+
+    private ResponseEntity<Object> authorize(HttpHeaders headers, Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        if (authentication.getAuthorities().stream().noneMatch(authority ->
+                Set.of("ROLE_OPERATOR", "ROLE_ADMIN").contains(authority.getAuthority()))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        List<String> origins = headers.get(HttpHeaders.ORIGIN);
+        if (origins != null && (origins.size() != 1 || !properties.allowedOrigins().contains(origins.get(0)))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        return null;
+    }
+
+    private static boolean accepts(HttpHeaders headers, MediaType type) {
+        return headers.getAccept().stream().anyMatch(value -> value.getQualityValue() > 0 && value.includes(type));
+    }
+
+    private static Map<String, Object> tool(String name, String description, boolean readOnly) {
+        return Map.of("name", name, "description", description, "inputSchema", EMPTY_SCHEMA,
+                "annotations", Map.of("readOnlyHint", readOnly, "destructiveHint", !readOnly,
+                        "idempotentHint", readOnly, "openWorldHint", !readOnly));
+    }
+
+    private static ResponseEntity<Object> toolResult(Object id, String text, boolean error) {
+        return result(id, Map.of("content", List.of(Map.of("type", "text", "text", text)), "isError", error));
+    }
+
+    private static ResponseEntity<Object> result(Object id, Object value) {
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(envelope(id, "result", value));
+    }
+
+    private static ResponseEntity<Object> error(Object id, int code, String message) {
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON)
+                .body(envelope(id, "error", Map.of("code", code, "message", message)));
+    }
+
+    private static Map<String, Object> envelope(Object id, String key, Object value) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("jsonrpc", "2.0");
+        response.put("id", id);
+        response.put(key, value);
+        return response;
+    }
+}

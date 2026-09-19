@@ -1,0 +1,19 @@
+# Serve a tool-capable model with vLLM before starting this profile.
+spring:
+  ai:
+    model:
+      chat: openai
+      embedding: none
+    openai:
+      base-url: ${VLLM_BASE_URL:http://localhost:8000/v1}
+      api-key: ${VLLM_API_KEY:kex-local}
+      chat:
+        options:
+          model: ${VLLM_MODEL:Qwen/Qwen3-8B}
+          max-retries: 0
+kex:
+  models:
+    local-provider: vllm
+  agent:
+    knowledge:
+      enabled: false

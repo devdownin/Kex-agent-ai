@@ -83,6 +83,9 @@ class AgentController {
 
     @PostMapping("/chat")
     AgentAnswer chat(@Valid @RequestBody ChatRequest request, Principal principal) {
+        if (request.task() != null) {
+            return agentService.askForTask(actor(principal), request.conversationId(), request.message(), request.task());
+        }
         return agentService.ask(actor(principal), request.conversationId(), request.message());
     }
 
@@ -100,7 +103,9 @@ class AgentController {
      */
     @PostMapping(path = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     Flux<ServerSentEvent<String>> stream(@Valid @RequestBody ChatRequest request, Principal principal) {
-        AgentStream stream = agentService.stream(actor(principal), request.conversationId(), request.message());
+        AgentStream stream = request.task() == null
+                ? agentService.stream(actor(principal), request.conversationId(), request.message())
+                : agentService.streamForTask(actor(principal), request.conversationId(), request.message(), request.task());
         return Flux.concat(
                         Flux.just(event("conversation", stream.conversationId())),
                         stream.events().map(AgentController::event))

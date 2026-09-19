@@ -21,6 +21,10 @@
 
 ---
 
+## A governed general-purpose agent
+
+Kex uses Kafka as a strong reference integration, but the agent is general-purpose: MCP can connect files, GitHub, SQL and business systems. Its differentiator is governance—capability autonomy, confidence thresholds, human approvals and an audit trail. Long-term summaries, reviewed reusable skills, Slack/Teams/e-mail notifications, scheduled read-only tasks, local Ollama/vLLM routing, a Kex MCP server, curated MCP installation and optional per-task stdio container isolation are documented in [Governed general-purpose agent](docs/GOVERNED-GENERAL-AGENT.md).
+
 ## ✨ Why Kex Agent AI?
 
 Most AI agent demos generate plausible answers from model memory.

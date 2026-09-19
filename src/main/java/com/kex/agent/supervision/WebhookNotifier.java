@@ -6,6 +6,8 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 
+import com.kex.agent.channels.ChannelNotifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -31,14 +33,27 @@ class WebhookNotifier {
 
     private final RestClient restClient;
     private final NotifyProperties properties;
+    private ChannelNotifier channels;
 
     WebhookNotifier(RestClient.Builder builder, NotifyProperties properties) {
         this.restClient = builder.requestFactory(requestFactory()).build();
         this.properties = properties;
     }
 
+    @Autowired(required = false)
+    void channels(ChannelNotifier channels) {
+        this.channels = channels;
+    }
+
+    Optional<String> approval(Decision decision) {
+        return channels == null ? Optional.empty() : channels.approval(decision);
+    }
+
     /** @return vide en cas de succès, le motif d'échec sinon — jamais une exception */
     Optional<String> send(String subject, String body) {
+        if (channels != null) {
+            return channels.send(subject, body);
+        }
         if (!StringUtils.hasText(properties.webhookUrl())) {
             return Optional.of("Aucun webhook de notification configuré (kex.agent.supervision.notify.webhook-url)");
         }

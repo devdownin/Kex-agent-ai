@@ -529,6 +529,7 @@ class SupervisionServiceTest {
             assertThat(alert.firstSeenAt()).isBefore(alert.lastSeenAt());
             // L'alerte porte l'action à prendre : la chercher ailleurs coûterait un aller-retour.
             assertThat(alert.pendingDecisionId()).isNotNull();
+            assertThat(alert.decisionIds()).contains(alert.pendingDecisionId());
         });
     }
 
@@ -838,6 +839,8 @@ class SupervisionServiceTest {
             assertThat(incident.processCount()).isEqualTo(3);
             assertThat(incident.processNames())
                     .containsExactlyInAnyOrder("Order Integration", "Billing", "Shipping");
+            assertThat(incident.alertIds()).containsExactlyInAnyOrder(
+                    "order-integration::Retard", "billing::Retard", "shipping::Retard");
         });
     }
 

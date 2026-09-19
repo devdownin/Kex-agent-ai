@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -178,7 +179,10 @@ public class SupervisionService {
                     key -> new ArrayList<>()).add(anomaly);
         }
 
-        List<Decision> waiting = pending();
+        List<Decision> allDecisions = decisions();
+        List<Decision> waiting = allDecisions.stream()
+                .filter(decision -> decision.status() == DecisionStatus.PENDING_APPROVAL)
+                .toList();
         List<Alert> alerts = new ArrayList<>();
         for (Map.Entry<String, List<Anomaly>> entry : grouped.entrySet()) {
             List<Anomaly> occurrences = entry.getValue();
@@ -192,10 +196,14 @@ public class SupervisionService {
                     .map(Decision::id)
                     .findFirst()
                     .orElse(null);
+            List<String> decisionIds = allDecisions.stream()
+                    .filter(decision -> occurrences.stream().anyMatch(a -> a.id().equals(decision.anomalyId())))
+                    .map(Decision::id)
+                    .toList();
             alerts.add(new Alert(entry.getKey(), latest.processId(), latest.processName(), latest.title(),
                     worst(occurrences), occurrences.size(), occurrences.getLast().detectedAt(),
                     latest.detectedAt(), latest.observations(), latest.analysis(), latest.probableCause(),
-                    latest.confidence(), latest.recommendation(), latest.capability(), pendingId,
+                    latest.confidence(), latest.recommendation(), latest.capability(), pendingId, decisionIds,
                     latest.knowledgeReference()));
         }
 
@@ -447,7 +455,10 @@ public class SupervisionService {
                 : ProcessState.WARNING;
         return List.of(new CorrelatedIncident(last.id(), last.finishedAt(), byProcess.size(),
                 byProcess.values().stream().map(Anomaly::processName).toList(), severity,
-                byProcess.values().stream().map(Anomaly::title).toList()));
+                byProcess.values().stream().map(Anomaly::title).toList(),
+                byProcess.values().stream()
+                        .map(anomaly -> Alert.identity(anomaly.processId(), anomaly.title()))
+                        .toList()));
     }
 
     /* ── Historique par processus ──────────────────────────────────────── */
@@ -715,6 +726,13 @@ public class SupervisionService {
         store(decision);
         record(AGENT, decision.action(), decision.processId(), decision.id(), anomaly.title(),
                 describe(decision));
+        if (decision.status() == DecisionStatus.PENDING_APPROVAL) {
+            Optional<String> deliveryFailure = notifier.approval(decision);
+            if (deliveryFailure.isPresent()) {
+                record(AGENT, "Notification de validation", decision.processId(), decision.id(),
+                        "Livraison aux canaux configurés", deliveryFailure.get());
+            }
+        }
         return decision;
     }
 

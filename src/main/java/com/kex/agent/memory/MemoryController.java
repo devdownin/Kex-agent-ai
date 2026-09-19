@@ -42,19 +42,21 @@ class MemoryController {
     }
 
     @GetMapping
-    List<MemoryView> list() {
-        return memory.list();
+    List<MemoryView> list(Principal principal) {
+        return principal == null ? memory.list() : memory.list(principal.getName());
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void forget(@PathVariable String id, Principal principal) {
-        MemoryEntry removed = memory.forget(id);
-        supervision.auditAction(actor(principal), "Souvenir supprimé", removed.content());
+        String actor = principal == null ? "Anonyme" : principal.getName();
+        MemoryEntry removed = principal == null ? memory.forget(id) : memory.forget(actor, id);
+        supervision.auditAction(actor, "Souvenir supprimé", removed.content());
     }
 
     private static String actor(Principal principal) {
-        return principal == null ? "Anonyme" : principal.getName();
+        if (principal == null) throw new org.springframework.web.server.ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        return principal.getName();
     }
 
     @ExceptionHandler(UnknownMemoryException.class)

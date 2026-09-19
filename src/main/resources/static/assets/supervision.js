@@ -242,7 +242,8 @@ function incidentCandidates(data) {
   const alerts = data.alerts || [];
   const claimed = new Set();
   const correlated = (data.incidents || []).map((incident) => {
-    const related = alerts.filter((alert) => incident.processNames.includes(alert.processName));
+    const alertIds = new Set(incident.alertIds || []);
+    const related = alerts.filter((alert) => alertIds.has(alert.id));
     related.forEach((alert) => claimed.add(alert.id));
     return {
       id: `cycle:${incident.cycleId}`,
@@ -279,7 +280,7 @@ function incidentDetail(incident, data, decisionHistory) {
   copy.append(el('h2', null, incident.title));
   copy.append(el('p', 'muted', `${incident.processNames.join(', ')} · détecté ${ago(incident.detectedAt) || 'à l’instant'}`));
   head.append(copy, contextChatButton('Interroger l’agent', `Incident · ${incident.title}`,
-    incidentContext(incident), 'primary'));
+    incidentContext(incident), incident.id, 'primary'));
   detail.append(head, el('p', 'incident-hypothesis', incident.hypothesis));
 
   const symptoms = incidentSection('Symptômes actifs', 'Ce que le dernier état confirme');
@@ -362,9 +363,11 @@ function evidenceNode(alert, processes) {
 }
 
 function relatedDecisions(incident, decisions) {
-  const processIds = new Set(incident.alerts.map((alert) => alert.processId));
-  return (decisions || []).filter((decision) =>
-    (incident.cycleId && decision.cycleId === incident.cycleId) || processIds.has(decision.processId))
+  const decisionIds = new Set(incident.alerts.flatMap((alert) => [
+    ...(alert.decisionIds || []),
+    alert.pendingDecisionId,
+  ].filter(Boolean)));
+  return (decisions || []).filter((decision) => decisionIds.has(decision.id))
     .sort((left, right) => String(right.decidedAt).localeCompare(String(left.decidedAt)));
 }
 
@@ -700,7 +703,7 @@ function openProcess(row) {
     if (!$('#view-processes').hidden) processes();
   });
   const ask = contextChatButton('Interroger l’agent', `Processus · ${row.name}`,
-    processContext(row, alerts), 'primary');
+    processContext(row, alerts), `process:${row.processId}`, 'primary');
   const copy = el('button', 'ghost', 'Copier l’identifiant');
   copy.type = 'button';
   copy.classList.add('technical-id');
@@ -823,20 +826,20 @@ function alertCard(alert) {
   open.addEventListener('click', () => openAnomaly(alert));
   const actions = el('div', 'card-actions');
   const ask = contextChatButton('Demander à l’agent', `Alerte · ${alert.title}`,
-    alertContext(alert));
+    alertContext(alert), `alert:${alert.id}`);
   actions.append(open, ask);
   card.append(actions);
   return card;
 }
 
-function contextChatButton(label, title, context, className = 'ghost') {
+function contextChatButton(label, title, context, contextId, className = 'ghost') {
   const ask = el('button', className, label);
   ask.type = 'button';
   ask.addEventListener('click', () => {
     // Un détail ouvert est modal ; le fermer évite de laisser une seconde couche marquée modale
     // derrière le chat, qui lui reste volontairement non modal à côté du cockpit.
     if (drawerOpen()) dismissDrawer();
-    dispatchEvent(new CustomEvent('kex:context-chat', { detail: { title, context } }));
+    dispatchEvent(new CustomEvent('kex:context-chat', { detail: { title, context, contextId } }));
   });
   return ask;
 }
@@ -874,7 +877,7 @@ function openAnomaly(anomaly) {
   body.append(el('p', 'muted', anomaly.processName));
   const actions = el('div', 'context-actions');
   const ask = contextChatButton('Poursuivre avec l’agent', `Alerte · ${anomaly.title}`,
-    alertContext(anomaly), 'primary');
+    alertContext(anomaly), `alert:${anomaly.id}`, 'primary');
   actions.append(ask);
   body.append(actions);
   if (anomaly.occurrences) body.append(recurrence(anomaly));

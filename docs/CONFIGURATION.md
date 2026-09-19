@@ -449,3 +449,12 @@ docker run --rm -p 8081:8081 \
 
 Construction multi-étapes sur JDK 25, via le wrapper Maven, avec cache BuildKit du dépôt local.
 L'exécution se fait sous l'UID `10001`, pas root.
+
+## Extensions governed by default
+
+- `kex.agent.channels.enabled=false` by default. When enabled, configure only HTTPS Slack/Teams webhooks or SMTP recipients; approval links always return to the authenticated console.
+- `kex.agent.automation.enabled=false` by default and requires `shared-memory`. Set `kex.agent.automation.read-only-tools` explicitly; an empty allowlist refuses startup rather than allowing arbitrary MCP tools.
+- `kex.models.enabled=false` by default. Routes are operator-owned under `kex.models.routes`; `local-only=true` rejects hosted endpoints. `application-ollama.yml` and `application-vllm.yml` provide local OpenAI-compatible profiles.
+- `kex.mcp.server.enabled=false` by default. If enabled, set explicit `kex.mcp.server.allowed-origins` values.
+- `kex.mcp.runtime.isolation.enabled=false` by default. Enabling it requires a pinned image for each allowed stdio command; there is no host fallback.
+- Automatic procedures are stored as pending skills and need an authenticated operator review before they enter durable context.

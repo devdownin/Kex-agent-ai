@@ -36,7 +36,7 @@ class InMemoryMemoryRepository implements MemoryRepository {
             // Un souvenir déjà remplacé ne se remarque pas : le premier remplaçant garde la chaîne.
             if (!marked && entry.id().equals(id) && entry.supersededBy() == null) {
                 rebuilt.add(new MemoryEntry(entry.id(), entry.content(), entry.conversationId(),
-                        entry.createdAt(), bySupersedingId));
+                        entry.createdAt(), bySupersedingId, entry.owner()));
                 marked = true;
             }
             else {

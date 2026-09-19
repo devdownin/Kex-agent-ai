@@ -13,5 +13,8 @@ import java.time.Instant;
  *                     quoi, vaut mieux que de le voir disparaître sans trace.
  */
 record MemoryEntry(String id, String content, String conversationId, Instant createdAt,
-                   String supersededBy) {
+                   String supersededBy, String owner) {
+    MemoryEntry(String id, String content, String conversationId, Instant createdAt, String supersededBy) {
+        this(id, content, conversationId, createdAt, supersededBy, "kex-internal");
+    }
 }

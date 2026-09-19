@@ -30,17 +30,19 @@ class JdbcMemoryRepository implements MemoryRepository {
                   content VARCHAR(2000) NOT NULL,
                   conversation_id VARCHAR(64),
                   created_at TIMESTAMP NOT NULL,
-                  superseded_by VARCHAR(64)
+                  superseded_by VARCHAR(64),
+                  owner VARCHAR(255) NOT NULL DEFAULT 'kex-internal'
                 )""");
+        jdbcTemplate.execute("ALTER TABLE kex_agent_memory ADD COLUMN IF NOT EXISTS owner VARCHAR(255) NOT NULL DEFAULT 'kex-internal'");
     }
 
     @Override
     public void add(MemoryEntry entry) {
         jdbcTemplate.update("""
-                INSERT INTO kex_agent_memory (id, content, conversation_id, created_at, superseded_by)
-                VALUES (?, ?, ?, ?, ?)""",
+                INSERT INTO kex_agent_memory (id, content, conversation_id, created_at, superseded_by, owner)
+                VALUES (?, ?, ?, ?, ?, ?)""",
                 entry.id(), entry.content(), entry.conversationId(), Timestamp.from(entry.createdAt()),
-                entry.supersededBy());
+                entry.supersededBy(), entry.owner());
         // Une rétention filtrée à la lecture seule ne borne jamais la table : une instance qui
         // tourne des mois accumulerait des lignes qu'aucune fenêtre de lecture ne referait petites.
         jdbcTemplate.update("""
@@ -61,11 +63,11 @@ class JdbcMemoryRepository implements MemoryRepository {
     @Override
     public List<MemoryEntry> active(Instant since) {
         return jdbcTemplate.query("""
-                SELECT id, content, conversation_id, created_at, superseded_by FROM kex_agent_memory
+                SELECT id, content, conversation_id, created_at, superseded_by, owner FROM kex_agent_memory
                 WHERE created_at >= ? AND superseded_by IS NULL ORDER BY created_at DESC""",
                 (rs, rowNum) -> new MemoryEntry(rs.getString("id"), rs.getString("content"),
                         rs.getString("conversation_id"), rs.getTimestamp("created_at").toInstant(),
-                        rs.getString("superseded_by")),
+                        rs.getString("superseded_by"), rs.getString("owner")),
                 Timestamp.from(since));
     }
 
@@ -74,11 +76,11 @@ class JdbcMemoryRepository implements MemoryRepository {
         MemoryEntry entry;
         try {
             entry = jdbcTemplate.queryForObject("""
-                    SELECT id, content, conversation_id, created_at, superseded_by FROM kex_agent_memory
+                    SELECT id, content, conversation_id, created_at, superseded_by, owner FROM kex_agent_memory
                     WHERE id = ?""",
                     (rs, rowNum) -> new MemoryEntry(rs.getString("id"), rs.getString("content"),
                             rs.getString("conversation_id"), rs.getTimestamp("created_at").toInstant(),
-                            rs.getString("superseded_by")),
+                            rs.getString("superseded_by"), rs.getString("owner")),
                     id);
         }
         catch (EmptyResultDataAccessException ex) {

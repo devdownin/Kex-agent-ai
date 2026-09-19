@@ -7,7 +7,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -16,6 +18,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
 import com.kex.agent.config.AgentProperties;
+import com.kex.agent.memory.LongTermMemoryService;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
@@ -27,6 +30,7 @@ import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
@@ -50,14 +54,31 @@ public class AgentService {
     private final Duration timeout;
     private final CircuitBreaker modelCircuitBreaker;
     private final TokenBudgetService tokenBudget;
+    private final LongTermMemoryService longTermMemory;
 
+    @Autowired
     AgentService(ChatClient chatClient, ChatMemory chatMemory, AgentProperties properties,
-                CircuitBreakerRegistry circuitBreakerRegistry, TokenBudgetService tokenBudget) {
+                CircuitBreakerRegistry circuitBreakerRegistry, TokenBudgetService tokenBudget,
+                org.springframework.beans.factory.ObjectProvider<LongTermMemoryService> longTermMemory) {
+        this(chatClient, chatMemory, properties, circuitBreakerRegistry, tokenBudget,
+                longTermMemory.getIfAvailable());
+    }
+
+    /** Compatibility constructor for focused unit tests and minimal embedding applications. */
+    AgentService(ChatClient chatClient, ChatMemory chatMemory, AgentProperties properties,
+                 CircuitBreakerRegistry circuitBreakerRegistry, TokenBudgetService tokenBudget) {
+        this(chatClient, chatMemory, properties, circuitBreakerRegistry, tokenBudget, null);
+    }
+
+    private AgentService(ChatClient chatClient, ChatMemory chatMemory, AgentProperties properties,
+                         CircuitBreakerRegistry circuitBreakerRegistry, TokenBudgetService tokenBudget,
+                         LongTermMemoryService longTermMemory) {
         this.chatClient = chatClient;
         this.chatMemory = chatMemory;
         this.timeout = properties.requestTimeout();
         this.modelCircuitBreaker = circuitBreakerRegistry.circuitBreaker("agent-model");
         this.tokenBudget = tokenBudget;
+        this.longTermMemory = longTermMemory;
     }
 
     /**
@@ -73,13 +94,28 @@ public class AgentService {
     }
 
     public AgentAnswer ask(String owner, String conversationId, String message) {
-        Conversation conversation = conversation(owner, conversationId);
+        return askForTask(owner, conversationId, message, "CHAT");
+    }
+
+    public AgentAnswer askForTask(String owner, String conversationId, String message, String task) {
+        return ask(conversation(owner, conversationId, task, null), message);
+    }
+
+    /** Only the server-configured allowlist can authorize tools for an unattended task. */
+    public AgentAnswer askReadOnly(String owner, String conversationId, String message, Set<String> allowedTools) {
+        return ask(conversation(owner, conversationId, "TRIAGE", Set.copyOf(allowedTools)), message);
+    }
+
+    private AgentAnswer ask(Conversation conversation, String message) {
         ToolCallRecorder recorder = new ToolCallRecorder();
         AgentExecution execution = new AgentExecution();
         ChatResponse response = bounded(conversation, execution, CircuitBreaker.decorateSupplier(modelCircuitBreaker,
                 () -> request(conversation, message, recorder, execution).call().chatResponse()));
         AgentUsage usage = AgentUsage.from(response);
         tokenBudget.record(usage);
+        if (longTermMemory != null) {
+            longTermMemory.recordSuccessfulTask(conversation.owner(), conversation.id(), message, text(response), recorder.calls());
+        }
         return new AgentAnswer(conversation.id(), text(response), recorder.calls(), usage, finishReason(response));
     }
 
@@ -93,7 +129,7 @@ public class AgentService {
         if (CollectionUtils.isEmpty(schema)) {
             throw new InvalidJsonSchemaException("Un schéma JSON non vide est requis");
         }
-        Conversation conversation = conversation(owner, conversationId);
+        Conversation conversation = conversation(owner, conversationId, "DIAGNOSTIC", null);
         ToolCallRecorder recorder = new ToolCallRecorder();
         AgentExecution execution = new AgentExecution();
         ResponseEntity<ChatResponse, Map<String, Object>> answer = bounded(conversation, execution,
@@ -102,6 +138,9 @@ public class AgentService {
                                 .responseEntity(new JsonSchemaOutputConverter(schema))));
         AgentUsage usage = AgentUsage.from(answer.response());
         tokenBudget.record(usage);
+        if (longTermMemory != null) {
+            longTermMemory.recordSuccessfulTask(conversation.owner(), conversation.id(), message, text(answer.response()), recorder.calls());
+        }
         return new AgentStructuredAnswer(conversation.id(), answer.entity(), recorder.calls(),
                 usage, finishReason(answer.response()));
     }
@@ -120,7 +159,11 @@ public class AgentService {
     }
 
     public AgentStream stream(String owner, String conversationId, String message) {
-        Conversation conversation = conversation(owner, conversationId);
+        return streamForTask(owner, conversationId, message, "CHAT");
+    }
+
+    public AgentStream streamForTask(String owner, String conversationId, String message, String task) {
+        Conversation conversation = conversation(owner, conversationId, task, null);
         String id = conversation.id();
         Sinks.Many<AgentEvent> tools = Sinks.many().unicast().onBackpressureBuffer();
         ToolCallRecorder recorder = new ToolCallRecorder(tools);
@@ -160,10 +203,21 @@ public class AgentService {
 
     private ChatClient.ChatClientRequestSpec request(Conversation conversation, String message,
                                                      ToolCallRecorder recorder, AgentExecution execution) {
-        return chatClient.prompt()
-                .user(message)
-                .toolContext(Map.of(ToolCallRecorder.CONTEXT_KEY, recorder,
-                        CONVERSATION_ID_CONTEXT_KEY, conversation.id(), AgentExecution.CONTEXT_KEY, execution))
+        Map<String, Object> context = new HashMap<>();
+        context.put(ToolCallRecorder.CONTEXT_KEY, recorder);
+        context.put(CONVERSATION_ID_CONTEXT_KEY, conversation.id());
+        context.put(AgentExecution.CONTEXT_KEY, execution);
+        context.put("kex.owner", conversation.owner());
+        context.put("kex.model-task", conversation.task());
+        if (conversation.allowedTools() != null) {
+            context.put(TaskToolPolicy.ALLOWED_TOOLS, conversation.allowedTools());
+        }
+        ChatClient.ChatClientRequestSpec request = chatClient.prompt().user(message);
+        if (longTermMemory != null) {
+            String durable = longTermMemory.context(conversation.owner());
+            if (!durable.isBlank()) request = request.system(durable);
+        }
+        return request.toolContext(context)
                 .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, conversation.memoryId()));
     }
 
@@ -224,13 +278,22 @@ public class AgentService {
     }
 
     /** @param generated l'appelant n'a pas fourni d'identifiant : celui-ci a été tiré ici */
-    private record Conversation(String id, String memoryId, boolean generated) {
+    private record Conversation(String id, String memoryId, boolean generated, String owner,
+                                String task, Set<String> allowedTools) {
     }
 
     private static Conversation conversation(String owner, String conversationId) {
+        return conversation(owner, conversationId, "CHAT", null);
+    }
+
+    private static Conversation conversation(String owner, String conversationId, String task, Set<String> allowedTools) {
+        String route = StringUtils.hasText(task) ? task.toUpperCase(java.util.Locale.ROOT) : "CHAT";
+        if (!Set.of("CHAT", "TRIAGE", "DIAGNOSTIC").contains(route)) {
+            throw new IllegalArgumentException("Type de tâche inconnu : " + task);
+        }
         boolean generated = !StringUtils.hasText(conversationId);
         String id = generated ? UUID.randomUUID().toString() : conversationId;
-        return new Conversation(id, memoryId(owner, id), generated);
+        return new Conversation(id, memoryId(owner, id), generated, owner, route, allowedTools);
     }
 
     private static String memoryId(String owner, String conversationId) {
