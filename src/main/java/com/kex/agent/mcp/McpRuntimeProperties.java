@@ -12,12 +12,13 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties("kex.mcp.runtime")
 public record McpRuntimeProperties(
         @DefaultValue(".kex/mcp-servers.enc") String storagePath,
-        @DefaultValue String storageKey,
+        String storageKey,
         @DefaultValue("30s") Duration requestTimeout,
         @DefaultValue("50") int healthHistorySize,
         @DefaultValue List<String> allowedStdioCommands) {
 
     public McpRuntimeProperties {
+        storageKey = storageKey == null ? "" : storageKey;
         allowedStdioCommands = allowedStdioCommands == null ? List.of() : List.copyOf(allowedStdioCommands);
         if (requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) {
             throw new IllegalArgumentException("kex.mcp.runtime.request-timeout doit être positif");
