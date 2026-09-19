@@ -103,6 +103,29 @@ kex:
 C'est délibéré : un customizer s'applique à toutes les connexions HTTP, et sans ce filtre le jeton
 d'un serveur partirait aussi vers les autres.
 
+### Administrer les serveurs depuis la console
+
+La vue **Technique → Serveurs MCP** ajoute des connexions sans redémarrer. L'assistant teste le
+handshake et découvre les outils avant tout enregistrement. Il permet ensuite de désactiver,
+modifier, rafraîchir, diagnostiquer ou retirer le serveur, de limiter les outils présentés au
+modèle, et de les associer à des capacités métier.
+
+Les connexions de la console restent en mémoire tant que `KEX_MCP_STORAGE_KEY` est vide. Une fois
+cette clé définie, la configuration complète — en-têtes, bearer et environnement compris — est
+écrite sous forme chiffrée et authentifiée AES-GCM dans `.kex/mcp-servers.enc` (chemin surchargeable
+par `KEX_MCP_STORAGE_PATH`). L'export JSON exclut toujours les secrets et l'import laisse les
+connexions désactivées jusqu'à leur reconfiguration.
+
+Un transport stdio lance un processus sur la machine de l'agent. Il est donc refusé par défaut,
+même à un administrateur. Les commandes permises doivent être énumérées explicitement :
+
+```bash
+export KEX_MCP_STDIO_ALLOWED_COMMANDS=npx,uvx
+```
+
+Les arguments ne passent jamais par un shell et l'environnement transmis est limité aux valeurs
+configurées, en plus de la liste minimale héritée par le SDK MCP.
+
 ### Vérifier
 
 ```bash

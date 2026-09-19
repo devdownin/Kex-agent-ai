@@ -15,11 +15,19 @@ import com.kex.agent.agent.AgentStructuredAnswer;
 import com.kex.agent.agent.AgentTimeoutException;
 import com.kex.agent.agent.InvalidJsonSchemaException;
 import com.kex.agent.agent.StructuredOutputException;
+import com.kex.agent.mcp.McpConfigurationBundle;
+import com.kex.agent.mcp.McpConnectionTestResult;
 import com.kex.agent.mcp.McpResourceContent;
 import com.kex.agent.mcp.McpResourceInfo;
+import com.kex.agent.mcp.McpRuntimeServerView;
+import com.kex.agent.mcp.McpSecretRotation;
+import com.kex.agent.mcp.McpServerDiagnostics;
 import com.kex.agent.mcp.McpServerInfo;
+import com.kex.agent.mcp.McpServerRegistration;
 import com.kex.agent.mcp.McpServerUnavailableException;
+import com.kex.agent.mcp.McpStorageException;
 import com.kex.agent.mcp.McpToolCatalog;
+import com.kex.agent.mcp.McpToolForbiddenException;
 import com.kex.agent.mcp.McpToolMetric;
 import com.kex.agent.mcp.McpToolResult;
 import com.kex.agent.mcp.UnknownMcpServerException;
@@ -38,8 +46,10 @@ import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -138,6 +148,89 @@ class AgentController {
         return toolCatalog.servers();
     }
 
+    @PostMapping("/mcp/servers")
+    @ResponseStatus(HttpStatus.CREATED)
+    McpServerInfo registerServer(@Valid @RequestBody McpServerRegistration request, Principal principal) {
+        McpServerInfo server = toolCatalog.register(request);
+        supervision.auditAction(actor(principal), "Ajout du serveur MCP : " + request.connection(), "Connecté");
+        return server;
+    }
+
+    @PostMapping("/mcp/servers/test")
+    McpConnectionTestResult testServer(@Valid @RequestBody McpServerRegistration request) {
+        return toolCatalog.test(request);
+    }
+
+    @GetMapping("/mcp/runtime-servers")
+    List<McpRuntimeServerView> runtimeServers() {
+        return toolCatalog.runtimeServers();
+    }
+
+    @PutMapping("/mcp/servers/{connection}")
+    McpRuntimeServerView updateServer(@PathVariable String connection,
+                                      @Valid @RequestBody McpServerRegistration request,
+                                      Principal principal) {
+        McpRuntimeServerView server = toolCatalog.update(connection, request);
+        supervision.auditAction(actor(principal), "Modification du serveur MCP : " + connection, "Enregistré");
+        return server;
+    }
+
+    @PostMapping("/mcp/servers/{connection}/enabled")
+    McpRuntimeServerView enableServer(@PathVariable String connection, @RequestParam boolean enabled,
+                                      Principal principal) {
+        McpRuntimeServerView server = toolCatalog.setEnabled(connection, enabled);
+        supervision.auditAction(actor(principal), (enabled ? "Activation" : "Désactivation")
+                + " du serveur MCP : " + connection, "Enregistré");
+        return server;
+    }
+
+    @PatchMapping("/mcp/servers/{connection}/secret")
+    McpRuntimeServerView rotateServerSecret(@PathVariable String connection,
+                                            @Valid @RequestBody McpSecretRotation request,
+                                            Principal principal) {
+        McpRuntimeServerView server = toolCatalog.rotateSecret(connection, request);
+        supervision.auditAction(actor(principal), "Rotation des secrets MCP : " + connection, "Enregistré");
+        return server;
+    }
+
+    @PostMapping("/mcp/servers/{connection}/refresh")
+    McpServerDiagnostics refreshServer(@PathVariable String connection, Principal principal) {
+        McpServerDiagnostics diagnostics = toolCatalog.refresh(connection);
+        supervision.auditAction(actor(principal), "Rafraîchissement des outils MCP : " + connection, "Exécuté");
+        return diagnostics;
+    }
+
+    @GetMapping("/mcp/servers/{connection}/diagnostics")
+    McpServerDiagnostics serverDiagnostics(@PathVariable String connection) {
+        return toolCatalog.diagnostics(connection);
+    }
+
+    @GetMapping("/mcp/configuration")
+    McpConfigurationBundle exportMcpConfiguration() {
+        return toolCatalog.exportConfiguration();
+    }
+
+    @PostMapping("/mcp/configuration")
+    List<McpRuntimeServerView> importMcpConfiguration(@Valid @RequestBody McpConfigurationBundle request,
+                                                      Principal principal) {
+        List<McpRuntimeServerView> servers = toolCatalog.importConfiguration(request);
+        supervision.auditAction(actor(principal), "Import de configurations MCP",
+                request.servers().size() + " importée(s)");
+        return servers;
+    }
+
+    @GetMapping("/mcp/storage")
+    Map<String, Object> mcpStorage() {
+        return toolCatalog.storageStatus();
+    }
+
+    @DeleteMapping("/mcp/servers/{connection}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void unregisterServer(@PathVariable String connection, Principal principal) {
+        toolCatalog.unregister(connection);
+        supervision.auditAction(actor(principal), "Retrait du serveur MCP : " + connection, "Retiré");
+    }
+
     /** Coût et latence de l'appel direct par connexion et par outil — voir OBSERVABILITE.md. */
     @GetMapping("/mcp/metrics")
     List<McpToolMetric> mcpMetrics() {
@@ -186,6 +279,22 @@ class AgentController {
     @ExceptionHandler(InvalidJsonSchemaException.class)
     ProblemDetail invalidSchema(InvalidJsonSchemaException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    ProblemDetail invalidArgument(IllegalArgumentException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(McpToolForbiddenException.class)
+    ProblemDetail forbiddenTool(McpToolForbiddenException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+    }
+
+    @ExceptionHandler(McpStorageException.class)
+    ProblemDetail mcpStorage(McpStorageException ex) {
+        log.error("Échec du stockage chiffré MCP", ex);
+        return ProblemDetail.forStatusAndDetail(HttpStatus.INSUFFICIENT_STORAGE, ex.getMessage());
     }
 
     /** Le modèle n'a pas tenu le contrat : panne amont, pas erreur d'appelant. */

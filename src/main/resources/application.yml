@@ -125,6 +125,16 @@ kex:
     bearer-tokens:
       - url-prefix: ${KAFKA_EXPLORER_URL:http://localhost:8080}
         token: ${EXPLORER_MCP_AUTH_TOKEN:}
+    runtime:
+      # Les serveurs ajoutés dans la console ne sont persistés que si cette clé est fournie.
+      # Le fichier est chiffré en AES-GCM ; sans clé, aucune valeur sensible ne touche le disque.
+      storage-key: ${KEX_MCP_STORAGE_KEY:}
+      storage-path: ${KEX_MCP_STORAGE_PATH:.kex/mcp-servers.enc}
+      request-timeout: 30s
+      health-history-size: 50
+      # Ajouter explicitement les exécutables que l'API ADMIN peut lancer (ex. npx, uvx).
+      # Vide par défaut : une clé d'administration compromise ne devient pas un shell distant.
+      allowed-stdio-commands: ${KEX_MCP_STDIO_ALLOWED_COMMANDS:}
 
   agent:
     request-timeout: 120s

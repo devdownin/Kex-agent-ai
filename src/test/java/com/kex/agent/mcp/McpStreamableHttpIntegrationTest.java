@@ -4,7 +4,9 @@ package com.kex.agent.mcp;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -15,6 +17,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Contrat de bout en bout du client MCP : transport streamable-HTTP réel, bearer injecté par
@@ -75,5 +78,60 @@ class McpStreamableHttpIntegrationTest {
         assertThat(catalog.resources("faux")).extracting(McpResourceInfo::uri).containsExactly("test://ressource");
         assertThat(catalog.readResource("faux", "test://ressource"))
                 .extracting(McpResourceContent::text).containsExactly("contenu");
+    }
+
+    @Test
+    void administre_une_connexion_runtime_et_applique_les_permissions() {
+        McpServerRegistration registration = new McpServerRegistration(
+                "runtime-faux", "HTTP", "http://127.0.0.1:" + SERVER.port(), "/mcp",
+                FakeMcpServer.TOKEN, Map.of("X-Kex-Test", "runtime"), null, List.of(), Map.of(), true,
+                Set.of("echo"), Map.of("echo", "RUNBOOK"));
+        McpServerRegistration second = new McpServerRegistration(
+                "runtime-second", "HTTP", "http://127.0.0.1:" + SERVER.port(), "/mcp",
+                FakeMcpServer.TOKEN, Map.of(), null, List.of(), Map.of(), true, Set.of(), Map.of());
+
+        try {
+            McpConnectionTestResult test = catalog.test(registration);
+            McpServerInfo registered = catalog.register(registration);
+            McpConfigurationBundle exported = catalog.exportConfiguration();
+            catalog.register(second);
+
+            assertThat(test.success()).isTrue();
+            assertThat(registered.connection()).isEqualTo("runtime-faux");
+            assertThat(catalog.runtimeServers()).hasSize(2).first().satisfies(server -> {
+                assertThat(server.transport()).isEqualTo("HTTP");
+                assertThat(server.hasBearerToken()).isTrue();
+            });
+            assertThat(catalog.diagnostics("runtime-faux").conflicts())
+                    .anyMatch(conflict -> conflict.contains("echo") && conflict.contains("runtime-second"));
+            assertThat(catalog.refresh("runtime-faux").healthHistory()).isNotEmpty();
+            assertThat(exported.servers()).singleElement().satisfies(server -> {
+                assertThat(server.enabled()).isFalse();
+                assertThat(server.bearerToken()).isNull();
+            });
+
+            McpServerRegistration restricted = new McpServerRegistration(
+                    "runtime-faux", "HTTP", "http://127.0.0.1:" + SERVER.port(), "/mcp", null,
+                    Map.of("X-Kex-Test", ""), null, List.of(), Map.of(), true,
+                    Set.of("outil-interdit"), Map.of("outil-interdit", "RUNBOOK"));
+            assertThat(catalog.update("runtime-faux", restricted).headerNames()).contains("X-Kex-Test");
+            assertThatThrownBy(() -> catalog.call("runtime-faux", "echo", Map.of()))
+                    .isInstanceOf(McpToolForbiddenException.class);
+
+            assertThat(catalog.setEnabled("runtime-faux", false).enabled()).isFalse();
+            assertThat(catalog.rotateSecret("runtime-faux",
+                    new McpSecretRotation(FakeMcpServer.TOKEN, Map.of(), Map.of())).secretRotatedAt()).isNotNull();
+            assertThat(catalog.setEnabled("runtime-faux", true).enabled()).isTrue();
+
+            catalog.unregister("runtime-second");
+            catalog.unregister("runtime-faux");
+            assertThat(catalog.importConfiguration(exported)).singleElement()
+                    .extracting(McpRuntimeServerView::enabled).isEqualTo(false);
+            assertThat(catalog.storageStatus()).containsEntry("encryptedPersistence", false);
+        }
+        finally {
+            catalog.dynamicConnectionNames().stream().filter(name -> name.startsWith("runtime-"))
+                    .toList().forEach(catalog::unregister);
+        }
     }
 }

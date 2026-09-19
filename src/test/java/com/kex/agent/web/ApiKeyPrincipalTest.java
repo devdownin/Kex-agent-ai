@@ -57,6 +57,14 @@ class ApiKeyPrincipalTest {
         assertThat(postStatus("/api/agent/mcp/servers/inconnu/tools/x", "Bearer jeton-admin")).isEqualTo(404);
     }
 
+    @Test
+    void seul_un_admin_peut_tester_ou_modifier_une_connexion_mcp() throws Exception {
+        assertThat(postStatus("/api/agent/mcp/servers/test", "Bearer jeton-ops")).isEqualTo(403);
+        // Le 400 vient du corps absent : il prouve que la sécurité a bien laissé passer l'admin.
+        assertThat(postStatus("/api/agent/mcp/servers/test", "Bearer jeton-admin")).isEqualTo(400);
+        assertThat(postStatus("/api/agent/mcp/configuration", "Bearer jeton-ops")).isEqualTo(403);
+    }
+
     private void post(String path, String authorization) throws IOException, InterruptedException {
         postStatus(path, authorization);
     }

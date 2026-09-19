@@ -445,11 +445,17 @@
       <section class="panel">
         <div class="panel-head">
           <h1>Serveurs MCP</h1>
-          <!-- Un seul bouton pour les quatre panneaux de la vue, comme dans les autres vues. -->
-          <button type="button" class="ghost" id="refresh-tools"
-                  aria-label="Rafraîchir la vue technique" title="Rafraîchir la vue technique">Rafraîchir</button>
+          <div class="panel-actions">
+            <button type="button" class="ghost" id="import-mcp">Importer</button>
+            <button type="button" class="ghost" id="export-mcp">Exporter</button>
+            <button type="button" class="primary" id="open-add-mcp">Ajouter un serveur</button>
+            <button type="button" class="ghost" id="refresh-tools"
+                    aria-label="Rafraîchir la vue technique" title="Rafraîchir la vue technique">Rafraîchir</button>
+          </div>
         </div>
         <p class="hint">La vue technique : ce que l'agent peut réellement observer et actionner. Le tableau de bord métier n'en est pas saturé.</p>
+        <div class="mcp-storage-status" id="mcp-storage-status" aria-live="polite"></div>
+        <input type="file" id="mcp-import-file" accept="application/json" hidden>
         <label class="sr-only" for="tools-search">Rechercher un serveur ou un outil</label>
         <input type="search" id="tools-search" placeholder="Rechercher un serveur ou un outil">
         <div class="servers" id="servers"></div>
@@ -560,6 +566,76 @@
   </div>
   <div id="notifications-list" class="notification-list"></div>
   <div class="row-end"><button type="button" class="ghost" id="mark-notifications-read">Tout marquer comme lu</button></div>
+</dialog>
+
+<dialog id="add-mcp-server">
+  <form class="stack mcp-wizard" id="add-mcp-form">
+    <div class="panel-head">
+      <div><h2 id="mcp-dialog-title">Ajouter un serveur MCP</h2>
+        <p class="hint">La connexion est testée avant tout enregistrement.</p></div>
+      <span class="state unknown" id="mcp-test-status">Non testé</span>
+    </div>
+    <fieldset>
+      <legend>1 · Point de départ</legend>
+      <label for="mcp-template">Modèle de serveur</label>
+      <select id="mcp-template">
+        <option value="custom">Personnalisé</option>
+        <option value="github">GitHub MCP distant</option>
+        <option value="filesystem">Fichiers locaux (stdio)</option>
+        <option value="postgres">PostgreSQL (stdio)</option>
+      </select>
+      <label for="mcp-connection">Nom de connexion</label>
+      <input id="mcp-connection" required maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}" placeholder="runbook">
+    </fieldset>
+    <fieldset>
+      <legend>2 · Transport et authentification</legend>
+      <label for="mcp-transport">Transport</label>
+      <select id="mcp-transport"><option value="HTTP">Streamable HTTP</option><option value="STDIO">Processus local (stdio)</option></select>
+      <div id="mcp-http-fields">
+        <label for="mcp-url">URL du serveur</label>
+        <input id="mcp-url" type="url" maxlength="2048" placeholder="https://mcp.example.net">
+        <label for="mcp-endpoint">Endpoint</label>
+        <input id="mcp-endpoint" maxlength="256" value="/mcp" placeholder="/mcp">
+        <label for="mcp-token">Bearer facultatif</label>
+        <input id="mcp-token" type="password" maxlength="4096" autocomplete="new-password" placeholder="Secret chiffré au repos">
+        <label for="mcp-headers">En-têtes HTTP (JSON)</label>
+        <textarea id="mcp-headers" rows="3" spellcheck="false" placeholder='{"X-API-Key":"secret"}'>{}</textarea>
+      </div>
+      <div id="mcp-stdio-fields" hidden>
+        <label for="mcp-command">Commande</label>
+        <input id="mcp-command" maxlength="1024" placeholder="npx">
+        <label for="mcp-args">Arguments (un par ligne)</label>
+        <textarea id="mcp-args" rows="3" spellcheck="false" placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/data"></textarea>
+        <label for="mcp-environment">Variables d'environnement (JSON)</label>
+        <textarea id="mcp-environment" rows="3" spellcheck="false" placeholder='{"DATABASE_URL":"…"}'>{}</textarea>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>3 · Gouvernance des outils</legend>
+      <label class="switch"><input type="checkbox" id="mcp-enabled" checked> <span>Activer après le test</span></label>
+      <label for="mcp-allowed-tools">Outils autorisés (séparés par des virgules, vide = tous)</label>
+      <input id="mcp-allowed-tools" placeholder="search, create_issue">
+      <label for="mcp-capabilities">Correspondance outil → capacité (JSON)</label>
+      <textarea id="mcp-capabilities" rows="3" spellcheck="false" placeholder='{"create_issue":"TICKETING"}'>{}</textarea>
+    </fieldset>
+    <pre class="dump mcp-test-result" id="mcp-test-result">Renseignez la connexion puis lancez le test.</pre>
+    <div class="row-end">
+      <button type="button" class="ghost" id="cancel-add-mcp">Annuler</button>
+      <button type="button" class="ghost" id="test-mcp">Tester la connexion</button>
+      <button type="submit" class="primary" id="submit-add-mcp">Ajouter</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="rotate-mcp-secret">
+  <form class="stack" id="rotate-mcp-form">
+    <h2>Faire tourner le secret</h2>
+    <p class="hint" id="rotate-mcp-label"></p>
+    <label for="rotate-mcp-token">Nouveau bearer</label>
+    <input id="rotate-mcp-token" type="password" maxlength="4096" autocomplete="new-password" required>
+    <div class="row-end"><button type="button" class="ghost" id="cancel-rotate-mcp">Annuler</button>
+      <button type="submit" class="primary" id="submit-rotate-mcp">Tester et remplacer</button></div>
+  </form>
 </dialog>
 
 <div class="toasts" id="toasts" aria-live="assertive"></div>

@@ -5,8 +5,8 @@
 // bord métier n'en soit pas saturé — les signaux bruts sont au second niveau, jamais au premier.
 
 import {
-  $, api, busy, circuitStateTag, el, empty, exampleFromSchema, params, render, report, schemaErrors, setParams,
-  stateTag,
+  $, api, busy, circuitStateTag, confirmAction, el, empty, exampleFromSchema, params, render, report,
+  schemaErrors, setParams, stateTag, toast,
 } from './core.js';
 import * as kafka from './kafka.js';
 import * as memory from './memory.js';
@@ -15,6 +15,9 @@ import * as memory from './memory.js';
 // caractère saisi — l'endpoint n'a pas de paramètre de recherche et n'a pas à en gagner un pour ça.
 let lastServers = [];
 let lastMetrics = [];
+let runtimeServers = new Map();
+let editingConnection = null;
+let rotatingConnection = null;
 
 export async function servers() {
   // Un panneau d'invocation ouvert porte un résultat en train d'être lu — celui du sondage de fond
@@ -22,14 +25,21 @@ export async function servers() {
   // donnée nouvelle ne le justifie. Il reprend au prochain appel une fois le panneau refermé.
   if ($('#servers').querySelector('.invoke')) return;
   await render($('#servers'), async () => {
-    const [list, metrics] = await Promise.all([
+    const [connected, metrics, runtime, storage] = await Promise.all([
       api('/api/agent/mcp/servers'),
       // Un serveur MCP jamais appelé n'a simplement pas encore de métrique : ce n'est pas une panne.
       api('/api/agent/mcp/metrics').catch(() => []),
+      api('/api/agent/mcp/runtime-servers').catch(() => []),
+      api('/api/agent/mcp/storage').catch(() => null),
     ]);
-    lastServers = list;
+    runtimeServers = new Map(runtime.map((server) => [server.connection, server]));
+    const seen = new Set(connected.map((server) => server.connection));
+    lastServers = connected.concat(runtime.filter((server) => !seen.has(server.connection)).map((server) => ({
+      connection: server.connection, initialized: false, tools: [], disabled: !server.enabled,
+    })));
     lastMetrics = metrics;
-    return list;
+    renderStorageStatus(storage);
+    return lastServers;
   }, renderServers);
 }
 
@@ -59,11 +69,13 @@ function metricFor(connection, tool) {
 
 function card(server) {
   const node = el('article', 'server');
+  const managed = runtimeServers.get(server.connection);
+  if (managed && !managed.enabled) node.classList.add('disabled');
   const head = el('header');
   // Le serveur s'adresse par clé de connexion : le nom qu'il annonce n'existe qu'après le handshake.
   head.append(el('h3', null, server.connection));
-  head.append(stateTag(server.initialized ? 'OK' : 'UNKNOWN',
-    server.initialized ? 'Initialisé' : 'Pas de handshake'));
+  head.append(stateTag(managed && !managed.enabled ? 'UNKNOWN' : (server.initialized ? 'OK' : 'UNKNOWN'),
+    managed && !managed.enabled ? 'Désactivé' : (server.initialized ? 'Initialisé' : 'Pas de handshake')));
   // Propre à cette connexion pour l'appel direct ; le chemin piloté par le modèle reste sur un
   // disjoncteur partagé entre serveurs, voir McpServerInfo.circuitBreakerState.
   if (server.circuitBreakerState) {
@@ -73,6 +85,16 @@ function card(server) {
 
   const meta = [server.serverName, server.version, server.protocolVersion].filter(Boolean).join(' · ');
   node.append(el('p', 'muted', meta || 'Aucun handshake abouti pour l’instant'));
+
+  if (managed) {
+    const flags = el('div', 'server-flags');
+    flags.append(el('span', 'badge', managed.transport));
+    if (managed.hasBearerToken) flags.append(el('span', 'badge', 'Bearer chiffré'));
+    if (managed.allowedTools?.length) flags.append(el('span', 'badge', `${managed.allowedTools.length} permission(s)`));
+    const mappings = Object.keys(managed.capabilityMappings || {}).length;
+    if (mappings) flags.append(el('span', 'badge', `${mappings} capacité(s)`));
+    node.append(flags);
+  }
 
   const tools = server.tools || [];
   if (tools.length) {
@@ -99,15 +121,109 @@ function card(server) {
     node.append(empty('Aucun outil exposé.'));
   }
 
-  const actions = el('div', 'row-end');
+  const actions = el('div', 'server-actions');
   const resources = el('button', 'ghost', 'Ressources');
   resources.type = 'button';
+  resources.disabled = Boolean(managed && !managed.enabled);
   // Répété une fois par serveur : sans libellé, un lecteur d'écran n'entend qu'« Ressources ».
   resources.setAttribute('aria-label', `Ressources de ${server.connection}`);
   resources.addEventListener('click', () => listResources(node, server.connection));
   actions.append(resources);
+  if (managed) {
+    const toggle = el('button', 'ghost', managed.enabled ? 'Désactiver' : 'Activer');
+    toggle.type = 'button';
+    toggle.addEventListener('click', () => busy(toggle, async () => {
+      try {
+        await api(`/api/agent/mcp/servers/${encodeURIComponent(server.connection)}/enabled?enabled=${!managed.enabled}`,
+          { method: 'POST' });
+        toast(`Serveur MCP « ${server.connection} » ${managed.enabled ? 'désactivé' : 'activé'}.`);
+        await servers();
+      } catch (error) { report(error); }
+    }));
+    const edit = el('button', 'ghost', 'Modifier');
+    edit.type = 'button';
+    edit.addEventListener('click', () => openEditor(managed));
+    const refresh = el('button', 'ghost', 'Rafraîchir les outils');
+    refresh.type = 'button';
+    refresh.addEventListener('click', () => busy(refresh, async () => {
+      try {
+        const diagnostics = await api(`/api/agent/mcp/servers/${encodeURIComponent(server.connection)}/refresh`,
+          { method: 'POST' });
+        showDiagnostics(node, diagnostics);
+        toast(`Catalogue « ${server.connection} » rafraîchi.`);
+        await servers();
+      } catch (error) { report(error); }
+    }));
+    const diagnostic = el('button', 'ghost', 'Diagnostic');
+    diagnostic.type = 'button';
+    diagnostic.addEventListener('click', async () => {
+      try {
+        showDiagnostics(node, await api(`/api/agent/mcp/servers/${encodeURIComponent(server.connection)}/diagnostics`));
+      } catch (error) { report(error); }
+    });
+    const rotate = el('button', 'ghost', 'Secret');
+    rotate.type = 'button';
+    rotate.addEventListener('click', () => openSecretRotation(server.connection));
+    actions.append(toggle, edit, refresh, diagnostic, rotate);
+    const remove = el('button', 'ghost danger', 'Retirer');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', `Retirer le serveur ${server.connection}`);
+    remove.addEventListener('click', async () => {
+      const confirmed = await confirmAction({
+        title: 'Retirer ce serveur MCP ?',
+        accept: 'Retirer le serveur',
+        lines: [['Connexion', server.connection], ['Effet', 'Ses outils ne seront plus disponibles pour l’agent.']],
+      });
+      if (!confirmed) return;
+      try {
+        await api(`/api/agent/mcp/servers/${encodeURIComponent(server.connection)}`, { method: 'DELETE' });
+        toast(`Serveur MCP « ${server.connection} » retiré.`);
+        await servers();
+      } catch (error) { report(error); }
+    });
+    actions.append(remove);
+  }
   node.append(actions);
   return node;
+}
+
+function renderStorageStatus(storage) {
+  const host = $('#mcp-storage-status');
+  if (!storage) {
+    host.textContent = 'État du stockage indisponible.';
+    return;
+  }
+  host.textContent = storage.encryptedPersistence
+    ? `Persistance chiffrée active · ${storage.configuredServers} serveur(s) administré(s)`
+    : 'Mode mémoire : définissez KEX_MCP_STORAGE_KEY pour conserver les serveurs et secrets après redémarrage.';
+}
+
+function showDiagnostics(host, diagnostics) {
+  host.querySelector('.mcp-diagnostics')?.remove();
+  const panel = el('section', 'mcp-diagnostics');
+  const head = el('header');
+  head.append(el('h4', null, `Diagnostic · ${diagnostics.transport}`), closeButton(panel));
+  panel.append(head);
+  const summary = el('p', 'muted', `${diagnostics.connected ? 'Connecté' : 'Hors ligne'} · ${diagnostics.toolCount} outil(s)`);
+  panel.append(summary);
+  if (diagnostics.conflicts?.length) {
+    const title = el('strong', null, 'Conflits détectés');
+    const conflicts = el('ul');
+    diagnostics.conflicts.forEach((conflict) => conflicts.append(el('li', null, conflict)));
+    panel.append(title, conflicts);
+  }
+  if (diagnostics.healthHistory?.length) {
+    const history = el('div');
+    diagnostics.healthHistory.slice(0, 8).forEach((sample) => {
+      const line = el('div', 'mcp-health-line');
+      line.append(stateTag(sample.healthy ? 'OK' : 'ERROR', sample.healthy ? 'OK' : 'Échec'),
+        el('time', 'muted', new Date(sample.checkedAt).toLocaleString('fr-FR')),
+        el('span', null, `${sample.latencyMillis ?? '—'} ms · ${sample.message}`));
+      history.append(line);
+    });
+    panel.append(el('strong', null, 'Historique de santé'), history);
+  }
+  host.append(panel);
 }
 
 /**
@@ -293,6 +409,190 @@ export function wire() {
     // Filtre sur le relevé déjà en cache : pas d'appel réseau par caractère saisi.
     $('#servers').replaceChildren(renderServers(lastServers));
   });
+
+  const dialog = $('#add-mcp-server');
+  $('#open-add-mcp').addEventListener('click', () => openEditor());
+  $('#cancel-add-mcp').addEventListener('click', () => dialog.close());
+  $('#mcp-transport').addEventListener('change', syncTransportFields);
+  $('#mcp-template').addEventListener('change', applyTemplate);
+  $('#test-mcp').addEventListener('click', () => testForm());
+  $('#add-mcp-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const submit = $('#submit-add-mcp');
+    busy(submit, async () => {
+      try {
+        const body = formRegistration();
+        const test = await api('/api/agent/mcp/servers/test', { method: 'POST', body });
+        renderTest(test);
+        if (!test.success) throw new Error(test.message || 'Le test de connexion a échoué.');
+        const endpoint = editingConnection
+          ? `/api/agent/mcp/servers/${encodeURIComponent(editingConnection)}`
+          : '/api/agent/mcp/servers';
+        await api(endpoint, { method: editingConnection ? 'PUT' : 'POST', body });
+        const name = $('#mcp-connection').value.trim();
+        dialog.close();
+        toast(`Serveur MCP « ${name} » ${editingConnection ? 'modifié' : 'ajouté'}.`);
+        await servers();
+      } catch (error) { report(error); }
+    });
+  });
+
+  $('#export-mcp').addEventListener('click', async () => {
+    try {
+      const bundle = await api('/api/agent/mcp/configuration');
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' }));
+      link.download = `kex-mcp-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      toast('Configuration MCP exportée sans secrets.');
+    } catch (error) { report(error); }
+  });
+  $('#import-mcp').addEventListener('click', () => $('#mcp-import-file').click());
+  $('#mcp-import-file').addEventListener('change', async (event) => {
+    const [file] = event.target.files;
+    if (!file) return;
+    try {
+      const bundle = JSON.parse(await file.text());
+      await api('/api/agent/mcp/configuration', { method: 'POST', body: bundle });
+      toast('Configurations importées désactivées. Renseignez leurs secrets avant activation.');
+      await servers();
+    } catch (error) { report(error); }
+    event.target.value = '';
+  });
+
+  const rotate = $('#rotate-mcp-secret');
+  $('#cancel-rotate-mcp').addEventListener('click', () => rotate.close());
+  $('#rotate-mcp-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const submit = $('#submit-rotate-mcp');
+    busy(submit, async () => {
+      try {
+        await api(`/api/agent/mcp/servers/${encodeURIComponent(rotatingConnection)}/secret`, {
+          method: 'PATCH', body: { bearerToken: $('#rotate-mcp-token').value },
+        });
+        rotate.close();
+        toast(`Secret de « ${rotatingConnection} » remplacé après test.`);
+        await servers();
+      } catch (error) { report(error); }
+    });
+  });
+}
+
+function parseObject(id, label) {
+  try {
+    const value = JSON.parse($(id).value || '{}');
+    if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error();
+    return value;
+  } catch {
+    throw new Error(`${label} doit être un objet JSON.`);
+  }
+}
+
+function formRegistration() {
+  const transport = $('#mcp-transport').value;
+  return {
+    connection: $('#mcp-connection').value.trim(),
+    transport,
+    url: transport === 'HTTP' ? $('#mcp-url').value.trim() : null,
+    endpoint: transport === 'HTTP' ? ($('#mcp-endpoint').value.trim() || '/mcp') : null,
+    bearerToken: $('#mcp-token').value || null,
+    headers: transport === 'HTTP' ? parseObject('#mcp-headers', 'Les en-têtes') : {},
+    command: transport === 'STDIO' ? $('#mcp-command').value.trim() : null,
+    args: transport === 'STDIO' ? $('#mcp-args').value.split('\n').map((value) => value.trim()).filter(Boolean) : [],
+    environment: transport === 'STDIO' ? parseObject('#mcp-environment', 'L’environnement') : {},
+    enabled: $('#mcp-enabled').checked,
+    allowedTools: $('#mcp-allowed-tools').value.split(',').map((value) => value.trim()).filter(Boolean),
+    capabilityMappings: parseObject('#mcp-capabilities', 'Les capacités'),
+  };
+}
+
+function syncTransportFields() {
+  const http = $('#mcp-transport').value === 'HTTP';
+  $('#mcp-http-fields').hidden = !http;
+  $('#mcp-stdio-fields').hidden = http;
+  $('#mcp-url').required = http;
+  $('#mcp-command').required = !http;
+}
+
+function applyTemplate() {
+  const template = $('#mcp-template').value;
+  const presets = {
+    github: { transport: 'HTTP', connection: 'github', url: 'https://api.githubcopilot.com', endpoint: '/mcp' },
+    filesystem: { transport: 'STDIO', connection: 'filesystem', command: 'npx', args: '-y\n@modelcontextprotocol/server-filesystem\n/data' },
+    postgres: { transport: 'STDIO', connection: 'postgres', command: 'npx', args: '-y\n@modelcontextprotocol/server-postgres', environment: '{\n  "DATABASE_URL": "postgresql://…"\n}' },
+  };
+  const preset = presets[template];
+  if (!preset) return;
+  $('#mcp-transport').value = preset.transport;
+  $('#mcp-connection').value = preset.connection;
+  $('#mcp-url').value = preset.url || '';
+  $('#mcp-endpoint').value = preset.endpoint || '/mcp';
+  $('#mcp-command').value = preset.command || '';
+  $('#mcp-args').value = preset.args || '';
+  $('#mcp-environment').value = preset.environment || '{}';
+  syncTransportFields();
+}
+
+function openEditor(server = null) {
+  editingConnection = server?.connection || null;
+  const form = $('#add-mcp-form');
+  form.reset();
+  $('#mcp-endpoint').value = '/mcp';
+  $('#mcp-headers').value = '{}';
+  $('#mcp-environment').value = '{}';
+  $('#mcp-capabilities').value = '{}';
+  $('#mcp-enabled').checked = true;
+  $('#mcp-test-status').className = 'state unknown';
+  $('#mcp-test-status').textContent = 'Non testé';
+  $('#mcp-test-result').textContent = 'Renseignez la connexion puis lancez le test.';
+  $('#mcp-dialog-title').textContent = server ? `Modifier ${server.connection}` : 'Ajouter un serveur MCP';
+  $('#submit-add-mcp').textContent = server ? 'Enregistrer' : 'Ajouter';
+  $('#mcp-connection').readOnly = Boolean(server);
+  if (server) {
+    $('#mcp-connection').value = server.connection;
+    $('#mcp-transport').value = server.transport;
+    $('#mcp-url').value = server.url || '';
+    $('#mcp-endpoint').value = server.endpoint || '/mcp';
+    $('#mcp-command').value = server.command || '';
+    $('#mcp-args').value = (server.args || []).join('\n');
+    $('#mcp-enabled').checked = server.enabled;
+    $('#mcp-allowed-tools').value = (server.allowedTools || []).join(', ');
+    $('#mcp-capabilities').value = JSON.stringify(server.capabilityMappings || {}, null, 2);
+    $('#mcp-headers').value = JSON.stringify(Object.fromEntries((server.headerNames || []).map((key) => [key, ''])), null, 2);
+    $('#mcp-environment').value = JSON.stringify(Object.fromEntries((server.environmentNames || []).map((key) => [key, ''])), null, 2);
+  }
+  syncTransportFields();
+  $('#add-mcp-server').showModal();
+  $('#mcp-connection').focus();
+}
+
+async function testForm() {
+  const button = $('#test-mcp');
+  await busy(button, async () => {
+    try {
+      renderTest(await api('/api/agent/mcp/servers/test', { method: 'POST', body: formRegistration() }));
+    } catch (error) {
+      renderTest({ success: false, message: error.message });
+    }
+  });
+}
+
+function renderTest(result) {
+  const status = $('#mcp-test-status');
+  status.className = `state ${result.success ? 'ok' : 'error'}`;
+  status.textContent = result.success ? 'Test réussi' : 'Échec du test';
+  $('#mcp-test-result').textContent = result.success
+    ? `${result.serverName || 'Serveur MCP'} · ${result.protocolVersion || 'protocole négocié'} · ${result.latencyMillis} ms\n${(result.tools || []).join('\n') || 'Aucun outil exposé'}`
+    : (result.message || 'Connexion impossible');
+}
+
+function openSecretRotation(connection) {
+  rotatingConnection = connection;
+  $('#rotate-mcp-label').textContent = `La nouvelle valeur sera testée sur « ${connection} » avant de remplacer l’ancienne.`;
+  $('#rotate-mcp-form').reset();
+  $('#rotate-mcp-secret').showModal();
+  $('#rotate-mcp-token').focus();
 }
 
 /** Remet le champ en accord avec l'adresse, comme les recherches de Processus et Audit. */

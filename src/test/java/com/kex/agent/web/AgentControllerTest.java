@@ -5,6 +5,7 @@ package com.kex.agent.web;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.anthropic.errors.AnthropicException;
 import com.kex.agent.agent.AgentAnswer;
@@ -14,9 +15,13 @@ import com.kex.agent.agent.AgentStream;
 import com.kex.agent.agent.AgentStructuredAnswer;
 import com.kex.agent.agent.AgentTimeoutException;
 import com.kex.agent.agent.StructuredOutputException;
+import com.kex.agent.mcp.McpConfigurationBundle;
+import com.kex.agent.mcp.McpConnectionTestResult;
 import com.kex.agent.mcp.McpResourceContent;
 import com.kex.agent.mcp.McpResourceInfo;
+import com.kex.agent.mcp.McpRuntimeServerView;
 import com.kex.agent.mcp.McpServerInfo;
+import com.kex.agent.mcp.McpServerRegistration;
 import com.kex.agent.mcp.McpServerUnavailableException;
 import com.kex.agent.mcp.McpToolCatalog;
 import com.kex.agent.mcp.McpToolInfo;
@@ -89,7 +94,7 @@ class AgentControllerTest {
     void purge_une_conversation() {
         assertThat(mvc.delete().uri("/api/agent/conversations/conv-1")).hasStatus(204);
 
-        verify(agentService).clear("Anonyme", "conv-1");
+        verify(agentService).clear("conv-1");
     }
 
     @Test
@@ -104,6 +109,74 @@ class AgentControllerTest {
         assertThat(response).bodyJson().extractingPath("$[0].connection").isEqualTo("kafka-explorer");
         assertThat(response).bodyJson().extractingPath("$[0].serverName").isEqualTo("kafka-explorer-mcp");
         assertThat(response).bodyJson().extractingPath("$[0].tools[0].name").isEqualTo("kex_list_topics");
+    }
+
+    @Test
+    void ajoute_un_serveur_mcp_dynamique() {
+        McpServerRegistration registration = new McpServerRegistration(
+                "runbook", "https://mcp.example.net", "/mcp", "secret");
+        given(toolCatalog.register(registration)).willReturn(
+                new McpServerInfo("runbook", "runbook-mcp", "1.0", "2025-06-18", true, "CLOSED", List.of()));
+
+        var response = mvc.post().uri("/api/agent/mcp/servers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"connection":"runbook","url":"https://mcp.example.net",
+                         "endpoint":"/mcp","bearerToken":"secret"} """);
+
+        assertThat(response).hasStatus(201);
+        assertThat(response).bodyJson().extractingPath("$.connection").isEqualTo("runbook");
+        verify(toolCatalog).register(registration);
+    }
+
+    @Test
+    void retire_un_serveur_mcp_dynamique() {
+        assertThat(mvc.delete().uri("/api/agent/mcp/servers/runbook")).hasStatus(204);
+        verify(toolCatalog).unregister("runbook");
+    }
+
+    @Test
+    void teste_une_connexion_avant_de_l_enregistrer() {
+        McpServerRegistration registration = new McpServerRegistration(
+                "runbook", "https://mcp.example.net", "/mcp", "secret");
+        given(toolCatalog.test(registration)).willReturn(new McpConnectionTestResult(
+                true, "runbook-mcp", "1.0", "2025-06-18", 18, List.of("restart"), "1 outil"));
+
+        var response = mvc.post().uri("/api/agent/mcp/servers/test")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"connection":"runbook","url":"https://mcp.example.net",
+                         "endpoint":"/mcp","bearerToken":"secret"} """);
+
+        assertThat(response).hasStatusOk();
+        assertThat(response).bodyJson().extractingPath("$.success").isEqualTo(true);
+        assertThat(response).bodyJson().extractingPath("$.tools[0]").isEqualTo("restart");
+    }
+
+    @Test
+    void active_une_connexion_runtime() {
+        McpRuntimeServerView view = new McpRuntimeServerView("runbook", "HTTP",
+                "https://mcp.example.net", "/mcp", null, List.of(), Set.of(), Set.of(), true,
+                Set.of(), Map.of(), true, null);
+        given(toolCatalog.setEnabled("runbook", true)).willReturn(view);
+
+        var response = mvc.post().uri("/api/agent/mcp/servers/runbook/enabled?enabled=true");
+
+        assertThat(response).hasStatusOk();
+        assertThat(response).bodyJson().extractingPath("$.enabled").isEqualTo(true);
+        verify(supervision).auditAction("Anonyme", "Activation du serveur MCP : runbook", "Enregistré");
+    }
+
+    @Test
+    void exporte_les_configurations_sans_les_secrets() {
+        given(toolCatalog.exportConfiguration()).willReturn(new McpConfigurationBundle(1, List.of(
+                new McpServerRegistration("runbook", "https://mcp.example.net", "/mcp", null))));
+
+        var response = mvc.get().uri("/api/agent/mcp/configuration");
+
+        assertThat(response).hasStatusOk();
+        assertThat(response).bodyJson().extractingPath("$.version").isEqualTo(1);
+        assertThat(response).bodyJson().extractingPath("$.servers[0].bearerToken").isNull();
     }
 
     @Test
@@ -281,7 +354,7 @@ class AgentControllerTest {
     @Test
     void retourne_504_avec_l_identifiant_de_conversation_quand_l_appel_depasse_le_plafond() {
         willThrow(new AgentTimeoutException(Duration.ofSeconds(120), "conv-9"))
-                .given(agentService).ask("Anonyme", "conv-1", "bonjour");
+                .given(agentService).ask("conv-1", "bonjour");
 
         var response = mvc.post().uri("/api/agent/chat")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -319,7 +392,7 @@ class AgentControllerTest {
     @Test
     void retourne_502_quand_le_modele_ne_respecte_pas_le_schema() {
         willThrow(new StructuredOutputException(new IllegalStateException("pas du json")))
-                .given(agentService).askStructured("Anonyme", null, "bonjour", Map.of("type", "object"));
+                .given(agentService).askStructured(null, "bonjour", Map.of("type", "object"));
 
         assertThat(mvc.post().uri("/api/agent/chat/structured")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -337,7 +410,7 @@ class AgentControllerTest {
     @Test
     void retourne_502_et_non_401_quand_le_fournisseur_anthropic_refuse_la_cle() {
         willThrow(new AnthropicException("invalid x-api-key"))
-                .given(agentService).ask("Anonyme", "conv-1", "bonjour");
+                .given(agentService).ask("conv-1", "bonjour");
 
         assertThat(mvc.post().uri("/api/agent/chat")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -350,7 +423,7 @@ class AgentControllerTest {
     @Test
     void retourne_502_et_non_401_quand_la_passerelle_openai_refuse_la_cle() {
         willThrow(new OpenAIException("invalid api key"))
-                .given(agentService).askStructured("Anonyme", "conv-1", "bonjour", Map.of("type", "object"));
+                .given(agentService).askStructured("conv-1", "bonjour", Map.of("type", "object"));
 
         assertThat(mvc.post().uri("/api/agent/chat/structured")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -361,12 +434,12 @@ class AgentControllerTest {
 
     /**
      * Le disjoncteur a ouvert : échouer tout de suite en 503 plutôt que de laisser l'appelant
-     * attendre du plafond de temps pour redécouvrir une panne déjà constatée.
+     * attendre le plafond de temps pour redécouvrir une panne déjà constatée.
      */
     @Test
     void retourne_503_quand_le_disjoncteur_du_modele_est_ouvert() {
         willThrow(CallNotPermittedException.createCallNotPermittedException(CircuitBreaker.ofDefaults("agent-model")))
-                .given(agentService).ask("Anonyme", "conv-1", "bonjour");
+                .given(agentService).ask("conv-1", "bonjour");
 
         assertThat(mvc.post().uri("/api/agent/chat")
                 .contentType(MediaType.APPLICATION_JSON)

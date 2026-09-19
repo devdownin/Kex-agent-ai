@@ -74,6 +74,13 @@ class SecurityConfig {
                                 .hasAnyRole("OPERATOR", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/agent/mcp/servers/*/tools/*",
                                 "/api/agent/knowledge").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/agent/mcp/servers",
+                                "/api/agent/mcp/servers/test", "/api/agent/mcp/servers/*/enabled",
+                                "/api/agent/mcp/servers/*/refresh", "/api/agent/mcp/configuration")
+                                .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/agent/mcp/servers/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/agent/mcp/servers/*/secret").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/agent/mcp/servers/*").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/agent/supervision/policy").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/memory/*", "/api/agent/knowledge")
                                 .hasRole("ADMIN")

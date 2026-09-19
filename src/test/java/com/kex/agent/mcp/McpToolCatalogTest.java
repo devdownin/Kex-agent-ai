@@ -5,7 +5,9 @@ package com.kex.agent.mcp;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryConfig;
@@ -303,6 +305,31 @@ class McpToolCatalogTest {
 
         assertThat(meterRegistry.get("kex.mcp.server.up").tag("connection", "kafka-explorer").gauge().value())
                 .isEqualTo(1.0);
+    }
+
+    @Test
+    void refuse_une_commande_stdio_absente_de_l_allowlist() {
+        RetryRegistry retryRegistry = RetryRegistry.ofDefaults();
+        McpToolCatalog catalog = new McpToolCatalog(List.of(), ObservationRegistry.NOOP,
+                CircuitBreakerRegistry.ofDefaults(), retryRegistry, new SimpleMeterRegistry(), new ObjectMapper(),
+                new McpRuntimeProperties(".kex/test.enc", "", Duration.ofSeconds(1), 5, List.of("npx")));
+        McpServerRegistration registration = new McpServerRegistration("shell", "STDIO", null, null, null,
+                Map.of(), "sh", List.of("-c", "id"), Map.of(), true, Set.of(), Map.of());
+
+        assertThatThrownBy(() -> catalog.test(registration))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("non autorisée");
+    }
+
+    @Test
+    void refuse_deux_sources_d_authorization_http() {
+        McpServerRegistration registration = new McpServerRegistration("double-auth", "HTTP",
+                "https://mcp.example.net", "/mcp", "bearer", Map.of("Authorization", "Basic secret"),
+                null, List.of(), Map.of(), true, Set.of(), Map.of());
+
+        assertThatThrownBy(() -> catalog(true).test(registration))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("soit le bearer");
     }
 
     @Test

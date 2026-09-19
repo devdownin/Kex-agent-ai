@@ -5,6 +5,8 @@ package com.kex.agent.config;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kex.agent.mcp.McpRuntimeProperties;
 import com.kex.agent.mcp.McpToolCatalog;
 import com.kex.agent.memory.MemoryTools;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -53,9 +55,11 @@ class AgentConfig {
                                   ObservationRegistry observationRegistry,
                                   CircuitBreakerRegistry circuitBreakerRegistry,
                                   RetryRegistry retryRegistry,
-                                  MeterRegistry meterRegistry) {
+                                  MeterRegistry meterRegistry,
+                                  ObjectMapper objectMapper,
+                                  McpRuntimeProperties runtimeProperties) {
         return new McpToolCatalog(mcpSyncClients.getIfAvailable(List::of), observationRegistry,
-                circuitBreakerRegistry, retryRegistry, meterRegistry);
+                circuitBreakerRegistry, retryRegistry, meterRegistry, objectMapper, runtimeProperties);
     }
 
     /**

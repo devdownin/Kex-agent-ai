@@ -206,6 +206,11 @@ kex:
 Restart, then `GET /api/agent/mcp/servers` tells you what it found. The whole story — including what
 MCP is, if this is your first one — is in [`docs/MCP.md`](docs/MCP.md).
 
+You can also manage them under **Technical → MCP servers**: test before add, HTTP or stdio,
+per-tool permissions, diagnostics, enable/disable and import/export. Set `KEX_MCP_STORAGE_KEY` to
+encrypt and retain these connections; for stdio, explicitly allow executables with
+`KEX_MCP_STDIO_ALLOWED_COMMANDS=npx,uvx`.
+
 ## 🔭 API
 
 | Method | Route | What it does |
