@@ -203,6 +203,10 @@ await check('un panneau de supervision se rouvre depuis son adresse', async () =
 
 await check('le cockpit relie incident, preuves et chat contextuel sans changer de vue', async () => {
   const now = new Date().toISOString();
+  const chatRequests = [];
+  let overviewRequests = 0;
+  let signalRefresh;
+  const refreshed = new Promise((resolve) => { signalRefresh = resolve; });
   const alert = {
     id: 'order-lag', processId: 'order-integration', processName: 'Order Integration',
     title: 'Retard de consommation', severity: 'ERROR', occurrences: 3,
@@ -210,25 +214,45 @@ await check('le cockpit relie incident, preuves et chat contextuel sans changer 
     observations: [{ label: 'consumerLag', value: '4200' }],
     analysis: 'Le retard progresse.', probableCause: 'Consumer ralenti', confidence: 0.91,
     recommendation: 'Inspecter le consumer', capability: 'RESTART_CONSUMER', pendingDecisionId: null,
+    decisionIds: ['decision-related'],
   };
-  await page.route('**/api/agent/supervision/overview', (route) => route.fulfill({
-    status: 200, contentType: 'application/json',
-    body: JSON.stringify(overviewStub({
+  await page.route('**/api/agent/supervision/overview', (route) => {
+    overviewRequests += 1;
+    if (overviewRequests > 1) signalRefresh();
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(overviewStub({
       anomaliesDetected: 1, alerts: [alert], incidents: [{
         cycleId: 'c1', detectedAt: now, processCount: 1, processNames: ['Order Integration'],
-        severity: 'ERROR', titles: ['Retard de consommation'],
+        severity: 'ERROR', titles: ['Retard de consommation'], alertIds: ['order-lag'],
       }],
       lastCycle: { ...cycleStub('c1', 1), events: [{ at: now, label: 'Analyse', detail: 'Retard confirmé' }] },
-    })),
-  }));
+    })) });
+  });
   await page.route('**/api/agent/supervision/decisions', (route) => route.fulfill({
-    status: 200, contentType: 'application/json', body: '[]',
+    status: 200, contentType: 'application/json', body: JSON.stringify([
+      { ...decisionStub('decision-related'), action: 'Décision réellement liée' },
+      { ...decisionStub('decision-unrelated'), action: 'Décision étrangère au symptôme' },
+    ]),
   }));
+  await page.route('**/api/agent/chat', async (route) => {
+    const body = route.request().postDataJSON();
+    chatRequests.push(body);
+    const other = body.message.includes('Contexte B');
+    await route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({
+        conversationId: other ? 'conv-context-b' : 'conv-incident',
+        content: other ? 'Réponse B' : `Réponse incident ${chatRequests.length}`,
+        tools: [], finishReason: 'end_turn',
+      }),
+    });
+  });
 
   await page.goto(`${BASE}/#/incidents`, { waitUntil: 'networkidle' });
   await page.waitForSelector('#incident-workspace .incident-detail');
   const sectionTitles = await page.$$eval('.incident-section > h3', (nodes) => nodes.map((node) => node.textContent));
   assert.deepEqual(sectionTitles, ['Symptômes actifs', 'Explorateur de preuves', 'Décisions liées', 'Chronologie']);
+  const decisionsText = await page.$eval('.incident-section:nth-of-type(3)', (node) => node.innerText);
+  assert.match(decisionsText, /Décision réellement liée/);
+  assert.doesNotMatch(decisionsText, /Décision étrangère/);
   await page.click('.evidence-node > summary');
   assert.match(await page.$eval('.evidence-body', (node) => node.innerText), /consumerLag : 4200/);
 
@@ -236,10 +260,49 @@ await check('le cockpit relie incident, preuves et chat contextuel sans changer 
   await page.waitForSelector('#context-chat:not([hidden])');
   assert.match(await page.$eval('#context-chat-payload', (node) => node.textContent), /Retard de consommation/);
   assert.match(page.url(), /#\/incidents/);
+  await page.fill('#context-chat-prompt', 'Pourquoi cet incident ?');
+  await page.click('#context-chat-send');
+  await page.waitForFunction(() => document.querySelector('#context-chat-transcript')
+    .innerText.includes('Réponse incident'));
+  assert.equal(chatRequests[0].conversationId, null, 'le premier échange démarre une conversation dédiée');
+  assert.match(chatRequests[0].message, /Retard de consommation/, 'le contexte est réellement transmis');
   await page.click('#context-chat-close');
+
+  await page.evaluate(() => dispatchEvent(new CustomEvent('kex:context-chat', { detail: {
+    contextId: 'alert:context-b', title: 'Alerte B', context: 'Contexte B',
+  } })));
+  await page.fill('#context-chat-prompt', 'Question B');
+  await page.click('#context-chat-send');
+  await page.waitForFunction(() => document.querySelector('#context-chat-transcript').innerText.includes('Réponse B'));
+  assert.equal(chatRequests[1].conversationId, null,
+    'un autre contexte ne reprend pas la conversation de l’incident');
+  await page.click('#context-chat-close');
+
+  await page.click('.incident-detail-head button.primary');
+  await page.waitForFunction(() => document.querySelector('#context-chat-transcript')
+    .innerText.includes('Pourquoi cet incident'));
+  await page.fill('#context-chat-prompt', 'Et maintenant ?');
+  await page.click('#context-chat-send');
+  await page.waitForFunction(() => document.querySelector('#context-chat-transcript')
+    .innerText.includes('Réponse incident 3'));
+  assert.equal(chatRequests[2].conversationId, 'conv-incident', 'le même incident reprend sa conversation');
+  await page.click('#context-chat-close');
+
+  await page.evaluate(() => dispatchEvent(new Event('online')));
+  await Promise.race([
+    refreshed,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('le cockpit ne s’est pas actualisé')), 3000)),
+  ]);
+
+  await page.click('.incident-detail-head button.primary');
+  await page.click('#context-chat-full');
+  await page.waitForSelector('#transcript .sent-context');
+  assert.match(await page.$eval('#transcript .sent-context', (node) => node.innerText),
+    /Incident.*Retard de consommation/s);
 
   await page.unroute('**/api/agent/supervision/overview');
   await page.unroute('**/api/agent/supervision/decisions');
+  await page.unroute('**/api/agent/chat');
 });
 
 await check('le bandeau hors ligne apparaît puis disparaît', async () => {

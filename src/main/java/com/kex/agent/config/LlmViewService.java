@@ -9,6 +9,7 @@ import java.util.List;
 
 import com.kex.agent.knowledge.KnowledgeProperties;
 import com.kex.agent.supervision.ModelAvailability;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -39,6 +40,7 @@ public class LlmViewService implements ModelAvailability {
     }
 
     public LlmView describe() {
+        if (routingEnabled()) return describeRouting();
         String provider = provider();
         String baseUrl = switch (provider) {
             case ANTHROPIC -> safeUrl(environment.getProperty("spring.ai.anthropic.base-url"));
@@ -47,7 +49,7 @@ public class LlmViewService implements ModelAvailability {
         };
         String variable = apiKeyVariable(provider);
         Boolean keyPresent = keyPresent(provider);
-        boolean gateway = OPENAI.equals(provider) && !hostIs(baseUrl, OPENAI_HOST);
+        boolean gateway = OPENAI.equals(provider) && localProvider() == null && !hostIs(baseUrl, OPENAI_HOST);
 
         List<String> warnings = new ArrayList<>();
         if (Boolean.FALSE.equals(keyPresent)) {
@@ -85,7 +87,41 @@ public class LlmViewService implements ModelAvailability {
      */
     @Override
     public boolean keyKnownMissing() {
+        if (routingEnabled()) return false; // Endpoint credentials are validated during binding.
         return Boolean.FALSE.equals(keyPresent(provider()));
+    }
+
+    private boolean routingEnabled() {
+        return environment.getProperty("kex.models.enabled", Boolean.class, false);
+    }
+
+    private LlmView describeRouting() {
+        LlmRoutingProperties routing = Binder.get(environment).bind("kex.models", LlmRoutingProperties.class).get();
+        List<String> route = routing.route(LlmRoutingProperties.Task.CHAT);
+        LlmRoutingProperties.Endpoint endpoint = routing.endpoints().get(route.getFirst());
+        boolean hosted = endpoint.provider() == LlmRoutingProperties.Provider.OPENAI
+                || endpoint.provider() == LlmRoutingProperties.Provider.ANTHROPIC;
+        List<String> warnings = new ArrayList<>();
+        warnings.add("Routage par tâche actif ; route CHAT : " + String.join(" → ", route)
+                + ". Les autres routes sont définies dans kex.models.routes.");
+        if (routing.endpoints().values().stream().anyMatch(value ->
+                value.provider() == LlmRoutingProperties.Provider.OPENAI
+                        || value.provider() == LlmRoutingProperties.Provider.ANTHROPIC)) {
+            warnings.add("Des fournisseurs hébergés sont configurés : une bascule peut leur transmettre les prompts et résultats d'outils.");
+        }
+        if (agent.logInteractions()) warnings.add("kex.agent.log-interactions est actif : prompts et réponses sont journalisés.");
+        return new LlmView("routing", "Routage par tâche", endpoint.model(), safeUrl(endpoint.baseUrl()), hosted,
+                true, "kex.models.endpoints.<nom>.api-key", endpoint.maxTokens(), endpoint.temperature(),
+                environment.getProperty("spring.ai.tools.limits.max-total-tool-calls", Integer.class),
+                environment.getProperty("spring.ai.tools.limits.on-limit-exceeded"),
+                agent.requestTimeout().toString(), agent.maxHistoryMessages(), agent.logInteractions(),
+                environment.getProperty("spring.ai.model.embedding", "none"), knowledge.enabled(),
+                agent.systemPrompt(), List.copyOf(warnings));
+    }
+
+    private String localProvider() {
+        String local = environment.getProperty("kex.models.local-provider", "");
+        return "ollama".equals(local) || "vllm".equals(local) ? local : null;
     }
 
     String provider() {
@@ -101,7 +137,8 @@ public class LlmViewService implements ModelAvailability {
     String apiKeyVariable(String provider) {
         return switch (provider) {
             case ANTHROPIC -> "ANTHROPIC_API_KEY";
-            case OPENAI -> "OPENROUTER_API_KEY";
+            case OPENAI -> localProvider() == null ? "OPENROUTER_API_KEY"
+                    : localProvider().toUpperCase(java.util.Locale.ROOT) + "_API_KEY (facultative)";
             default -> null;
         };
     }
@@ -142,6 +179,8 @@ public class LlmViewService implements ModelAvailability {
         return switch (provider) {
             case ANTHROPIC -> "Anthropic";
             case OPENAI -> {
+                if ("ollama".equals(localProvider())) yield "Ollama (API locale)";
+                if ("vllm".equals(localProvider())) yield "vLLM (API locale)";
                 if (hostIs(baseUrl, OPENROUTER_HOST)) yield "OpenRouter";
                 yield hostIs(baseUrl, OPENAI_HOST) ? "OpenAI" : "Passerelle compatible OpenAI";
             }

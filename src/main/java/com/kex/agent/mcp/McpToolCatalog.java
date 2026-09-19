@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import com.kex.agent.isolation.IsolatedStdioCommand;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -67,6 +68,7 @@ public class McpToolCatalog implements AutoCloseable {
     private final ObjectMapper objectMapper;
     private final McpRuntimeProperties properties;
     private final EncryptedMcpServerStore store;
+    private final Map<McpSyncClient, IsolatedStdioCommand> isolatedProcesses = new ConcurrentHashMap<>();
 
     public McpToolCatalog(List<McpSyncClient> clients, ObservationRegistry observationRegistry,
                           CircuitBreakerRegistry circuitBreakerRegistry, RetryRegistry retryRegistry,
@@ -121,11 +123,11 @@ public class McpToolCatalog implements AutoCloseable {
                 throw ex;
             }
             if (normalized.enabled()) install(normalized.connection(), candidate);
-            else candidate.close();
+            else closeClient(candidate);
             return info;
         }
         catch (RuntimeException ex) {
-            if (!dynamicClients.containsKey(normalized.connection())) candidate.close();
+            if (!dynamicClients.containsKey(normalized.connection())) closeClient(candidate);
             recordHealth(normalized.connection(), false, elapsed(started), diagnosticMessage(ex));
             if (ex instanceof McpStorageException) throw ex;
             throw new McpServerUnavailableException(normalized.connection(), ex);
@@ -153,7 +155,7 @@ public class McpToolCatalog implements AutoCloseable {
                     diagnosticMessage(ex));
         }
         finally {
-            candidate.close();
+            closeClient(candidate);
         }
     }
 
@@ -178,11 +180,11 @@ public class McpToolCatalog implements AutoCloseable {
             }
             deactivate(connection);
             if (normalized.enabled()) install(connection, candidate);
-            else candidate.close();
+            else closeClient(candidate);
             return runtimeView(connection);
         }
         catch (RuntimeException ex) {
-            if (!dynamicClients.containsValue(candidate)) candidate.close();
+            if (!dynamicClients.containsValue(candidate)) closeClient(candidate);
             recordHealth(connection, false, elapsed(started), diagnosticMessage(ex));
             if (ex instanceof McpStorageException) throw ex;
             throw new McpServerUnavailableException(connection, ex);
@@ -201,7 +203,7 @@ public class McpToolCatalog implements AutoCloseable {
                 candidate.initialize();
             }
             catch (RuntimeException ex) {
-                candidate.close();
+                closeClient(candidate);
                 throw new McpServerUnavailableException(connection, ex);
             }
         }
@@ -211,7 +213,7 @@ public class McpToolCatalog implements AutoCloseable {
         }
         catch (RuntimeException ex) {
             definitions.put(connection, current);
-            if (candidate != null) candidate.close();
+            if (candidate != null) closeClient(candidate);
             throw ex;
         }
         if (enabled) install(connection, candidate);
@@ -248,10 +250,10 @@ public class McpToolCatalog implements AutoCloseable {
                 deactivate(connection);
                 install(connection, candidate);
             }
-            else candidate.close();
+            else closeClient(candidate);
         }
         catch (RuntimeException ex) {
-            candidate.close();
+            closeClient(candidate);
             recordHealth(connection, false, elapsed(started), diagnosticMessage(ex));
             throw new McpServerUnavailableException(connection, ex);
         }
@@ -298,6 +300,9 @@ public class McpToolCatalog implements AutoCloseable {
         long started = System.nanoTime();
         if (!definition.enabled()) {
             McpConnectionTestResult result = test(definition);
+            if (!result.success()) {
+                throw new McpServerUnavailableException(connection, new IllegalStateException(result.message()));
+            }
             return diagnostics(connection);
         }
         McpSyncClient client = dynamicClients.get(connection);
@@ -312,6 +317,7 @@ public class McpToolCatalog implements AutoCloseable {
         }
         catch (RuntimeException ex) {
             recordHealth(connection, false, elapsed(started), diagnosticMessage(ex));
+            throw new McpServerUnavailableException(connection, ex);
         }
         return diagnostics(connection);
     }
@@ -382,8 +388,7 @@ public class McpToolCatalog implements AutoCloseable {
                 .lowCardinalityKeyValue("connection", connection)
                 .lowCardinalityKeyValue("tool", tool)
                 .observe(() -> {
-                    McpSchema.CallToolResult result = client(connection).callTool(
-                            new McpSchema.CallToolRequest(tool, arguments == null ? Map.of() : arguments));
+                    McpSchema.CallToolResult result = invokeTool(connection, tool, arguments);
                     return new McpToolResult(connection, tool, Boolean.TRUE.equals(result.isError()),
                             textOf(result.content()), result.structuredContent());
                 });
@@ -432,7 +437,7 @@ public class McpToolCatalog implements AutoCloseable {
 
     @Override
     public synchronized void close() {
-        dynamicClients.values().forEach(McpSyncClient::close);
+        dynamicClients.values().forEach(this::closeClient);
         clients.removeAll(dynamicClients.values());
         dynamicClients.clear();
     }
@@ -481,7 +486,7 @@ public class McpToolCatalog implements AutoCloseable {
             recordHealth(registration.connection(), true, elapsed(started), "Connexion activée");
         }
         catch (RuntimeException ex) {
-            client.close();
+            closeClient(client);
             recordHealth(registration.connection(), false, elapsed(started), diagnosticMessage(ex));
             throw new McpServerUnavailableException(registration.connection(), ex);
         }
@@ -499,18 +504,58 @@ public class McpToolCatalog implements AutoCloseable {
         McpSyncClient active = dynamicClients.remove(connection);
         if (active != null) {
             clients.remove(active);
-            active.close();
+            closeClient(active);
+        }
+    }
+
+    private McpSchema.CallToolResult invokeTool(String connection, String tool, Map<String, Object> arguments) {
+        McpServerRegistration registration = definitions.get(connection);
+        McpSchema.CallToolRequest request = new McpSchema.CallToolRequest(tool,
+                arguments == null ? Map.of() : arguments);
+        if (!isolated(registration)) return client(connection).callTool(request);
+        if (!registration.enabled()) throw new UnknownMcpServerException(connection);
+        // Discovery is persistent; tool execution always receives a new filesystem and process.
+        McpSyncClient taskClient = createClient(registration);
+        try {
+            taskClient.initialize();
+            return taskClient.callTool(request);
+        }
+        finally {
+            closeClient(taskClient);
+        }
+    }
+
+    private boolean isolated(McpServerRegistration registration) {
+        return registration != null && "STDIO".equals(registration.transport()) && properties.isolation().enabled();
+    }
+
+    private void closeClient(McpSyncClient client) {
+        IsolatedStdioCommand process = isolatedProcesses.remove(client);
+        try {
+            client.close();
+        }
+        finally {
+            if (process != null) process.close();
         }
     }
 
     private McpSyncClient createClient(McpServerRegistration registration) {
-        McpClientTransport transport = "STDIO".equals(registration.transport())
-                ? stdioTransport(registration)
-                : httpTransport(registration);
-        return McpClient.sync(transport)
-                .clientInfo(new McpSchema.Implementation("kex-agent - " + registration.connection(), "runtime"))
-                .requestTimeout(properties.requestTimeout())
-                .build();
+        IsolatedStdioCommand process = isolated(registration)
+                ? new IsolatedStdioCommand(properties.isolation(), registration.command(), registration.args(),
+                        registration.environment()) : null;
+        try {
+            McpClientTransport transport = "STDIO".equals(registration.transport())
+                    ? stdioTransport(registration, process) : httpTransport(registration);
+            McpSyncClient client = McpClient.sync(transport)
+                    .clientInfo(new McpSchema.Implementation("kex-agent - " + registration.connection(), "runtime"))
+                    .requestTimeout(properties.requestTimeout()).build();
+            if (process != null) isolatedProcesses.put(client, process);
+            return client;
+        }
+        catch (RuntimeException ex) {
+            if (process != null) process.close();
+            throw ex;
+        }
     }
 
     private McpClientTransport httpTransport(McpServerRegistration registration) {
@@ -534,16 +579,16 @@ public class McpToolCatalog implements AutoCloseable {
     }
 
     /** Réflexion limitée à la fabrique stdio pour rester compatible avec les mappers SDK 0.x/1.x. */
-    private McpClientTransport stdioTransport(McpServerRegistration registration) {
+    private McpClientTransport stdioTransport(McpServerRegistration registration, IsolatedStdioCommand process) {
         if (!StringUtils.hasText(registration.command())) {
             throw new IllegalArgumentException("La commande du transport STDIO est obligatoire");
         }
         try {
             Class<?> parametersType = Class.forName("io.modelcontextprotocol.client.transport.ServerParameters");
             Object builder = parametersType.getMethod("builder", String.class)
-                    .invoke(null, registration.command().trim());
-            builder.getClass().getMethod("args", List.class).invoke(builder, registration.args());
-            builder.getClass().getMethod("env", Map.class).invoke(builder, registration.environment());
+                    .invoke(null, process == null ? registration.command().trim() : process.executable());
+            builder.getClass().getMethod("args", List.class).invoke(builder, process == null ? registration.args() : process.arguments());
+            builder.getClass().getMethod("env", Map.class).invoke(builder, process == null ? registration.environment() : Map.of());
             Object parameters = builder.getClass().getMethod("build").invoke(builder);
             Class<?> transportType = Class.forName("io.modelcontextprotocol.client.transport.StdioClientTransport");
             for (Constructor<?> constructor : transportType.getConstructors()) {
@@ -586,6 +631,10 @@ public class McpToolCatalog implements AutoCloseable {
                 .noneMatch(command -> command.equals(source.command().trim()))) {
             throw new IllegalArgumentException("Commande STDIO non autorisée ; configurez "
                     + "KEX_MCP_STDIO_ALLOWED_COMMANDS");
+        }
+        if ("STDIO".equals(transport) && properties.isolation().enabled()
+                && !properties.isolation().images().containsKey(source.command().trim())) {
+            throw new IllegalArgumentException("Aucune image d'isolation approuvée pour cette commande STDIO");
         }
         if (StringUtils.hasText(source.bearerToken()) && source.headers().keySet().stream()
                 .anyMatch(name -> "authorization".equalsIgnoreCase(name))) {

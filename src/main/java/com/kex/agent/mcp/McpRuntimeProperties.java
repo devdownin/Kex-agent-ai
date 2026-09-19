@@ -15,10 +15,18 @@ public record McpRuntimeProperties(
         String storageKey,
         @DefaultValue("30s") Duration requestTimeout,
         @DefaultValue("50") int healthHistorySize,
-        @DefaultValue List<String> allowedStdioCommands) {
+        @DefaultValue List<String> allowedStdioCommands,
+        @DefaultValue com.kex.agent.isolation.StdioIsolationProperties isolation) {
+
+    public McpRuntimeProperties(String storagePath, String storageKey, Duration requestTimeout,
+                                int healthHistorySize, List<String> allowedStdioCommands) {
+        this(storagePath, storageKey, requestTimeout, healthHistorySize, allowedStdioCommands,
+                com.kex.agent.isolation.StdioIsolationProperties.defaults());
+    }
 
     public McpRuntimeProperties {
         storageKey = storageKey == null ? "" : storageKey;
+        isolation = isolation == null ? com.kex.agent.isolation.StdioIsolationProperties.defaults() : isolation;
         allowedStdioCommands = allowedStdioCommands == null ? List.of() : List.copyOf(allowedStdioCommands);
         if (requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) {
             throw new IllegalArgumentException("kex.mcp.runtime.request-timeout doit être positif");

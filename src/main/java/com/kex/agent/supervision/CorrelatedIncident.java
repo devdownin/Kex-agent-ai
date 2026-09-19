@@ -15,5 +15,6 @@ import java.util.List;
  * partir d'une simple simultanéité serait plus trompeur que de ne rien dire.
  */
 public record CorrelatedIncident(String cycleId, Instant detectedAt, int processCount,
-                                 List<String> processNames, ProcessState severity, List<String> titles) {
+                                 List<String> processNames, ProcessState severity, List<String> titles,
+                                 List<String> alertIds) {
 }

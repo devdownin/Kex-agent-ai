@@ -17,6 +17,7 @@ const CONVERSATION_STORAGE = 'kex.agent.conversation';
 // de vérité, seulement un moyen de la réafficher telle quelle.
 const HISTORY_INDEX = 'kex.agent.conversations';
 const TRANSCRIPT_PREFIX = 'kex.agent.conversation.';
+const CONTEXT_CONVERSATIONS = 'kex.agent.context-conversations';
 const MAX_HISTORY = 20;
 const MAX_TURNS_STORED = 40;
 
@@ -24,6 +25,9 @@ let conversationId = null;
 let inFlight = null;
 let unauthorized = () => {};
 let contextualPayload = '';
+let contextualTitle = '';
+let activeContextId = null;
+let contextualConversationId = null;
 
 try {
   conversationId = sessionStorage.getItem(CONVERSATION_STORAGE);
@@ -72,11 +76,40 @@ function touchIndex(id, label) {
 
 function removeFromIndex(id) {
   writeIndex(readIndex().filter((entry) => entry.id !== id));
+  const contexts = readContextConversations();
+  Object.entries(contexts).forEach(([contextId, conversation]) => {
+    if (conversation === id) delete contexts[contextId];
+  });
+  writeContextConversations(contexts);
+  if (contextualConversationId === id) contextualConversationId = null;
   try {
     localStorage.removeItem(TRANSCRIPT_PREFIX + id);
   } catch {
     /* idem */
   }
+}
+
+function readContextConversations() {
+  try {
+    return JSON.parse(sessionStorage.getItem(CONTEXT_CONVERSATIONS) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function writeContextConversations(contexts) {
+  try {
+    sessionStorage.setItem(CONTEXT_CONVERSATIONS, JSON.stringify(contexts));
+  } catch {
+    /* sans stockage, l'isolation reste valable tant que la page n'est pas rechargée */
+  }
+}
+
+function rememberContextConversation(contextId, id) {
+  if (!contextId || !id) return;
+  const contexts = readContextConversations();
+  contexts[contextId] = id;
+  writeContextConversations(contexts);
 }
 
 function readTranscript(id) {
@@ -119,12 +152,35 @@ function addContextTurn(role, text) {
   return turn;
 }
 
+function renderSentContext(turn, saved) {
+  if (!saved.context) return;
+  const detail = el('details', 'sent-context');
+  detail.append(el('summary', null, saved.contextTitle || 'Contexte transmis'),
+    el('pre', 'dump', saved.context));
+  turn.append(detail);
+}
+
+function replayContext(id) {
+  $('#context-chat-transcript').replaceChildren();
+  if (!id) return;
+  readTranscript(id).forEach((saved) => {
+    const turn = addContextTurn(saved.role, saved.text);
+    if (saved.role === 'agent') {
+      renderToolChips(turn, saved.tools || []);
+      renderFinishReason(turn, saved.finishReason);
+    }
+  });
+}
+
 /** Ouvre l'assistant à côté du contexte opérationnel, sans changer de route. */
-export function openContextual({ title = 'Interroger l’agent', context = '' } = {}) {
+export function openContextual({ title = 'Interroger l’agent', context = '', contextId = null } = {}) {
   contextualPayload = context.trim();
+  contextualTitle = title;
+  activeContextId = contextId || `${title}\n${contextualPayload}`;
+  contextualConversationId = readContextConversations()[activeContextId] || null;
   $('#context-chat-title').textContent = title;
   $('#context-chat-payload').textContent = contextualPayload || 'Aucun contexte structuré.';
-  $('#context-chat-transcript').replaceChildren();
+  replayContext(contextualConversationId);
   $('#context-chat').hidden = false;
   document.documentElement.dataset.contextChat = 'open';
   $('#context-chat-prompt').focus();
@@ -136,25 +192,32 @@ function closeContextual() {
 }
 
 async function sendContextual(question) {
-  const message = [contextualPayload, `Question de l’opérateur : ${question}`].filter(Boolean).join('\n\n');
-  const answer = await api('/api/agent/chat', { method: 'POST', body: { conversationId, message } });
-  setConversation(answer.conversationId);
-  appendTranscript(answer.conversationId, { role: 'user', text: question });
+  const contextId = activeContextId;
+  const context = contextualPayload;
+  const title = contextualTitle;
+  const ownConversationId = contextualConversationId;
+  const message = [context, `Question de l’opérateur : ${question}`].filter(Boolean).join('\n\n');
+  const answer = await api('/api/agent/chat', {
+    method: 'POST', body: { conversationId: ownConversationId, message },
+  });
+  if (activeContextId === contextId) contextualConversationId = answer.conversationId;
+  rememberContextConversation(contextId, answer.conversationId);
+  const savedQuestion = { role: 'user', text: question, context, contextTitle: title };
+  appendTranscript(answer.conversationId, savedQuestion);
   touchIndex(answer.conversationId, question.slice(0, 48));
   appendTranscript(answer.conversationId,
     { role: 'agent', text: answer.content, tools: answer.tools, finishReason: answer.finishReason });
 
-  // La conversation complète reste la continuité de ce panneau : en l'ouvrant ensuite, les tours
-  // effectués ici ne disparaissent pas de l'écran ni de la transcription locale.
-  addTurn('user', question);
-  const { turn } = addTurn('agent', answer.content);
-  renderToolChips(turn, answer.tools || []);
-  renderFinishReason(turn, answer.finishReason);
-  renderToolLog(answer.tools || []);
-
-  const contextualTurn = addContextTurn('agent', answer.content);
-  renderToolChips(contextualTurn, answer.tools || []);
-  renderFinishReason(contextualTurn, answer.finishReason);
+  if (activeContextId === contextId) {
+    // La conversation complète reste la continuité de ce panneau : en l'ouvrant ensuite, les tours
+    // effectués ici ne disparaissent pas de l'écran ni de la transcription locale. La rejouer évite
+    // aussi de juxtaposer à l'écran les tours de deux contextes dont les conversations sont isolées.
+    setConversation(answer.conversationId);
+    replay(answer.conversationId);
+    const contextualTurn = addContextTurn('agent', answer.content);
+    renderToolChips(contextualTurn, answer.tools || []);
+    renderFinishReason(contextualTurn, answer.finishReason);
+  }
 }
 
 function renderToolChips(turn, calls) {
@@ -295,6 +358,7 @@ function replay(id) {
   let lastTools = [];
   readTranscript(id).forEach((saved) => {
     const { turn } = addTurn(saved.role, saved.text);
+    if (saved.role === 'user') renderSentContext(turn, saved);
     if (saved.role === 'agent') {
       if (saved.tools?.length) {
         renderToolChips(turn, saved.tools);
@@ -378,7 +442,13 @@ export function wire(onUnauthorized) {
   registerDrawer('historique', openHistory);
   addEventListener('kex:context-chat', (event) => openContextual(event.detail));
   $('#context-chat-close').addEventListener('click', closeContextual);
-  $('#context-chat-full').addEventListener('click', closeContextual);
+  $('#context-chat-full').addEventListener('click', () => {
+    if (contextualConversationId) {
+      setConversation(contextualConversationId);
+      replay(contextualConversationId);
+    }
+    closeContextual();
+  });
   addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !$('#context-chat').hidden) closeContextual();
   });

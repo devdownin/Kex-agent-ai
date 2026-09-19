@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.function.Supplier;
 
 import com.kex.agent.agent.AgentExecution;
+import com.kex.agent.agent.TaskToolPolicy;
 import com.kex.agent.agent.ToolCallRecorder;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.springframework.ai.chat.model.ToolContext;
@@ -74,6 +75,7 @@ class RecordingToolCallbackProvider implements ToolCallbackProvider {
             return wrapUntrusted(name, ToolCallRecorder.timed(toolContext, name,
                     () -> {
                         AgentExecution.ensureActive(toolContext);
+                        TaskToolPolicy.check(name, toolContext);
                         return protect(() -> delegate.call(toolInput, toolContext));
                     }));
         }

@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -eu
+KEX_BIN_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ "${1:-}" = "migrate" ]; then
+  shift
+  exec python3 "$KEX_BIN_DIR/kex_migrate.py" "$@"
+fi
+printf '%s\n' 'Usage: kex migrate --source ~/.openclaw [--workspace PATH] [--apply --output PATH]' >&2
+exit 2

@@ -294,6 +294,14 @@ class AgentControllerTest {
     }
 
     @Test
+    void retourne_503_si_le_rafraichissement_mcp_echoue() {
+        willThrow(new McpServerUnavailableException("kafka-explorer", new IllegalStateException("refused")))
+                .given(toolCatalog).refresh("kafka-explorer");
+
+        assertThat(mvc.post().uri("/api/agent/mcp/servers/kafka-explorer/refresh")).hasStatus(503);
+    }
+
+    @Test
     void le_flux_annonce_la_conversation_puis_les_tokens() throws Exception {
         given(agentService.stream("Anonyme", null, "bonjour")).willReturn(new AgentStream("conv-9",
                 Flux.just(new AgentEvent.Token("sa"), new AgentEvent.ToolCall("echo", 12, false),

@@ -4,10 +4,13 @@ package com.kex.agent.config;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.kex.agent.agent.AgentEvent;
 import com.kex.agent.agent.AgentExecution;
 import com.kex.agent.agent.ToolCallRecorder;
+import com.kex.agent.agent.TaskToolPolicy;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
@@ -22,6 +25,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RecordingToolCallbackProviderTest {
+
+    @Test
+    void une_tache_ne_peut_pas_executer_un_outil_hors_liste_administrateur() {
+        AtomicBoolean called = new AtomicBoolean();
+        ToolCallback delegate = new ToolCallback() {
+            public ToolDefinition getToolDefinition() {
+                return DefaultToolDefinition.builder().name("restart").description("restart").inputSchema("{}").build();
+            }
+            public String call(String input) {
+                called.set(true);
+                return "restarted";
+            }
+        };
+        ToolContext context = new ToolContext(Map.of(TaskToolPolicy.ALLOWED_TOOLS, Set.of("read_lag")));
+        assertThatThrownBy(() -> wrap(delegate).call("{}", context)).isInstanceOf(SecurityException.class);
+        assertThat(called).isFalse();
+    }
+
+    @Test
+    void une_tache_peut_utiliser_un_outil_explicitement_autorise() {
+        ToolContext context = new ToolContext(Map.of(TaskToolPolicy.ALLOWED_TOOLS, Set.of("echo")));
+        assertThat(wrap(callback("lag: 42", null)).call("{}", context)).contains("lag: 42");
+    }
 
     private static ToolCallback callback(String result, RuntimeException failure) {
         return new ToolCallback() {

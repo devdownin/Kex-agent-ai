@@ -19,6 +19,10 @@
 
 ---
 
+## Un agent généraliste à gouvernance forte
+
+Kafka est une intégration de référence, pas une limite : Kex peut exploiter des serveurs MCP pour des fichiers, GitHub, SQL ou des systèmes métier. Sa différenciation reste la gouvernance — autonomie par capacité, seuils de confiance, validation humaine et audit. Voir [la vision et les extensions](docs/GOVERNED-GENERAL-AGENT.md).
+
 **La plupart des démos d'« agent IA » répondent de mémoire. Celui-ci va regarder.**
 
 Kex Agent AI est un service Spring Boot qui se connecte à des serveurs [MCP](https://modelcontextprotocol.io),

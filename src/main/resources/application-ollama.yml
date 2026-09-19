@@ -1,0 +1,19 @@
+# Local inference through Ollama's native OpenAI-compatible endpoint.
+spring:
+  ai:
+    model:
+      chat: openai
+      embedding: none
+    openai:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434/v1}
+      api-key: ${OLLAMA_API_KEY:kex-local}
+      chat:
+        options:
+          model: ${OLLAMA_MODEL:qwen3:8b}
+          max-retries: 0
+kex:
+  models:
+    local-provider: ollama
+  agent:
+    knowledge:
+      enabled: false

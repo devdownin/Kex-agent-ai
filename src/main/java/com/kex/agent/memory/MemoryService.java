@@ -38,6 +38,11 @@ class MemoryService {
      *                 contredit et les deux seraient relus ensemble.
      */
     String remember(String content, String replaces, String conversationId) {
+        return remember("kex-internal", content, replaces, conversationId);
+    }
+
+    String remember(String owner, String content, String replaces, String conversationId) {
+        MemoryIdentity.require(owner);
         String trimmed = content == null ? "" : content.strip();
         if (trimmed.isEmpty()) {
             return "Rien à retenir : contenu vide.";
@@ -46,27 +51,37 @@ class MemoryService {
                 ? trimmed.substring(0, properties.maxContentLength())
                 : trimmed;
         String id = UUID.randomUUID().toString();
-        repository.add(new MemoryEntry(id, bounded, conversationId, clock.instant(), null));
+        repository.add(new MemoryEntry(id, bounded, conversationId, clock.instant(), null, owner));
 
         if (!StringUtils.hasText(replaces)) {
             return "Retenu.";
         }
-        return repository.supersede(replaces.strip(), id)
+        return repository.active(clock.instant().minus(properties.retention())).stream()
+                .anyMatch(entry -> owner.equals(entry.owner()) && entry.id().equals(replaces.strip()))
+                && repository.supersede(replaces.strip(), id)
                 ? "Retenu, et le souvenir remplacé est marqué périmé."
                 : "Retenu, mais aucun souvenir valable ne porte cet identifiant : rien n'a été marqué périmé.";
     }
 
-    List<MemoryFact> recall() {
+    List<MemoryFact> recall() { return recall("kex-internal"); }
+
+    List<MemoryFact> recall(String owner) {
+        MemoryIdentity.require(owner);
         Instant since = clock.instant().minus(properties.retention());
         return repository.active(since).stream()
+                .filter(entry -> owner.equals(entry.owner()))
                 .map(entry -> new MemoryFact(entry.id(), entry.content()))
                 .toList();
     }
 
     /** Pour le Control Center : plus de champs que {@link #recall()}, rien pour le modèle. */
-    List<MemoryView> list() {
+    List<MemoryView> list() { return list("kex-internal"); }
+
+    List<MemoryView> list(String owner) {
+        MemoryIdentity.require(owner);
         Instant since = clock.instant().minus(properties.retention());
         return repository.active(since).stream()
+                .filter(entry -> owner.equals(entry.owner()))
                 .map(entry -> new MemoryView(entry.id(), entry.content(), entry.conversationId(), entry.createdAt()))
                 .toList();
     }
@@ -75,7 +90,13 @@ class MemoryService {
      * Suppression par un opérateur, jamais par le modèle : aucun outil ne l'expose. L'appelant
      * ({@link MemoryController}) écrit l'audit à partir de l'entrée rendue ici.
      */
-    MemoryEntry forget(String id) {
+    MemoryEntry forget(String id) { return forget("kex-internal", id); }
+
+    MemoryEntry forget(String owner, String id) {
+        MemoryIdentity.require(owner);
+        if (list(owner).stream().noneMatch(entry -> entry.id().equals(id))) {
+            throw new UnknownMemoryException(id);
+        }
         return repository.forget(id).orElseThrow(() -> new UnknownMemoryException(id));
     }
 }

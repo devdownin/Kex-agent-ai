@@ -545,7 +545,9 @@ const TICK_MS = 1_000;
 
 // Les écrans qui portent un formulaire ne se rafraîchissent pas : un rendu par-dessus effacerait
 // ce que quelqu'un est en train de saisir. Le chat non plus, pour la même raison.
-const SELF_REFRESHING = new Set(['overview', 'attention', 'processes', 'decisions', 'alerts', 'audit', 'tools']);
+const SELF_REFRESHING = new Set([
+  'overview', 'attention', 'processes', 'decisions', 'alerts', 'incidents', 'audit', 'tools',
+]);
 
 /**
  * Un sondage est suspendu quand l'onglet est caché — il n'y a personne pour lire et chaque cycle
@@ -553,7 +555,8 @@ const SELF_REFRESHING = new Set(['overview', 'attention', 'processes', 'decision
  * quelqu'un qui lit une décision avant de l'approuver est hostile.
  */
 function paused() {
-  return document.hidden || drawerOpen() || document.querySelector('dialog[open]') !== null;
+  return document.hidden || drawerOpen() || !$('#context-chat').hidden
+    || document.querySelector('dialog[open]') !== null;
 }
 
 async function backgroundRefresh() {

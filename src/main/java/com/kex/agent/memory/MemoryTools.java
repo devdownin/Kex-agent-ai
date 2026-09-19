@@ -7,6 +7,7 @@ import java.util.List;
 import com.kex.agent.agent.AgentExecution;
 import com.kex.agent.agent.AgentService;
 import com.kex.agent.agent.ToolCallRecorder;
+import com.kex.agent.agent.TaskToolPolicy;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -36,15 +37,17 @@ public class MemoryTools {
                     + "un souvenir existant, sans quoi les deux seront relus ensemble.") String replaces,
             ToolContext toolContext) {
         AgentExecution.ensureActive(toolContext);
+        TaskToolPolicy.check("remember_fact", toolContext);
         return ToolCallRecorder.timed(toolContext, "remember_fact",
-                () -> memory.remember(content, replaces, conversationId(toolContext)));
+                () -> memory.remember(MemoryIdentity.from(toolContext), content, replaces, conversationId(toolContext)));
     }
 
     @Tool(name = "recall_facts", description = "Relit les faits retenus lors de conversations "
             + "précédentes, avec leur identifiant. À appeler en début d'échange si un souvenir "
             + "pourrait éviter de redemander une information déjà établie.")
     public List<MemoryFact> recallFacts(ToolContext toolContext) {
-        return ToolCallRecorder.timed(toolContext, "recall_facts", memory::recall);
+        TaskToolPolicy.check("recall_facts", toolContext);
+        return ToolCallRecorder.timed(toolContext, "recall_facts", () -> memory.recall(MemoryIdentity.from(toolContext)));
     }
 
     private static String conversationId(ToolContext toolContext) {
