@@ -481,6 +481,7 @@ await check('la tendance des cycles se trace dès que deux cycles sont connus', 
 
 await check('la mise à jour de politique montre un diff avant/après, pas seulement l’état visé', async () => {
   await page.goto(`${BASE}/#/agent`, { waitUntil: 'networkidle' });
+  await page.click('[data-agent-tab="general"]');
   await page.waitForSelector('#agent-form');
   const before = await page.$eval('input[name="mode"]:checked', (node) => node.value);
   const other = before === 'SUPERVISED' ? 'MANUAL' : 'SUPERVISED';
