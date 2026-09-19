@@ -6,7 +6,8 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import com.kex.agent.config.AgentProperties;
@@ -255,15 +256,15 @@ class AgentServiceTest {
     }
 
     @Test
-    void borne_l_attente_d_un_appel_bloquant() {
+    void borne_l_attente_d_un_appel_bloquant() throws InterruptedException {
         blockingCall();
-        AtomicBoolean interrupted = new AtomicBoolean();
+        CountDownLatch interrupted = new CountDownLatch(1);
         given(callSpec.chatResponse()).willAnswer(invocation -> {
             try {
                 Thread.sleep(5_000);
             }
             catch (InterruptedException ex) {
-                interrupted.set(true);
+                interrupted.countDown();
                 throw ex;
             }
             return response("trop tard");
@@ -274,7 +275,7 @@ class AgentServiceTest {
         assertThatThrownBy(() -> service.ask("conv-1", "ping"))
                 .isInstanceOf(AgentTimeoutException.class)
                 .extracting(ex -> ((AgentTimeoutException) ex).conversationId()).isEqualTo("conv-1");
-        assertThat(interrupted).isTrue();
+        assertThat(interrupted.await(1, TimeUnit.SECONDS)).isTrue();
     }
 
     /**
