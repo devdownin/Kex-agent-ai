@@ -38,6 +38,9 @@
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 21 19H3Z"/><path d="M12 10.3v3.4"/><circle cx="12" cy="16.4" r=".9" fill="currentColor" stroke="none"/></svg>
         À traiter
         <span class="badge" id="nav-attention" hidden>0</span></a>
+      <a class="nav-item" href="#/incidents" data-view="incidents">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14v14H5z"/><path d="M8 9h8M8 12h5M8 15h7"/><circle cx="17.5" cy="15.5" r="2.5"/></svg>
+        Incidents</a>
       <a class="nav-item" href="#/agent" data-view="agent">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="8" width="11" height="10" rx="2.5"/><circle cx="10" cy="13" r=".6" fill="currentColor" stroke="none"/><circle cx="14" cy="13" r=".6" fill="currentColor" stroke="none"/><path d="M12 8V5.5"/><circle cx="12" cy="4.3" r="1.1"/><path d="M4 12.5h2.5M17.5 12.5H20"/></svg>
         Agent</a>
@@ -198,6 +201,19 @@
         <button type="button" class="primary" id="refresh-attention">Actualiser</button>
       </section>
       <div class="attention-columns" id="attention-workspace" data-skeleton="list"></div>
+    </section>
+
+    <!-- ══ Cockpit incident ══ -->
+    <section class="view" id="view-incidents" hidden>
+      <section class="incident-heading">
+        <div>
+          <span class="panel-kicker">Diagnostic opérationnel</span>
+          <h1>Cockpit incident</h1>
+          <p>Symptômes, preuves, décisions et chronologie réunis sans changer d’écran.</p>
+        </div>
+        <button type="button" class="ghost" id="refresh-incidents">Actualiser</button>
+      </section>
+      <div id="incident-workspace" data-skeleton="list"></div>
     </section>
 
     <!-- ══ Agent ══ -->
@@ -521,6 +537,30 @@
       <button type="button" class="ghost" id="drawer-close" aria-label="Fermer le panneau">✕</button>
     </div>
     <div class="drawer-body" id="drawer-body"></div>
+  </aside>
+
+  <!-- Assistant contextuel non modal : le cockpit reste lisible pendant l'échange. -->
+  <aside class="context-chat" id="context-chat" hidden aria-labelledby="context-chat-title">
+    <div class="drawer-head">
+      <div>
+        <span class="panel-kicker">Assistant contextuel</span>
+        <h2 id="context-chat-title">Interroger l’agent</h2>
+      </div>
+      <button type="button" class="ghost" id="context-chat-close" aria-label="Fermer le chat contextuel">✕</button>
+    </div>
+    <div class="context-chat-body">
+      <details class="context-payload">
+        <summary>Contexte transmis à l’agent</summary>
+        <pre id="context-chat-payload"></pre>
+      </details>
+      <ol class="transcript context-transcript" id="context-chat-transcript" aria-live="polite"></ol>
+    </div>
+    <form class="composer context-composer" id="context-chat-form">
+      <label class="sr-only" for="context-chat-prompt">Question</label>
+      <textarea id="context-chat-prompt" rows="2" placeholder="Posez une question sur cet incident…" required></textarea>
+      <button type="submit" class="primary" id="context-chat-send">Envoyer</button>
+      <a class="ghost" href="#/chat" id="context-chat-full">Ouvrir la conversation</a>
+    </form>
   </aside>
 </div>
 

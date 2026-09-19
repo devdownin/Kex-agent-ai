@@ -104,7 +104,9 @@ class McpStreamableHttpIntegrationTest {
             });
             assertThat(catalog.diagnostics("runtime-faux").conflicts())
                     .anyMatch(conflict -> conflict.contains("echo") && conflict.contains("runtime-second"));
-            assertThat(catalog.refresh("runtime-faux").healthHistory()).isNotEmpty();
+            McpServerDiagnostics refreshed = catalog.refresh("runtime-faux");
+            assertThat(refreshed.healthHistory()).isNotEmpty();
+            assertThat(refreshed.toolDiff().hasChanges()).isFalse();
             assertThat(exported.servers()).singleElement().satisfies(server -> {
                 assertThat(server.enabled()).isFalse();
                 assertThat(server.bearerToken()).isNull();

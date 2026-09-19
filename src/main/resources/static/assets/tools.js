@@ -206,6 +206,7 @@ function showDiagnostics(host, diagnostics) {
   panel.append(head);
   const summary = el('p', 'muted', `${diagnostics.connected ? 'Connecté' : 'Hors ligne'} · ${diagnostics.toolCount} outil(s)`);
   panel.append(summary);
+  if (diagnostics.toolDiff) panel.append(renderToolDiff(diagnostics.toolDiff));
   if (diagnostics.conflicts?.length) {
     const title = el('strong', null, 'Conflits détectés');
     const conflicts = el('ul');
@@ -224,6 +225,34 @@ function showDiagnostics(host, diagnostics) {
     panel.append(el('strong', null, 'Historique de santé'), history);
   }
   host.append(panel);
+}
+
+function renderToolDiff(diff) {
+  const section = el('section', 'mcp-tool-diff');
+  const title = el('div', 'mcp-diff-title');
+  title.append(el('strong', null, 'Diff du catalogue'));
+  if (diff.comparedAt) title.append(el('time', 'muted', new Date(diff.comparedAt).toLocaleString('fr-FR')));
+  section.append(title);
+  const hasChanges = (diff.added?.length || 0) + (diff.removed?.length || 0)
+    + (diff.schemaChanged?.length || 0) > 0;
+  if (!hasChanges) {
+    section.append(el('p', 'hint', 'Aucun changement depuis le rafraîchissement précédent.'));
+    return section;
+  }
+  const groups = [
+    ['Ajoutés', diff.added || [], 'added'],
+    ['Supprimés', diff.removed || [], 'removed'],
+    ['Schéma modifié', diff.schemaChanged || [], 'changed'],
+  ];
+  groups.filter(([, names]) => names.length).forEach(([label, names, kind]) => {
+    const row = el('div', `mcp-diff-group ${kind}`);
+    row.append(el('span', 'mcp-diff-label', `${label} · ${names.length}`));
+    const chips = el('div', 'chips');
+    names.forEach((name) => chips.append(el('code', 'chip', name)));
+    row.append(chips);
+    section.append(row);
+  });
+  return section;
 }
 
 /**

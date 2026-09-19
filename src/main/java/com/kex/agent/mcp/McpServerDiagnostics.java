@@ -11,6 +11,7 @@ public record McpServerDiagnostics(
         boolean enabled,
         boolean connected,
         int toolCount,
+        McpToolDiff toolDiff,
         List<String> conflicts,
         Map<String, String> capabilityMappings,
         List<McpHealthSample> healthHistory) {

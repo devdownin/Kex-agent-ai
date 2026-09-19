@@ -3,6 +3,7 @@
 package com.kex.agent.mcp;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -79,6 +80,27 @@ class McpToolCatalogTest {
                     new McpToolInfo("kex_list_topics", "Liste les topics", Map.of("type", "object")));
             assertThat(server.circuitBreakerState()).isEqualTo("CLOSED");
         });
+    }
+
+    @Test
+    void compare_les_outils_ajoutes_supprimes_et_les_schemas_modifies() {
+        Instant comparedAt = Instant.parse("2026-09-19T10:15:30Z");
+        Map<String, McpToolInfo> previous = Map.of(
+                "removed", new McpToolInfo("removed", "Ancien", Map.of("type", "object")),
+                "changed", new McpToolInfo("changed", "Stable", Map.of("required", List.of("id"))),
+                "stable", new McpToolInfo("stable", "Stable", Map.of("type", "string")));
+        Map<String, McpToolInfo> current = Map.of(
+                "added", new McpToolInfo("added", "Nouveau", Map.of("type", "object")),
+                "changed", new McpToolInfo("changed", "Stable", Map.of("required", List.of("id", "force"))),
+                "stable", new McpToolInfo("stable", "Description modifiée", Map.of("type", "string")));
+
+        McpToolDiff diff = McpToolCatalog.compareTools(previous, current, comparedAt);
+
+        assertThat(diff.comparedAt()).isEqualTo(comparedAt);
+        assertThat(diff.added()).containsExactly("added");
+        assertThat(diff.removed()).containsExactly("removed");
+        assertThat(diff.schemaChanged()).containsExactly("changed");
+        assertThat(diff.hasChanges()).isTrue();
     }
 
     @Test

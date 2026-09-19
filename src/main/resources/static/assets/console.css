@@ -1122,6 +1122,74 @@ table.grid tr.clickable:hover td:last-child { border-top-right-radius: var(--rad
 .decision-technical summary { cursor: pointer; color: var(--ink-3); font-size: 12px; font-weight: 650; }
 .decision-technical > div { margin-top: 10px; }
 
+/* ── Cockpit incident et preuves ────────────────────────────────────── */
+
+.incident-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
+.incident-heading h1 { margin: 3px 0; }
+.incident-heading p { margin: 0; color: var(--ink-2); }
+.incident-cockpit { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.incident-queue, .incident-detail {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.incident-queue { position: sticky; top: 84px; padding: 12px; display: flex; flex-direction: column; gap: 7px; }
+.incident-queue h2 { margin: 2px 4px 8px; font-size: 13px; }
+.incident-choice { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; text-align: left; padding: 11px; background: transparent; border-color: transparent; }
+.incident-choice strong { align-self: center; font-size: 12px; }
+.incident-choice .muted { grid-column: 2; font-size: 11px; }
+.incident-choice.selected { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); }
+.incident-detail { overflow: hidden; border-top: 3px solid var(--warn); }
+.incident-detail[data-state="ERROR"] { border-top-color: var(--danger); }
+.incident-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 22px 22px 16px; }
+.incident-detail-head h2 { margin: 3px 0 4px; font-size: 21px; }
+.incident-detail-head p { margin: 0; }
+.incident-hypothesis { margin: 0 22px 18px; padding: 11px 13px; border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--ink-2); }
+.incident-section { padding: 18px 22px; border-top: 1px solid var(--line-soft); }
+.incident-section > h3 { margin: 0; font-size: 14px; }
+.incident-section > .hint { margin: 2px 0 12px; }
+.incident-symptom, .incident-decision { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 5px 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.incident-symptom:first-of-type, .incident-decision:first-of-type { border-top: 0; }
+.incident-symptom .muted, .incident-decision .muted { grid-column: 2; font-size: 11px; }
+.incident-symptom button, .incident-decision button { grid-column: 3; grid-row: 1 / span 2; }
+.evidence-node { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); margin-top: 8px; overflow: hidden; }
+.evidence-node > summary { cursor: pointer; display: flex; align-items: center; gap: 9px; padding: 12px; background: var(--surface-2); }
+.evidence-node > summary .muted { margin-left: auto; font-size: 11px; }
+.evidence-body { display: flex; flex-direction: column; gap: 11px; padding: 14px; }
+.evidence-provenance { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.evidence-provenance .definition { display: block; padding: 9px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.evidence-provenance dt { margin-bottom: 4px; }
+.evidence-raw summary { cursor: pointer; color: var(--ink-3); font-size: 11px; }
+.evidence-raw pre { margin-top: 8px; }
+
+/* Le panneau contextuel est volontairement non modal : l'incident et ses preuves restent lisibles. */
+.context-chat {
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 35;
+  width: min(430px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  box-shadow: -12px 0 36px rgb(0 0 0 / 16%);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.context-chat .drawer-head > div { min-width: 0; }
+.context-chat .drawer-head h2 { margin-top: 2px; }
+.context-chat-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 18px; display: flex; flex-direction: column; gap: 14px; }
+.context-payload { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); }
+.context-payload summary { cursor: pointer; padding: 10px 12px; font-size: 12px; font-weight: 650; }
+.context-payload pre { max-height: 210px; overflow: auto; margin: 0; padding: 0 12px 12px; white-space: pre-wrap; font: 11px/1.5 var(--mono); color: var(--ink-2); }
+.context-transcript { min-height: 180px; }
+.context-composer { border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+.context-composer > .ghost { align-self: center; }
+@media (min-width: 1281px) {
+  :root[data-context-chat="open"] main { margin-right: 430px; }
+}
+
 /* ── MCP ─────────────────────────────────────────────────────────────── */
 
 /* auto-fit, pas auto-fill : avec un seul serveur MCP connecté, auto-fill réserverait quand même
@@ -1143,6 +1211,13 @@ table.grid tr.clickable:hover td:last-child { border-top-right-radius: var(--rad
 .mcp-test-result { min-height: 58px; max-height: 150px; }
 .mcp-diagnostics { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
 .mcp-diagnostics ul { margin: 8px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 12px; }
+.mcp-tool-diff { margin: 10px 0; padding: 10px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); }
+.mcp-diff-title { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+.mcp-diff-group { margin-top: 9px; }
+.mcp-diff-label { display: block; margin-bottom: 5px; font-size: 11px; font-weight: 700; color: var(--ink-2); }
+.mcp-diff-group.added .chip { border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+.mcp-diff-group.removed .chip { border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); text-decoration: line-through; }
+.mcp-diff-group.changed .chip { border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
 .mcp-health-line { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 8px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid var(--line-soft); font-size: 11px; }
 #add-mcp-server { width: min(680px, calc(100vw - 32px)); }
 
@@ -1369,6 +1444,8 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   .chat-layout { grid-template-columns: minmax(0, 1fr); }
   .chat-aside { position: static; }
   .attention-grid { grid-template-columns: minmax(0, 1fr); }
+  .incident-cockpit { grid-template-columns: minmax(190px, 240px) minmax(0, 1fr); }
+  .evidence-provenance { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ── Mobile : priorité aux actions et aux alertes, pas au tableau ────── */
@@ -1399,6 +1476,10 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   .hero-health { min-width: 0; }
   main { padding: 14px; }
   .drawer { width: 100vw; border-left: 0; }
+  .context-chat { width: 100vw; border-left: 0; }
+  .incident-cockpit { grid-template-columns: minmax(0, 1fr); }
+  .incident-queue { position: static; }
+  .incident-detail-head { flex-direction: column; }
   .definition { flex-direction: column; gap: 2px; }
   .definition dt { flex: none; }
   .transcript { max-height: 58dvh; }

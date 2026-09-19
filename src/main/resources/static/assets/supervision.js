@@ -197,6 +197,211 @@ export async function attentionView() {
   });
 }
 
+/* ── Cockpit incident et explorateur de preuves ─────────────────────────────── */
+
+export async function incidents() {
+  await render($('#incident-workspace'), async () => {
+    const data = await refresh();
+    const history = await api(`${BASE}/decisions`).catch(() => data.pending || []);
+    return { data, history };
+  }, ({ data, history }) => incidentWorkspace(data, history));
+}
+
+function incidentWorkspace(data, decisionHistory) {
+  const candidates = incidentCandidates(data);
+  if (!candidates.length) {
+    return empty('Aucun incident actif.',
+      'Le cockpit apparaît dès qu’une anomalie est active ou que plusieurs processus sont corrélés.',
+      { href: '#/overview', label: 'Voir la synthèse' });
+  }
+  const selectedId = params().get('incident');
+  const selected = candidates.find((candidate) => candidate.id === selectedId) || candidates[0];
+  if (selected.id !== selectedId) setParams({ incident: selected.id }, true);
+
+  const layout = el('div', 'incident-cockpit');
+  const queue = el('nav', 'incident-queue');
+  queue.setAttribute('aria-label', 'Incidents actifs');
+  queue.append(el('h2', null, `Incidents actifs · ${candidates.length}`));
+  candidates.forEach((candidate) => {
+    const button = el('button', candidate.id === selected.id ? 'incident-choice selected' : 'incident-choice');
+    button.type = 'button';
+    button.setAttribute('aria-pressed', String(candidate.id === selected.id));
+    button.append(stateTag(candidate.severity), el('strong', null, candidate.title),
+      el('span', 'muted', `${candidate.alerts.length} symptôme(s) · ${ago(candidate.detectedAt) || 'à l’instant'}`));
+    button.addEventListener('click', () => {
+      setParams({ incident: candidate.id });
+      $('#incident-workspace').replaceChildren(incidentWorkspace(data, decisionHistory));
+    });
+    queue.append(button);
+  });
+  layout.append(queue, incidentDetail(selected, data, decisionHistory));
+  return layout;
+}
+
+function incidentCandidates(data) {
+  const alerts = data.alerts || [];
+  const claimed = new Set();
+  const correlated = (data.incidents || []).map((incident) => {
+    const related = alerts.filter((alert) => incident.processNames.includes(alert.processName));
+    related.forEach((alert) => claimed.add(alert.id));
+    return {
+      id: `cycle:${incident.cycleId}`,
+      cycleId: incident.cycleId,
+      title: `${incident.processCount} processus touchés simultanément`,
+      severity: incident.severity,
+      detectedAt: incident.detectedAt,
+      alerts: related,
+      processNames: incident.processNames,
+      hypothesis: 'La concomitance signale une cause commune possible ; elle ne l’établit pas.',
+    };
+  });
+  const standalone = alerts.filter((alert) => !claimed.has(alert.id)).map((alert) => ({
+    id: `alert:${alert.id}`,
+    cycleId: null,
+    title: alert.title,
+    severity: alert.severity,
+    detectedAt: alert.lastSeenAt,
+    alerts: [alert],
+    processNames: [alert.processName],
+    hypothesis: alert.analysis || 'Analyse en attente.',
+  }));
+  return [...correlated, ...standalone].sort((left, right) =>
+    Number(right.severity === 'ERROR') - Number(left.severity === 'ERROR')
+      || String(right.detectedAt).localeCompare(String(left.detectedAt)));
+}
+
+function incidentDetail(incident, data, decisionHistory) {
+  const detail = el('article', 'incident-detail');
+  detail.dataset.state = incident.severity;
+  const head = el('header', 'incident-detail-head');
+  const copy = el('div');
+  copy.append(el('span', 'panel-kicker', incident.cycleId ? `Cycle ${incident.cycleId}` : 'Alerte active'));
+  copy.append(el('h2', null, incident.title));
+  copy.append(el('p', 'muted', `${incident.processNames.join(', ')} · détecté ${ago(incident.detectedAt) || 'à l’instant'}`));
+  head.append(copy, contextChatButton('Interroger l’agent', `Incident · ${incident.title}`,
+    incidentContext(incident), 'primary'));
+  detail.append(head, el('p', 'incident-hypothesis', incident.hypothesis));
+
+  const symptoms = incidentSection('Symptômes actifs', 'Ce que le dernier état confirme');
+  if (incident.alerts.length) incident.alerts.forEach((alert) => symptoms.append(incidentSymptom(alert)));
+  else symptoms.append(empty('Aucune alerte active correspondante.',
+    'La corrélation du cycle reste visible, mais ses alertes ne sont plus actives.'));
+  detail.append(symptoms);
+
+  const evidence = incidentSection('Explorateur de preuves',
+    'Chaque conclusion reste reliée à ses observations, sa fraîcheur et sa couverture.');
+  if (incident.alerts.length) incident.alerts.forEach((alert) =>
+    evidence.append(evidenceNode(alert, data.processes || [])));
+  else evidence.append(empty('Aucune preuve active à explorer.'));
+  detail.append(evidence);
+
+  const related = relatedDecisions(incident, decisionHistory);
+  const decisionsSection = incidentSection('Décisions liées',
+    'Actions proposées ou déjà tranchées pour les processus concernés.');
+  if (!related.length) decisionsSection.append(empty('Aucune décision liée.'));
+  related.slice(0, 6).forEach((decision) => decisionsSection.append(incidentDecision(decision)));
+  detail.append(decisionsSection);
+
+  const chronology = incidentSection('Chronologie', 'Du premier symptôme au dernier relevé connu.');
+  chronology.append(incidentTimeline(incident, data.lastCycle));
+  detail.append(chronology);
+  return detail;
+}
+
+function incidentSection(title, subtitleText) {
+  const section = el('section', 'incident-section');
+  section.append(el('h3', null, title), el('p', 'hint', subtitleText));
+  return section;
+}
+
+function incidentSymptom(alert) {
+  const item = el('div', 'incident-symptom');
+  item.append(stateTag(alert.severity), el('strong', null, alert.title),
+    el('span', 'muted', `${alert.processName} · ${alert.occurrences || 1} relevé(s)`));
+  const inspect = el('button', 'ghost', 'Détail');
+  inspect.type = 'button';
+  inspect.addEventListener('click', () => openAnomaly(alert));
+  item.append(inspect);
+  return item;
+}
+
+function evidenceNode(alert, processes) {
+  const process = processes.find((candidate) => candidate.processId === alert.processId);
+  const node = el('details', 'evidence-node');
+  const summary = el('summary');
+  summary.append(stateTag(alert.severity), el('strong', null, alert.title),
+    el('span', 'muted', `${alert.observations?.length || 0} observation(s)`));
+  node.append(summary);
+  const body = el('div', 'evidence-body');
+  const provenance = el('div', 'evidence-provenance');
+  provenance.append(
+    definition('Source', el('span', null, `Supervision · ${alert.processName}`)),
+    definition('Fraîcheur', el('span', null, `${ago(alert.lastSeenAt) || 'à l’instant'} (${stamp(alert.lastSeenAt)})`)),
+    definition('Couverture', process?.coverage ? coverageTag(process.coverage) : el('span', 'muted', 'Non renseignée')),
+  );
+  body.append(provenance);
+  if (alert.observations?.length) {
+    const observations = el('ul', 'observations');
+    alert.observations.forEach((observation) => {
+      observations.append(el('li', null, `${observation.label} : ${observation.value}`));
+    });
+    body.append(observations);
+  } else {
+    body.append(empty('Aucune mesure structurée.', 'La conclusion ne doit pas être lue comme une preuve mesurée.'));
+  }
+  body.append(el('p', null, alert.analysis || 'Aucune analyse fournie.'));
+  if (alert.probableCause) body.append(el('p', 'muted', `Cause probable : ${alert.probableCause}`));
+  const raw = el('details', 'evidence-raw technical-id');
+  raw.append(el('summary', null, 'Données brutes'), el('pre', 'dump', JSON.stringify({
+    id: alert.id, processId: alert.processId, observations: alert.observations,
+    firstSeenAt: alert.firstSeenAt, lastSeenAt: alert.lastSeenAt, confidence: alert.confidence,
+  }, null, 2)));
+  body.append(raw);
+  node.append(body);
+  return node;
+}
+
+function relatedDecisions(incident, decisions) {
+  const processIds = new Set(incident.alerts.map((alert) => alert.processId));
+  return (decisions || []).filter((decision) =>
+    (incident.cycleId && decision.cycleId === incident.cycleId) || processIds.has(decision.processId))
+    .sort((left, right) => String(right.decidedAt).localeCompare(String(left.decidedAt)));
+}
+
+function incidentDecision(decision) {
+  const card = el('div', 'incident-decision');
+  card.append(stateTag(DECISION_STATES[decision.status], DECISION_LABELS[decision.status] || decision.status),
+    el('strong', null, decision.action), el('span', 'muted', `${decision.processName} · ${stamp(decision.decidedAt)}`));
+  const open = el('button', 'ghost', 'Comprendre');
+  open.type = 'button';
+  open.addEventListener('click', () => openDecision(decision.id));
+  card.append(open);
+  return card;
+}
+
+function incidentTimeline(incident, lastCycle) {
+  const events = incident.alerts.flatMap((alert) => [
+    { at: alert.firstSeenAt, label: 'Premier symptôme', detail: `${alert.processName} · ${alert.title}` },
+    ...(alert.lastSeenAt !== alert.firstSeenAt
+      ? [{ at: alert.lastSeenAt, label: 'Symptôme encore actif', detail: alert.processName }]
+      : []),
+  ]);
+  if (lastCycle && (!incident.cycleId || lastCycle.id === incident.cycleId)) events.push(...lastCycle.events);
+  return timeline({ events: events.sort((left, right) => String(left.at).localeCompare(String(right.at))), failure: null });
+}
+
+const incidentContext = (incident) => [
+  `Analyse l’incident « ${incident.title} ».`,
+  `Gravité : ${incident.severity}. Processus : ${incident.processNames.join(', ')}.`,
+  incident.cycleId && `Cycle : ${incident.cycleId}.`,
+  ...incident.alerts.map((alert) => [
+    `Symptôme : ${alert.title} sur ${alert.processName}.`,
+    alert.analysis && `Analyse actuelle : ${alert.analysis}`,
+    alert.observations?.length && `Observations : ${alert.observations.map((item) => `${item.label}=${item.value}`).join(', ')}.`,
+  ].filter(Boolean).join(' ')),
+  'Distingue les faits, les hypothèses et les prochaines actions.',
+].filter(Boolean).join('\n');
+
 function attentionGroup(title, items, card, emptyMessage, href, label) {
   const section = el('section', 'attention-group');
   const head = el('header');
@@ -309,9 +514,12 @@ function kpiIcon(kind) {
  */
 function incidentBanners(incidents) {
   return (incidents || []).map((incident) => {
-    const banner = el('p', incident.severity === 'ERROR' ? 'banner danger' : 'banner');
+    const banner = el('div', incident.severity === 'ERROR' ? 'banner danger' : 'banner');
     banner.append(`Incident probable : ${incident.processCount} processus en anomalie au même cycle `
       + `(${incident.processNames.join(', ')}) — signale une cause commune possible, pas un diagnostic.`);
+    const open = el('a', 'ghost', 'Ouvrir le cockpit');
+    open.href = `#/incidents?incident=${encodeURIComponent(`cycle:${incident.cycleId}`)}`;
+    banner.append(open);
     return banner;
   });
 }
@@ -491,8 +699,8 @@ function openProcess(row) {
     toast(favorites.has(row.processId) ? `${row.name} ajouté aux favoris.` : `${row.name} retiré des favoris.`);
     if (!$('#view-processes').hidden) processes();
   });
-  const ask = el('a', 'primary', 'Interroger l’agent');
-  ask.href = chatDraft(processContext(row, alerts));
+  const ask = contextChatButton('Interroger l’agent', `Processus · ${row.name}`,
+    processContext(row, alerts), 'primary');
   const copy = el('button', 'ghost', 'Copier l’identifiant');
   copy.type = 'button';
   copy.classList.add('technical-id');
@@ -614,14 +822,24 @@ function alertCard(alert) {
   open.setAttribute('aria-label', `Examiner : ${alert.title}`);
   open.addEventListener('click', () => openAnomaly(alert));
   const actions = el('div', 'card-actions');
-  const ask = el('a', 'ghost', 'Demander à l’agent');
-  ask.href = chatDraft(alertContext(alert));
+  const ask = contextChatButton('Demander à l’agent', `Alerte · ${alert.title}`,
+    alertContext(alert));
   actions.append(open, ask);
   card.append(actions);
   return card;
 }
 
-const chatDraft = (message) => `#/chat?draft=${encodeURIComponent(message)}`;
+function contextChatButton(label, title, context, className = 'ghost') {
+  const ask = el('button', className, label);
+  ask.type = 'button';
+  ask.addEventListener('click', () => {
+    // Un détail ouvert est modal ; le fermer évite de laisser une seconde couche marquée modale
+    // derrière le chat, qui lui reste volontairement non modal à côté du cockpit.
+    if (drawerOpen()) dismissDrawer();
+    dispatchEvent(new CustomEvent('kex:context-chat', { detail: { title, context } }));
+  });
+  return ask;
+}
 const alertContext = (alert) => [
   `Analyse l’alerte « ${alert.title} » sur ${alert.processName}.`,
   `Gravité : ${alert.severity}. Confiance : ${percent(alert.confidence)}. Occurrences : ${alert.occurrences || 1}.`,
@@ -655,8 +873,8 @@ function openAnomaly(anomaly) {
   body.append(stateTag(anomaly.severity));
   body.append(el('p', 'muted', anomaly.processName));
   const actions = el('div', 'context-actions');
-  const ask = el('a', 'primary', 'Poursuivre dans le chat');
-  ask.href = chatDraft(alertContext(anomaly));
+  const ask = contextChatButton('Poursuivre avec l’agent', `Alerte · ${anomaly.title}`,
+    alertContext(anomaly), 'primary');
   actions.append(ask);
   body.append(actions);
   if (anomaly.occurrences) body.append(recurrence(anomaly));
@@ -1430,6 +1648,7 @@ export function wire() {
 
   $('#refresh-decisions').addEventListener('click', decisions);
   $('#refresh-attention').addEventListener('click', attentionView);
+  $('#refresh-incidents').addEventListener('click', incidents);
   $('#refresh-performance').addEventListener('click', performance);
   $('#refresh-audit').addEventListener('click', audit);
 

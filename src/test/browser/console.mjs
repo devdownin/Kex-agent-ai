@@ -201,6 +201,47 @@ await check('un panneau de supervision se rouvre depuis son adresse', async () =
   assert.doesNotMatch(page.url(), /processus=/);
 });
 
+await check('le cockpit relie incident, preuves et chat contextuel sans changer de vue', async () => {
+  const now = new Date().toISOString();
+  const alert = {
+    id: 'order-lag', processId: 'order-integration', processName: 'Order Integration',
+    title: 'Retard de consommation', severity: 'ERROR', occurrences: 3,
+    firstSeenAt: new Date(Date.now() - 600000).toISOString(), lastSeenAt: now,
+    observations: [{ label: 'consumerLag', value: '4200' }],
+    analysis: 'Le retard progresse.', probableCause: 'Consumer ralenti', confidence: 0.91,
+    recommendation: 'Inspecter le consumer', capability: 'RESTART_CONSUMER', pendingDecisionId: null,
+  };
+  await page.route('**/api/agent/supervision/overview', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify(overviewStub({
+      anomaliesDetected: 1, alerts: [alert], incidents: [{
+        cycleId: 'c1', detectedAt: now, processCount: 1, processNames: ['Order Integration'],
+        severity: 'ERROR', titles: ['Retard de consommation'],
+      }],
+      lastCycle: { ...cycleStub('c1', 1), events: [{ at: now, label: 'Analyse', detail: 'Retard confirmé' }] },
+    })),
+  }));
+  await page.route('**/api/agent/supervision/decisions', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: '[]',
+  }));
+
+  await page.goto(`${BASE}/#/incidents`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#incident-workspace .incident-detail');
+  const sectionTitles = await page.$$eval('.incident-section > h3', (nodes) => nodes.map((node) => node.textContent));
+  assert.deepEqual(sectionTitles, ['Symptômes actifs', 'Explorateur de preuves', 'Décisions liées', 'Chronologie']);
+  await page.click('.evidence-node > summary');
+  assert.match(await page.$eval('.evidence-body', (node) => node.innerText), /consumerLag : 4200/);
+
+  await page.click('.incident-detail-head button.primary');
+  await page.waitForSelector('#context-chat:not([hidden])');
+  assert.match(await page.$eval('#context-chat-payload', (node) => node.textContent), /Retard de consommation/);
+  assert.match(page.url(), /#\/incidents/);
+  await page.click('#context-chat-close');
+
+  await page.unroute('**/api/agent/supervision/overview');
+  await page.unroute('**/api/agent/supervision/decisions');
+});
+
 await check('le bandeau hors ligne apparaît puis disparaît', async () => {
   assert.ok(await page.$eval('#offline', (node) => node.hidden), 'caché tant qu’on est en ligne');
   await context.setOffline(true);
@@ -248,6 +289,45 @@ await check('la carte d’un serveur MCP unique occupe toute la largeur du panne
   assert.ok(widths.card > widths.grid - 40,
     `la carte (${widths.card}px) doit remplir la grille (${widths.grid}px)`);
   await page.unroute('**/api/agent/mcp/servers');
+});
+
+await check('le diagnostic MCP distingue ajout, suppression et changement de schéma', async () => {
+  const server = {
+    connection: 'runtime-demo', serverName: 'demo-mcp', version: '1.0.0',
+    protocolVersion: '2025-11-25', initialized: true,
+    tools: [{ name: 'search_v2', description: 'Recherche.' }],
+  };
+  const runtime = {
+    connection: 'runtime-demo', transport: 'HTTP', url: 'https://mcp.example.net', endpoint: '/mcp',
+    command: null, args: [], headerNames: [], environmentNames: [], enabled: true, allowedTools: [],
+    capabilityMappings: {}, hasBearerToken: false, secretRotatedAt: null,
+  };
+  await page.route('**/api/agent/mcp/servers', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify([server]),
+  }));
+  await page.route('**/api/agent/mcp/runtime-servers', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify([runtime]),
+  }));
+  await page.route('**/api/agent/mcp/servers/runtime-demo/diagnostics', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({
+      connection: 'runtime-demo', transport: 'HTTP', enabled: true, connected: true, toolCount: 1,
+      toolDiff: { comparedAt: new Date().toISOString(), added: ['search_v2'], removed: ['search'],
+        schemaChanged: ['summarize'] },
+      conflicts: [], capabilityMappings: {}, healthHistory: [],
+    }),
+  }));
+
+  await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#servers .server');
+  await page.getByRole('button', { name: 'Diagnostic' }).click();
+  const diff = await page.$eval('.mcp-tool-diff', (node) => node.innerText);
+  assert.match(diff, /Ajoutés · 1[\s\S]*search_v2/);
+  assert.match(diff, /Supprimés · 1[\s\S]*search/);
+  assert.match(diff, /Schéma modifié · 1[\s\S]*summarize/);
+
+  await page.unroute('**/api/agent/mcp/servers');
+  await page.unroute('**/api/agent/mcp/runtime-servers');
+  await page.unroute('**/api/agent/mcp/servers/runtime-demo/diagnostics');
 });
 
 await check('un tableau déjà rendu ne clignote pas au sondage de fond', async () => {

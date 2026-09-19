@@ -13,6 +13,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -56,6 +57,8 @@ public class McpToolCatalog implements AutoCloseable {
     private final Map<String, McpServerRegistration> definitions = new ConcurrentHashMap<>();
     private final Map<String, Instant> secretRotations = new ConcurrentHashMap<>();
     private final Map<String, ArrayDeque<McpHealthSample>> healthHistory = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, McpToolInfo>> toolSnapshots = new ConcurrentHashMap<>();
+    private final Map<String, McpToolDiff> toolDiffs = new ConcurrentHashMap<>();
     private final CircuitBreakerRegistry circuitBreakerRegistry;
     private final ObservationRegistry observationRegistry;
     private final MeterRegistry meterRegistry;
@@ -269,6 +272,8 @@ public class McpToolCatalog implements AutoCloseable {
         }
         deactivate(connection);
         healthHistory.remove(connection);
+        toolSnapshots.remove(connection);
+        toolDiffs.remove(connection);
         circuitBreakers.remove(connection);
     }
 
@@ -288,7 +293,7 @@ public class McpToolCatalog implements AutoCloseable {
                 .toList();
     }
 
-    public McpServerDiagnostics refresh(String connection) {
+    public synchronized McpServerDiagnostics refresh(String connection) {
         McpServerRegistration definition = requireDynamic(connection);
         long started = System.nanoTime();
         if (!definition.enabled()) {
@@ -297,7 +302,12 @@ public class McpToolCatalog implements AutoCloseable {
         }
         McpSyncClient client = dynamicClients.get(connection);
         try {
-            List<McpToolInfo> ignored = listTools(client);
+            List<McpToolInfo> tools = listToolsStrict(client);
+            Instant comparedAt = Instant.now();
+            Map<String, McpToolInfo> previous = toolSnapshots.getOrDefault(connection, Map.of());
+            Map<String, McpToolInfo> current = indexTools(tools);
+            toolDiffs.put(connection, compareTools(previous, current, comparedAt));
+            toolSnapshots.put(connection, current);
             recordHealth(connection, true, elapsed(started), "Catalogue d'outils rafraîchi");
         }
         catch (RuntimeException ex) {
@@ -311,7 +321,8 @@ public class McpToolCatalog implements AutoCloseable {
         McpSyncClient client = dynamicClients.get(connection);
         int toolCount = client == null ? 0 : listTools(client).size();
         return new McpServerDiagnostics(connection, definition.transport(), definition.enabled(),
-                client != null && client.isInitialized(), toolCount, conflictsFor(connection),
+                client != null && client.isInitialized(), toolCount,
+                toolDiffs.getOrDefault(connection, McpToolDiff.empty(Instant.now())), conflictsFor(connection),
                 definition.capabilityMappings(), history(connection));
     }
 
@@ -479,6 +490,8 @@ public class McpToolCatalog implements AutoCloseable {
     private void install(String connection, McpSyncClient client) {
         clients.add(client);
         dynamicClients.put(connection, client);
+        toolSnapshots.putIfAbsent(connection, indexTools(listTools(client)));
+        toolDiffs.putIfAbsent(connection, McpToolDiff.empty(Instant.now()));
         registerInfrastructure(connection, client, false);
     }
 
@@ -737,14 +750,37 @@ public class McpToolCatalog implements AutoCloseable {
     private static List<McpToolInfo> listTools(McpSyncClient client) {
         if (client == null || !client.isInitialized()) return List.of();
         try {
-            return client.listTools().tools().stream()
-                    .map(tool -> new McpToolInfo(tool.name(), tool.description(), tool.inputSchema()))
-                    .toList();
+            return listToolsStrict(client);
         }
         catch (RuntimeException ex) {
             log.warn("Listing des outils MCP impossible pour '{}' : {}", connectionName(client), ex.getMessage());
             return List.of();
         }
+    }
+
+    private static List<McpToolInfo> listToolsStrict(McpSyncClient client) {
+        if (client == null || !client.isInitialized()) return List.of();
+        return client.listTools().tools().stream()
+                .map(tool -> new McpToolInfo(tool.name(), tool.description(), tool.inputSchema()))
+                .toList();
+    }
+
+    private static Map<String, McpToolInfo> indexTools(List<McpToolInfo> tools) {
+        return tools.stream().collect(Collectors.toMap(McpToolInfo::name, tool -> tool, (first, ignored) -> first));
+    }
+
+    static McpToolDiff compareTools(Map<String, McpToolInfo> previous, Map<String, McpToolInfo> current,
+                                    Instant comparedAt) {
+        List<String> added = current.keySet().stream().filter(name -> !previous.containsKey(name)).sorted().toList();
+        List<String> removed = previous.keySet().stream().filter(name -> !current.containsKey(name)).sorted().toList();
+        List<String> schemaChanged = current.entrySet().stream()
+                .filter(entry -> previous.containsKey(entry.getKey()))
+                .filter(entry -> !Objects.equals(previous.get(entry.getKey()).inputSchema(),
+                        entry.getValue().inputSchema()))
+                .map(Map.Entry::getKey)
+                .sorted()
+                .toList();
+        return new McpToolDiff(comparedAt, added, removed, schemaChanged);
     }
 
     private static URI validatedBaseUrl(String value) {

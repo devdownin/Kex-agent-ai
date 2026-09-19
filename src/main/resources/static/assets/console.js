@@ -19,6 +19,7 @@ const BASE = '/api/agent/supervision';
 const VIEWS = {
   overview: { title: 'Vue d’ensemble', load: supervision.overview },
   attention: { title: 'À traiter', load: supervision.attentionView },
+  incidents: { title: 'Cockpit incident', load: supervision.incidents },
   agent: { title: 'Agent', load: supervision.agent },
   processes: { title: 'Processus', load: supervision.processes },
   decisions: { title: 'Décisions', load: supervision.decisions },

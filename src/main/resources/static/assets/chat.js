@@ -23,6 +23,7 @@ const MAX_TURNS_STORED = 40;
 let conversationId = null;
 let inFlight = null;
 let unauthorized = () => {};
+let contextualPayload = '';
 
 try {
   conversationId = sessionStorage.getItem(CONVERSATION_STORAGE);
@@ -106,6 +107,54 @@ function addTurn(role, text) {
   transcript.append(turn);
   transcript.scrollTop = transcript.scrollHeight;
   return { turn, bubble };
+}
+
+function addContextTurn(role, text) {
+  const turn = el('li', `turn ${role}`);
+  turn.append(el('span', 'who', role === 'user' ? 'vous' : role === 'error' ? 'erreur' : 'agent'));
+  turn.append(el('div', 'bubble', text || ''));
+  const transcript = $('#context-chat-transcript');
+  transcript.append(turn);
+  transcript.scrollTop = transcript.scrollHeight;
+  return turn;
+}
+
+/** Ouvre l'assistant à côté du contexte opérationnel, sans changer de route. */
+export function openContextual({ title = 'Interroger l’agent', context = '' } = {}) {
+  contextualPayload = context.trim();
+  $('#context-chat-title').textContent = title;
+  $('#context-chat-payload').textContent = contextualPayload || 'Aucun contexte structuré.';
+  $('#context-chat-transcript').replaceChildren();
+  $('#context-chat').hidden = false;
+  document.documentElement.dataset.contextChat = 'open';
+  $('#context-chat-prompt').focus();
+}
+
+function closeContextual() {
+  $('#context-chat').hidden = true;
+  delete document.documentElement.dataset.contextChat;
+}
+
+async function sendContextual(question) {
+  const message = [contextualPayload, `Question de l’opérateur : ${question}`].filter(Boolean).join('\n\n');
+  const answer = await api('/api/agent/chat', { method: 'POST', body: { conversationId, message } });
+  setConversation(answer.conversationId);
+  appendTranscript(answer.conversationId, { role: 'user', text: question });
+  touchIndex(answer.conversationId, question.slice(0, 48));
+  appendTranscript(answer.conversationId,
+    { role: 'agent', text: answer.content, tools: answer.tools, finishReason: answer.finishReason });
+
+  // La conversation complète reste la continuité de ce panneau : en l'ouvrant ensuite, les tours
+  // effectués ici ne disparaissent pas de l'écran ni de la transcription locale.
+  addTurn('user', question);
+  const { turn } = addTurn('agent', answer.content);
+  renderToolChips(turn, answer.tools || []);
+  renderFinishReason(turn, answer.finishReason);
+  renderToolLog(answer.tools || []);
+
+  const contextualTurn = addContextTurn('agent', answer.content);
+  renderToolChips(contextualTurn, answer.tools || []);
+  renderFinishReason(contextualTurn, answer.finishReason);
 }
 
 function renderToolChips(turn, calls) {
@@ -327,6 +376,31 @@ export function wire(onUnauthorized) {
   unauthorized = onUnauthorized;
   setConversation(conversationId);
   registerDrawer('historique', openHistory);
+  addEventListener('kex:context-chat', (event) => openContextual(event.detail));
+  $('#context-chat-close').addEventListener('click', closeContextual);
+  $('#context-chat-full').addEventListener('click', closeContextual);
+  addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !$('#context-chat').hidden) closeContextual();
+  });
+  $('#context-chat-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const field = $('#context-chat-prompt');
+    const question = field.value.trim();
+    if (!question) return;
+    addContextTurn('user', question);
+    field.value = '';
+    const send = $('#context-chat-send');
+    send.disabled = true;
+    try {
+      await sendContextual(question);
+    } catch (error) {
+      addContextTurn('error', error.message);
+      report(error);
+    } finally {
+      send.disabled = false;
+      field.focus();
+    }
+  });
 
   $('#composer').addEventListener('submit', async (event) => {
     event.preventDefault();
