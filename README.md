@@ -2,7 +2,9 @@
 
 # 🧭 Kex Agent AI
 
-### An AI agent that actually uses your tools — Spring Boot 4, Spring AI 2, Java 25.
+### Stop asking AI to guess. Give it real tools.
+
+**A production-minded AI agent built with Java 25, Spring Boot 4, Spring AI 2 and MCP.**
 
 [![CI](https://github.com/devdownin/Kex-agent-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/devdownin/Kex-agent-ai/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/devdownin/Kex-agent-ai/actions/workflows/codeql.yml/badge.svg)](https://github.com/devdownin/Kex-agent-ai/actions/workflows/codeql.yml)
@@ -13,22 +15,48 @@
 [![MCP](https://img.shields.io/badge/MCP-stdio_·_SSE_·_streamable--HTTP-5A45FF)](docs/MCP.md)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-[Quick start](#-quick-start) · [What you can ask it](#-what-you-can-ask-it) · [How it works](#-how-it-works) · [Docs](#-documentation) · [🇫🇷 Français](README.fr.md)
+[Why Kex](#-why-kex-agent-ai) · [Highlights](#-highlights) · [Quick start](#-quick-start) · [What you can ask it](#-what-you-can-ask-it) · [How it works](#-how-it-works) · [Docs](#-documentation) · [🇫🇷 Français](README.fr.md)
 
 </div>
 
 ---
 
-**Most "AI agent" demos answer from the model's memory. This one goes and looks.**
+## ✨ Why Kex Agent AI?
 
-Kex Agent AI is a Spring Boot service that connects to [MCP](https://modelcontextprotocol.io) servers,
-discovers the tools they expose, and hands them to a Claude model — so a question like *"which topics
-received nothing today?"* becomes a real query against a real cluster, not a plausible-sounding guess.
+Most AI agent demos generate plausible answers from model memory.
+
+**Kex Agent AI goes and checks.**
+
+Kex Agent AI connects language models to real systems through the
+[Model Context Protocol (MCP)](https://modelcontextprotocol.io). It discovers tools at runtime,
+invokes them securely, explains its decisions, and keeps humans in control through a complete
+operations console.
+
+A question like *"which topics received nothing today?"* becomes a real query against a real
+cluster — not a confident-sounding guess. Every capability is explicit, every sensitive action is
+controlled, and every result can be traced.
+
+## 🚀 Highlights
+
+- **Runtime MCP management** — add and test HTTP, SSE or stdio servers directly from the UI.
+- **Secure by default** — bearer authentication, encrypted MCP configuration and explicit stdio
+  allowlists.
+- **Per-tool permissions** — decide exactly which tools each connection may expose to the model.
+- **Human-in-the-loop supervision** — approve, reject or automate actions by capability.
+- **Built-in Control Center** — observe, understand, decide, act and verify from one interface.
+- **Operational diagnostics** — health history, latency, connection tests and live tool refresh.
+- **Portable configuration** — import and export MCP connections without exposing their secrets.
+- **Multiple model providers** — Anthropic or OpenAI-compatible gateways such as OpenRouter.
+- **Kafka ready** — inspect topics, trace business keys, diagnose lag and query live data.
+- **Docker ready** — run the agent alone or start the complete Kafka stack in one command.
+
+## 🟠 Kafka ready out of the box
 
 It ships wired to [Kafka SQL Explorer](https://github.com/devdownin/Kafkaexplorer), whose MCP server
 exposes 15 read-only tools over Kafka: topic listing, Flink SQL, schema inference, cross-topic key
-tracing, cluster audits. One `docker compose up` and you are asking questions of your broker in
-plain language.
+tracing and cluster audits. The model chooses the appropriate tool; the MCP server enforces the
+operational guardrails. One `docker compose up` and you are asking questions of your broker in
+plain language — while retaining an audit trail of what the agent actually did.
 
 ## ⚡ Quick start
 
@@ -281,8 +309,9 @@ simply stops, which a client cannot tell apart from a finished answer. Exchanges
 ./mvnw verify
 ```
 
-78 tests, no network, no secrets. Including an MCP integration test that stands up a **real**
-streamable-HTTP server behind a bearer token and drives the actual client through handshake,
+The test suite runs without network access or secrets. It includes an MCP integration test that
+stands up a **real** streamable-HTTP server behind a bearer token and drives the actual client
+through handshake,
 `tools/list`, `tools/call`, `resources/list` and `resources/read` — the transport is exercised, not
 mocked.
 
@@ -331,6 +360,13 @@ commit SHA.
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) for the workflow and the house rules, [`SECURITY.md`](SECURITY.md)
 for reporting a vulnerability — privately, never as an issue.
+
+---
+
+### Build agents that act — and stay accountable.
+
+If you believe AI agents should use real tools, explain their decisions and remain under operational
+control, **star the project and help shape what production-grade agentic AI should look like.**
 
 ## 📄 License
 
