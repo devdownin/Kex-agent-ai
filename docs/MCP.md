@@ -126,6 +126,71 @@ export KEX_MCP_STDIO_ALLOWED_COMMANDS=npx,uvx
 Les arguments ne passent jamais par un shell et l'environnement transmis est limité aux valeurs
 configurées, en plus de la liste minimale héritée par le SDK MCP.
 
+### Découvrir des serveurs depuis des registres externes
+
+Au-delà des deux entrées curées de `GET /api/agent/mcp/catalog` (GitHub en lecture seule,
+Microsoft Learn), `GET /api/agent/mcp/catalog/discover` interroge des registres tiers pour
+proposer des candidats non pré-vérifiés par le projet — chacun noté par un calcul de confiance
+déterministe plutôt que jugé par le modèle, pour rester reproductible et testable comme toute
+autre règle de sécurité de l'agent. Deux sources aujourd'hui, chacune éteinte par défaut :
+
+```bash
+export KEX_MCP_CATALOG_DOCKER_ENABLED=true
+export KEX_MCP_CATALOG_OFFICIAL_REGISTRY_ENABLED=true
+```
+
+| Source | Ce qu'elle expose |
+|---|---|
+| Docker MCP Catalog (`hub.docker.com/v2/repositories/mcp/`) | Adoption (tirages, étoiles), fraîcheur ; chaque image `mcp/<nom>` est construite par Docker à partir du dépôt soumis — c'est ce que la note retient pour la provenance de cette source, sans dépendre d'un champ de dépôt que cette API n'expose pas |
+| Registre officiel MCP (`registry.modelcontextprotocol.io/v0/servers`) | Dépôt source, paquets déclarés (npm, pypi, cargo, oci, nuget, mcpb), variables d'environnement requises, points d'accès distants, statut et date de mise à jour |
+
+**Note de confiance sur 100**, dix critères pondérés, calculée pour chaque candidat par
+`McpTrustScoreCalculator` :
+
+| Critère | Poids |
+|---|---|
+| Éditeur officiel / identité vérifiée | 20 |
+| Provenance source → build vérifiable | 15 |
+| Signature / attestation de l'artefact | 10 |
+| SBOM disponible | 10 |
+| Analyse CVE / dépendances | 10 |
+| Projet activement maintenu | 10 |
+| Permissions minimales | 10 |
+| Outils et effets de bord documentés | 5 |
+| Isolation / conteneur disponible | 5 |
+| Réputation / adoption | 5 |
+
+Un critère qu'aucune source ne mesure reste `UNKNOWN` — ni compté ni traité comme un échec, même
+principe que `Coverage` pour les relevés Kafka. Signature, SBOM et analyse CVE restent `UNKNOWN`
+pour tout candidat aujourd'hui : aucune des deux sources branchées ne porte ce signal ; « Éditeur
+officiel » n'est retenu que pour un dépôt explicitement ajouté à
+`kex.mcp.catalog.trust.trusted-publisher-repositories` (vide par défaut) — le deviner depuis un
+nom d'organisation inventerait une confiance que personne n'a accordée.
+
+**Six critères éliminatoires**, indépendants du score, refusent l'installation côté serveur
+(`403`) quel que soit le total obtenu — un candidat disqualifié garde sa note affichée, mais
+`POST .../install` la refuse toujours :
+
+- binaire sans dépôt source ni paquet issu d'un registre public reconnu ;
+- plus de `kex.mcp.catalog.trust.max-required-secrets` secrets requis, ou un nom de variable
+  jugé disproportionné (`broad-credential-keywords`) ;
+- un argument ou une valeur par défaut qui désigne la racine du système de fichiers ;
+- une invocation shell sans paquet de registre public identifié derrière ;
+- un point d'accès distant sans en-tête d'authentification déclaré ;
+- un point d'accès distant sans description exploitable.
+
+**Installer un candidat** (`POST /api/agent/mcp/catalog/discover/{source}/{id}/install`, `ADMIN`,
+`{"connection":"...","bearerToken":"..."}` si requis) rejoue le même `register` que l'ajout manuel
+— connexion créée désactivée, testée par un vrai handshake. Deux formes seulement, en attendant
+l'introduction d'une correspondance générale pour les autres types de paquets :
+
+- un candidat avec un **point d'accès distant** s'enregistre en transport HTTP ; un modèle d'URL
+  (`{variable}`) ou une requête/fragment dans l'URL sont refusés (`400`) plutôt que mal traduits ;
+- un candidat **conteneurisé** (source Docker, ou paquet `oci` du registre officiel) s'enregistre
+  en transport stdio, `docker run --rm -i <image>` — et exige donc `docker` dans
+  `kex.mcp.runtime.allowed-stdio-commands`, comme toute autre commande stdio : la note de confiance
+  n'est jamais un raccourci vers cette liste blanche.
+
 ### Vérifier
 
 ```bash

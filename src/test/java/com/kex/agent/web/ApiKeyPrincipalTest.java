@@ -66,6 +66,15 @@ class ApiKeyPrincipalTest {
     }
 
     @Test
+    void seul_un_admin_peut_installer_depuis_la_decouverte_mcp() throws Exception {
+        assertThat(postStatus("/api/agent/mcp/catalog/discover/docker/fetch/install", "Bearer jeton-ops"))
+                .isEqualTo(403);
+        // Le 400 vient du corps absent : il prouve que la sécurité a bien laissé passer l'admin.
+        assertThat(postStatus("/api/agent/mcp/catalog/discover/docker/fetch/install", "Bearer jeton-admin"))
+                .isEqualTo(400);
+    }
+
+    @Test
     void seul_un_admin_peut_approuver_une_competence() throws Exception {
         // Une compétence approuvée s'injecte durablement dans le prompt système de chaque
         // conversation future du même propriétaire — même pouvoir que POST /api/agent/knowledge,

@@ -132,9 +132,32 @@ kex:
       storage-path: ${KEX_MCP_STORAGE_PATH:.kex/mcp-servers.enc}
       request-timeout: 30s
       health-history-size: 50
-      # Ajouter explicitement les exécutables que l'API ADMIN peut lancer (ex. npx, uvx).
+      # Ajouter explicitement les exécutables que l'API ADMIN peut lancer (ex. npx, uvx, docker).
       # Vide par défaut : une clé d'administration compromise ne devient pas un shell distant.
+      # « docker » doit y figurer explicitement pour installer un candidat OCI du catalogue de
+      # découverte ci-dessous — la note de confiance ne remplace jamais cette liste blanche.
       allowed-stdio-commands: ${KEX_MCP_STDIO_ALLOWED_COMMANDS:}
+    catalog:
+      trust:
+        # Seuils du calcul de confiance (McpTrustScoreCalculator) : aucun ne prétend mesurer ce
+        # que les sources ci-dessous n'exposent pas elles-mêmes — voir la javadoc du calculateur.
+        maintenance-window: 180d
+        minimal-permissions-secret-threshold: 2
+        max-required-secrets: 5
+        min-documented-description-length: 40
+        min-adoption-pull-count: 1000
+        # Vide par défaut : aucune source ne porte de statut d'éditeur vérifié, et le deviner
+        # depuis un nom d'organisation inventerait une confiance que personne n'a accordée.
+        trusted-publisher-repositories: []
+      sources:
+        # Éteintes par défaut, comme chaque extension qui ajoute une sortie réseau propre à
+        # l'agent : interroger un registre tiers est un choix d'opérateur.
+        docker:
+          enabled: ${KEX_MCP_CATALOG_DOCKER_ENABLED:false}
+          base-url: ${KEX_MCP_CATALOG_DOCKER_BASE_URL:https://hub.docker.com}
+        official-registry:
+          enabled: ${KEX_MCP_CATALOG_OFFICIAL_REGISTRY_ENABLED:false}
+          base-url: ${KEX_MCP_CATALOG_OFFICIAL_REGISTRY_BASE_URL:https://registry.modelcontextprotocol.io}
 
   agent:
     request-timeout: 120s

@@ -28,10 +28,13 @@ import org.springframework.web.server.ResponseStatusException;
 public class McpCatalogController {
 
     private final McpRecommendedCatalog catalog;
+    private final McpCatalogDiscoveryService discovery;
     private final ObjectProvider<SupervisionService> supervision;
 
-    public McpCatalogController(McpRecommendedCatalog catalog, ObjectProvider<SupervisionService> supervision) {
+    public McpCatalogController(McpRecommendedCatalog catalog, McpCatalogDiscoveryService discovery,
+                                ObjectProvider<SupervisionService> supervision) {
         this.catalog = catalog;
+        this.discovery = discovery;
         this.supervision = supervision;
     }
 
@@ -50,6 +53,31 @@ public class McpCatalogController {
         SupervisionService service = supervision.getIfAvailable();
         if (service != null) service.auditAction(authentication.getName(),
                 "Installation depuis le catalogue MCP : " + id, "Connexion désactivée : " + request.connection());
+        return result;
+    }
+
+    /**
+     * Interroge les sources dynamiques activées ({@code kex.mcp.catalog.sources.*.enabled}) et
+     * note chaque candidat. Une source désactivée ou injoignable le dit dans sa propre entrée,
+     * jamais en silence : voir {@link McpCatalogSourceOverview}.
+     */
+    @GetMapping("/discover")
+    List<McpCatalogSourceOverview> discover(Authentication authentication) {
+        requireRole(authentication, "ROLE_OPERATOR", "ROLE_ADMIN");
+        return discovery.discover();
+    }
+
+    @PostMapping("/discover/{sourceId}/{candidateId}/install")
+    @ResponseStatus(HttpStatus.CREATED)
+    McpServerInfo installDiscovered(@PathVariable String sourceId, @PathVariable String candidateId,
+                                    @Valid @RequestBody McpCatalogInstallRequest request,
+                                    Authentication authentication) {
+        requireRole(authentication, "ROLE_ADMIN");
+        McpServerInfo result = discovery.install(sourceId, candidateId, request);
+        SupervisionService service = supervision.getIfAvailable();
+        if (service != null) service.auditAction(authentication.getName(),
+                "Installation depuis la découverte MCP (" + sourceId + "/" + candidateId + ")",
+                "Connexion désactivée : " + request.connection());
         return result;
     }
 
