@@ -1271,6 +1271,35 @@ et lit un texte qui a l'air plausible sans être celui qu'on voulait lire. `.dum
 second sans ambiguïté ; le même risque existe pour tout panneau qui affiche plusieurs `<pre
 class="dump">` à la fois.
 
+### `.shell` a besoin d'une hauteur définie, pas d'un plancher
+
+`.shell` ne portait qu'un `min-height: 100dvh`. Une grille CSS dont le conteneur n'a qu'un plancher
+de hauteur, sans hauteur *définie*, dimensionne ses lignes `fr` sur leur propre contenu plutôt que
+sur l'espace qu'il reste à l'écran — c'est le contenu qui commande, pas l'inverse. Concrètement : dès
+qu'un tableau dépassait la hauteur visible (Audit, Processus, la liste des serveurs MCP), la ligne
+`main` de la grille grandissait avec lui, et c'est **toute la page** qui se mettait à défiler — rail
+de navigation et barre du haut compris, ni l'un ni l'autre n'ayant de `position: sticky` ou `fixed`
+sur desktop (contrairement au mobile, où ils en ont déjà une, pour la même raison). L'opérateur
+perdait la navigation, le statut de l'agent et « Exécuter maintenant » exactement au moment de
+parcourir une longue liste — l'usage le plus courant de ces écrans. `overflow: auto` était déjà posé
+sur `main`, mais ne pouvait jamais s'activer faute de hauteur bornée en amont : un enfant de grille
+en overflow non visible ne force sa ligne à grandir que si cette ligne peut encore grandir, jamais au
+détriment d'une taille de conteneur déjà fixée. `height: 100dvh` fixe cette taille ; `main` redevient
+le seul conteneur qui défile.
+
+Effet de bord corrigé avec : `main` ne réinitialisait jamais son défilement au changement de vue —
+seul un attribut `hidden` change, ce n'est pas un nouveau document. Quitter un long tableau scrollé
+ouvrait donc l'écran suivant déjà scrollé, son en-tête hors champ. `route()`, dans `console.js`, remet
+`main.scrollTop` à 0 à chaque changement de vue.
+
+### Un toast se ferme d'un geste, et se tait sous la souris
+
+Un toast n'avait ni bouton de fermeture ni pause au survol : sa minuterie tournait sans savoir qu'on
+était en train de le lire, action associée comprise, et il pouvait disparaître pendant qu'on
+l'attrapait à la souris. `toast()`, dans `core.js`, ajoute un bouton `.toast-close` à chaque toast et
+suspend sa minuterie tant que le pointeur reste dessus — le temps déjà écoulé est conservé, pas
+remis à zéro, pour ne pas prolonger indéfiniment un toast qu'on survole par inadvertance.
+
 ## Ce que les tests couvrent
 
 | Test | Ce qu'il verrouille |

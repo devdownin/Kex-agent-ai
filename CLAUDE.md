@@ -250,4 +250,11 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   voir avec le défaut qu'il cherchait à couvrir. Le résultat porte désormais sa propre classe
   (`.dump.result`), et c'est elle que le test cible.
 
+- **`.shell` veut une hauteur définie, un `min-height` ne borne rien.** Sans hauteur définie, une
+  grille CSS dimensionne ses lignes `fr` sur leur propre contenu, pas sur l'espace restant de
+  l'écran : un tableau plus haut que l'écran (Audit, Processus, serveurs MCP) faisait alors défiler
+  toute la page, rail et barre du haut compris — ni l'un ni l'autre n'ayant de `position: sticky`
+  sur desktop. `overflow: auto` sur `main` ne s'active qu'une fois `.shell` en `height: 100dvh`, pas
+  `min-height`.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
