@@ -132,15 +132,15 @@ a normally completed response »). Testé par
 `AgentServiceTest.alimente_la_memoire_long_terme_a_la_fin_d_un_flux_reussi` et
 `AgentServiceTest.n_alimente_pas_la_memoire_long_terme_quand_le_flux_echoue_par_timeout`.
 
-### 2.3 `pom.xml` cible Java 21, tout le reste annonce Java 25
+### 2.3 `pom.xml` ciblait Java 21, tout le reste annonce Java 25 — **corrigé**
 
 `pom.xml:19,24` (`<java.version>21</java.version>`, `<maven.compiler.release>21</maven.compiler.release>`)
-contredit `CLAUDE.md`, `README.md`, `README.fr.md`, `docs/CONFIGURATION.md` et les quatre workflows
-CI, qui épinglent tous JDK 25. Le build fonctionne (JDK 25 est ascendant-compatible avec
-`release: 21`), donc ce n'est pas un défaut de fonctionnement, mais la mention de version fixe dans
-le seul fichier qui devrait faire foi.
+contredisait `CLAUDE.md`, `README.md`, `README.fr.md`, `docs/CONFIGURATION.md` et les quatre
+workflows CI, qui épinglent tous JDK 25.
 
-**Suggestion** : aligner `pom.xml` sur `25`.
+**Correctif** : `pom.xml` aligné sur `25`. Vérifié en installant `openjdk-25-jdk-headless` dans
+l'environnement d'audit (absent par défaut, seul JDK 21 y était disponible) et en rejouant
+`./mvnw verify` sous ce JDK — build et couverture inchangés.
 
 ### 2.4 `automation/` : erreurs métier rendues en 500 générique — **corrigé**
 
@@ -156,7 +156,7 @@ d'exceptions métier : validation, ressource inconnue, conflit d'état) —
 `IllegalArgumentException` → `400`, `UnknownAutomationException` → `404`,
 `IllegalStateException` → `409`. Testé par `AutomationControllerTest`.
 
-### 2.5 `automation/` : bail d'exécution indépendant du plafond réel de la tâche
+### 2.5 `automation/` : bail d'exécution indépendant du plafond réel de la tâche — **corrigé**
 
 `AutomationService.tick()` borne la réclamation par `kex.agent.automation.timeout` (défaut 2 min,
 `JdbcAutomationRepository.java:126-143`), mais l'exécution elle-même (`AgentService.askReadOnly`)
@@ -164,9 +164,13 @@ est bornée séparément par `kex.agent.request-timeout` (défaut 120 s), sans r
 les deux. Si le bail expire avant la fin réelle du tour LLM, une autre réplique (le profil visé est
 `shared-memory`, donc multi-instance) peut réclamer et exécuter la même automatisation en double.
 
-**Suggestion** : soit dériver le bail de `request-timeout` avec une marge, soit documenter
-l'invariant `automation.timeout ≥ request-timeout` et le vérifier au démarrage — dans l'esprit de
-`SupervisionScheduleConsistencyCheck`, déjà utilisé pour un couplage de propriétés similaire.
+**Correctif** : `AutomationTimeoutConsistencyCheck`, sur le même modèle que
+`SupervisionScheduleConsistencyCheck` — un avertissement au démarrage
+(`ApplicationReadyEvent`), pas un échec, quand `automation.enabled=true` et
+`automation.timeout < request-timeout`. Une dérivation automatique du bail à partir de
+`request-timeout` a été écartée : elle aurait fait dépendre silencieusement une propriété d'une
+autre dans un sens non évident, alors qu'un avertissement explicite laisse l'opérateur choisir la
+marge. Testé par `AutomationTimeoutConsistencyCheckTest`.
 
 ## 3. Fonctionnalités livrées sans façade opérateur
 
@@ -222,6 +226,6 @@ résumés/automatisations sont d'abord un manque de confort opérationnel.
 | 1.3 | Suppression de résumé sous-protégée | Moyen | Faible (une ligne de `SecurityConfig`) | Corrigé |
 | 2.2 | Flux console n'alimente jamais l'apprentissage | Moyen | Moyen (choix de conception à trancher) | Corrigé |
 | 2.4 | Erreurs `automation/` en 500 | Faible | Faible | Corrigé |
-| 2.3 | Java 21 vs 25 dans `pom.xml` | Faible | Trivial | Ouvert |
-| 2.5 | Bail d'automatisation découplé du timeout réel | Faible (pas d'exécuteur mutant aujourd'hui) | Moyen | Ouvert |
+| 2.3 | Java 21 vs 25 dans `pom.xml` | Faible | Trivial | Corrigé |
+| 2.5 | Bail d'automatisation découplé du timeout réel | Faible (pas d'exécuteur mutant aujourd'hui) | Moyen | Corrigé |
 | 1.4 / 1.6 | Isolation STDIO et KDF, par défaut faibles | Faible aujourd'hui, à revoir si le périmètre s'élargit | Documentation / Moyen | Ouvert |
