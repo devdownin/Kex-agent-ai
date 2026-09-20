@@ -113,15 +113,21 @@ export async function api(path, options = {}) {
 
 export function toast(message, kind, action) {
   const node = el('div', kind === 'error' ? 'toast error' : 'toast', message);
+  let dismiss = () => node.remove();
   if (action?.label && action?.run) {
     const button = el('button', 'ghost', action.label);
     button.type = 'button';
     button.addEventListener('click', async () => {
       button.disabled = true;
-      try { await action.run(); node.remove(); } catch (error) { report(error); }
+      try { await action.run(); dismiss(); } catch (error) { report(error); }
     });
     node.append(button);
   }
+  const close = el('button', 'toast-close', '✕');
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Fermer cette notification');
+  close.addEventListener('click', () => dismiss());
+  node.append(close);
   $('#toasts').append(node);
   if (kind !== 'error') {
     try {
@@ -129,7 +135,21 @@ export function toast(message, kind, action) {
     } catch { /* retour visible via le toast pour cette session */ }
     dispatchEvent(new CustomEvent('kex:action', { detail: { message, at: new Date().toISOString() } }));
   }
-  setTimeout(() => node.remove(), action ? 10_000 : 6000);
+  // Une minuterie qu'on peut suspendre : sans ça, un toast se referme sous la souris pendant
+  // qu'on le lit, l'action qu'il propose disparaissant avec lui.
+  const life = action ? 10_000 : 6000;
+  let remaining = life;
+  let since = Date.now();
+  let timer = setTimeout(() => dismiss(), remaining);
+  dismiss = () => { clearTimeout(timer); node.remove(); };
+  node.addEventListener('mouseenter', () => {
+    clearTimeout(timer);
+    remaining -= Date.now() - since;
+  });
+  node.addEventListener('mouseleave', () => {
+    since = Date.now();
+    timer = setTimeout(() => dismiss(), Math.max(remaining, 1000));
+  });
 }
 
 export const report = (error) => toast(error instanceof Error ? error.message : String(error), 'error');
