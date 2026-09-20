@@ -61,6 +61,7 @@ jobs:
   # jusqu'ici ont tous été trouvés à la main, donc une fois, donc sans garantie qu'ils ne
   # reviennent pas. Ce job les rejoue.
   browser:
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -81,6 +82,12 @@ jobs:
       # vérifierait rien de plus et doublerait le temps de restitution.
       - name: Package the agent
         run: ./mvnw -B --no-transfer-progress -DskipTests package
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-1.56.1
 
       # Hors de l'arborescence et sans package.json : Playwright n'est pas une dépendance du
       # projet, et un manifeste npm à la racine ferait vivre une seconde chaîne de construction
@@ -130,9 +137,18 @@ jobs:
         if: failure()
         run: cat "$RUNNER_TEMP/agent.log" || true
 
+      - name: Upload agent logs on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: agent-browser-log
+          path: ${{ runner.temp }}/agent.log
+          retention-days: 7
+
   # Le Dockerfile et le compose sont livrés avec l'application : sans ce job ils ne sont
   # vérifiés par personne avant un `docker compose up` en production.
   docker:
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
 

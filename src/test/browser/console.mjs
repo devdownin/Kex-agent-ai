@@ -297,7 +297,7 @@ await check('le cockpit relie incident, preuves et chat contextuel sans changer 
   await page.click('.incident-detail-head button.primary');
   await page.click('#context-chat-full');
   await page.waitForSelector('#transcript .sent-context');
-  assert.match(await page.$eval('#transcript .sent-context', (node) => node.innerText),
+  assert.match(await page.$eval('#transcript .sent-context', (node) => node.textContent),
     /Incident.*Retard de consommation/s);
 
   await page.unroute('**/api/agent/supervision/overview');
