@@ -4,7 +4,9 @@ package com.kex.agent.mcp;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.net.InetAddress;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -838,10 +840,30 @@ public class McpToolCatalog implements AutoCloseable {
             if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
                     || uri.getHost() == null || uri.getUserInfo() != null || uri.getQuery() != null
                     || uri.getFragment() != null) throw new IllegalArgumentException();
+            rejectLinkLocalHost(uri.getHost());
             return uri;
         }
         catch (RuntimeException ex) {
             throw new IllegalArgumentException("URL MCP HTTP(S) absolue invalide");
+        }
+    }
+
+    /**
+     * Un hôte en lien-local (169.254.0.0/16, fe80::/10) est presque toujours une passerelle de
+     * métadonnées cloud : AWS, GCP, Azure, Alibaba et DigitalOcean y répondent toutes sur
+     * 169.254.169.254. Sans ce refus, une clé ADMIN compromise transformerait « ajouter un serveur
+     * MCP » en vol des identifiants d'infrastructure de l'hôte. Le réseau local ou privé, lui,
+     * reste autorisé : un serveur MCP de développement tourne couramment sur la même machine ou le
+     * même réseau que l'agent, et le restreindre casserait des déploiements légitimes pour un risque
+     * que le rôle ADMIN couvre déjà.
+     */
+    private static void rejectLinkLocalHost(String host) {
+        try {
+            if (InetAddress.getByName(host).isLinkLocalAddress()) throw new IllegalArgumentException();
+        }
+        catch (UnknownHostException ex) {
+            // Un nom qui ne se résout pas encore à l'enregistrement échoue de toute façon à la
+            // connexion ; ce n'est pas à cette validation de le refuser par avance.
         }
     }
 

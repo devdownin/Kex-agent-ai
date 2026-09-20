@@ -12,45 +12,48 @@ porte volontairement sur ce qui n'y figure pas encore : `automation/`, `channels
 
 ## 1. Sécurité
 
-### 1.1 Aucun filtrage d'URL privée/loopback/metadata sur l'ajout d'un serveur MCP (SSRF)
+### 1.1 Aucun filtrage d'URL privée/loopback/metadata sur l'ajout d'un serveur MCP (SSRF) — **corrigé**
 
 `McpToolCatalog.validatedBaseUrl` (`src/main/java/com/kex/agent/mcp/McpToolCatalog.java:835-846`)
-vérifie le schéma (`http`/`https`), l'absence d'`userinfo`/`query`/`fragment`, mais **rien** sur
-l'hôte lui-même : `127.0.0.1`, `169.254.169.254` (métadonnées cloud) ou une adresse du réseau
-interne du conteneur passent la validation. `POST /api/agent/mcp/servers` est protégé par
-`ADMIN` (`SecurityConfig.java:77-80`), mais un jeton `ADMIN` compromis — ou une CI mal isolée —
-peut ainsi faire sonder par l'agent n'importe quelle adresse interne sous couvert d'« ajouter un
-serveur MCP ». Aucun test ne couvre ce cas (`McpToolCatalogTest` ne contient aucun scénario
-d'URL privée).
+vérifiait le schéma (`http`/`https`), l'absence d'`userinfo`/`query`/`fragment`, mais **rien** sur
+l'hôte lui-même : `169.254.169.254` (métadonnées cloud AWS/GCP/Azure/Alibaba) passait la
+validation. `POST /api/agent/mcp/servers` est protégé par `ADMIN` (`SecurityConfig.java:77-80`),
+mais un jeton `ADMIN` compromis pouvait ainsi faire sonder par l'agent la passerelle de
+métadonnées de l'hôte sous couvert d'« ajouter un serveur MCP ».
 
-**Suggestion** : liste noire d'IP (loopback, lien-local, plages privées RFC 1918, métadonnées
-cloud connues) dans `validatedBaseUrl`, avec un test dédié — dans le même esprit que
-`kex.mcp.runtime.allowed-stdio-commands`, déjà une liste blanche pour le cas STDIO.
+**Correctif** : `validatedBaseUrl` rejette maintenant un hôte lien-local
+(`InetAddress.isLinkLocalAddress()`, couvre `169.254.0.0/16` et `fe80::/10`) — voir
+`rejectLinkLocalHost`. Le réseau privé (RFC 1918) et le loopback restent volontairement autorisés :
+un serveur MCP de développement tourne couramment sur la même machine ou le même réseau que
+l'agent (`McpStreamableHttpIntegrationTest` en enregistre un sur `127.0.0.1` à chaud), et les
+restreindre casserait des déploiements légitimes pour un risque que le rôle `ADMIN` couvre déjà —
+seule la passerelle de métadonnées, qui n'a aucun usage MCP légitime, est visée. Testé par
+`McpToolCatalogTest.refuse_un_hote_en_lien_local`.
 
-### 1.2 Approuver une compétence a le même pouvoir qu'écrire dans la base de connaissance, sans la même exigence de rôle
+### 1.2 Approuver une compétence a le même pouvoir qu'écrire dans la base de connaissance, sans la même exigence de rôle — **corrigé**
 
 `POST /api/agent/knowledge` est explicitement réservé à `ADMIN`
 (`SecurityConfig.java:76`) parce que son contenu pèse sur chaque analyse future. Or
 `POST /api/agent/skills/{id}/approve` (`SkillsController.java:46`) a exactement le même effet —
 son Markdown est injecté durablement dans le prompt système de chaque conversation future du même
 propriétaire (`LongTermMemoryService.context`, appelé depuis `AgentService.java:216-218`) — et
-n'a **aucune** ligne dédiée dans `SecurityConfig.java` : la route retombe sur le filtre générique
-`/api/agent/**` → `OPERATOR`/`ADMIN` (`SecurityConfig.java:87`). Un `OPERATOR` peut donc faire ce
-qu'un `ADMIN` seul peut faire côté connaissance.
+n'avait **aucune** ligne dédiée dans `SecurityConfig.java` : la route retombait sur le filtre
+générique `/api/agent/**` → `OPERATOR`/`ADMIN` (`SecurityConfig.java:87`).
 
-**Suggestion** : aligner `POST /api/agent/skills/*/approve` sur `ADMIN`, comme
-`POST /api/agent/knowledge`.
+**Correctif** : `POST /api/agent/skills/*/approve` rejoint désormais le motif `ADMIN` de
+`POST /api/agent/knowledge`. Testé par
+`ApiKeyPrincipalTest.seul_un_admin_peut_approuver_une_competence`.
 
-### 1.3 La suppression d'un résumé durable échappe à la règle `ADMIN` de la mémoire
+### 1.3 La suppression d'un résumé durable échappait à la règle `ADMIN` de la mémoire — **corrigé**
 
 `DELETE /api/agent/memory/*` exige `ADMIN` (`SecurityConfig.java:85-86`). Mais
 `DELETE /api/agent/memory/summaries/{id}` (`LongTermMemoryController.java:31-36`) a un segment de
-plus : avec `AntPathMatcher`, `*` ne franchit pas `/`, donc ce chemin ne correspond pas au motif et
-retombe sur `/api/agent/**` → `OPERATOR`/`ADMIN`. Un `OPERATOR` peut supprimer un résumé durable
-alors qu'il ne peut pas supprimer un simple fait court — l'inverse de l'intention lisible dans le
-reste du fichier.
+plus : avec `AntPathMatcher`, `*` ne franchit pas `/`, donc ce chemin ne correspondait pas au motif
+et retombait sur `/api/agent/**` → `OPERATOR`/`ADMIN`. Un `OPERATOR` pouvait supprimer un résumé
+durable alors qu'il ne peut pas supprimer un simple fait court.
 
-**Suggestion** : ajouter `/api/agent/memory/summaries/*` au motif `ADMIN` existant.
+**Correctif** : `/api/agent/memory/summaries/*` rejoint le motif `ADMIN` existant. Testé par
+`ApiKeyPrincipalTest.seul_un_admin_peut_supprimer_un_resume_durable`.
 
 ### 1.4 Isolation Docker des serveurs MCP STDIO : désactivée par défaut
 
@@ -206,13 +209,13 @@ résumés/automatisations sont d'abord un manque de confort opérationnel.
 
 ## Priorisation suggérée
 
-| # | Constat | Impact | Effort |
-|---|---|---|---|
-| 1.1 | SSRF via URL de serveur MCP | Élevé | Faible (fonction pure + test) |
-| 1.2 | Approbation de compétence sous-protégée | Élevé | Faible (une ligne de `SecurityConfig`) |
-| 1.3 | Suppression de résumé sous-protégée | Moyen | Faible (une ligne de `SecurityConfig`) |
-| 2.2 | Flux console n'alimente jamais l'apprentissage | Moyen | Moyen (choix de conception à trancher) |
-| 2.4 | Erreurs `automation/` en 500 | Faible | Faible |
-| 2.3 | Java 21 vs 25 dans `pom.xml` | Faible | Trivial |
-| 2.5 | Bail d'automatisation découplé du timeout réel | Faible (pas d'exécuteur mutant aujourd'hui) | Moyen |
-| 1.4 / 1.6 | Isolation STDIO et KDF, par défaut faibles | Faible aujourd'hui, à revoir si le périmètre s'élargit | Documentation / Moyen |
+| # | Constat | Impact | Effort | État |
+|---|---|---|---|---|
+| 1.1 | SSRF via URL de serveur MCP | Élevé | Faible (fonction pure + test) | Corrigé |
+| 1.2 | Approbation de compétence sous-protégée | Élevé | Faible (une ligne de `SecurityConfig`) | Corrigé |
+| 1.3 | Suppression de résumé sous-protégée | Moyen | Faible (une ligne de `SecurityConfig`) | Corrigé |
+| 2.2 | Flux console n'alimente jamais l'apprentissage | Moyen | Moyen (choix de conception à trancher) | Ouvert |
+| 2.4 | Erreurs `automation/` en 500 | Faible | Faible | Ouvert |
+| 2.3 | Java 21 vs 25 dans `pom.xml` | Faible | Trivial | Ouvert |
+| 2.5 | Bail d'automatisation découplé du timeout réel | Faible (pas d'exécuteur mutant aujourd'hui) | Moyen | Ouvert |
+| 1.4 / 1.6 | Isolation STDIO et KDF, par défaut faibles | Faible aujourd'hui, à revoir si le périmètre s'élargit | Documentation / Moyen | Ouvert |

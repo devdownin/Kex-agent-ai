@@ -73,7 +73,7 @@ class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/supervision/processes/*/maintenance")
                                 .hasAnyRole("OPERATOR", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/agent/mcp/servers/*/tools/*",
-                                "/api/agent/knowledge").hasRole("ADMIN")
+                                "/api/agent/knowledge", "/api/agent/skills/*/approve").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/agent/mcp/servers",
                                 "/api/agent/mcp/servers/test", "/api/agent/mcp/servers/*/enabled",
                                 "/api/agent/mcp/servers/*/refresh", "/api/agent/mcp/configuration")
@@ -82,7 +82,8 @@ class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/api/agent/mcp/servers/*/secret").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/mcp/servers/*").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/agent/supervision/policy").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/agent/memory/*", "/api/agent/knowledge")
+                        .requestMatchers(HttpMethod.DELETE, "/api/agent/memory/*",
+                                "/api/agent/memory/summaries/*", "/api/agent/knowledge")
                                 .hasRole("ADMIN")
                         .requestMatchers("/api/agent/**").hasAnyRole("OPERATOR", "ADMIN")
                         .requestMatchers(EndpointRequest.toAnyEndpoint()).hasRole("ADMIN")
