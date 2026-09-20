@@ -65,6 +65,25 @@ class ApiKeyPrincipalTest {
         assertThat(postStatus("/api/agent/mcp/configuration", "Bearer jeton-ops")).isEqualTo(403);
     }
 
+    @Test
+    void seul_un_admin_peut_approuver_une_competence() throws Exception {
+        // Une compétence approuvée s'injecte durablement dans le prompt système de chaque
+        // conversation future du même propriétaire — même pouvoir que POST /api/agent/knowledge,
+        // qui exige déjà ADMIN.
+        assertThat(postStatus("/api/agent/skills/inconnue/approve", "Bearer jeton-ops")).isEqualTo(403);
+        // Le 409 vient de la compétence inconnue : il prouve que la sécurité a laissé passer l'admin.
+        assertThat(postJsonStatus("/api/agent/skills/inconnue/approve", "Bearer jeton-admin", "{}"))
+                .isEqualTo(409);
+    }
+
+    @Test
+    void seul_un_admin_peut_supprimer_un_resume_durable() throws Exception {
+        // Même exigence que DELETE /api/agent/memory/{id} pour un fait court : un résumé durable
+        // n'est pas moins sensible.
+        assertThat(deleteStatus("/api/agent/memory/summaries/inconnu", "Bearer jeton-ops")).isEqualTo(403);
+        assertThat(deleteStatus("/api/agent/memory/summaries/inconnu", "Bearer jeton-admin")).isEqualTo(404);
+    }
+
     private void post(String path, String authorization) throws IOException, InterruptedException {
         postStatus(path, authorization);
     }
@@ -73,6 +92,27 @@ class ApiKeyPrincipalTest {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .header("Authorization", authorization)
                 .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+        try (HttpClient client = HttpClient.newHttpClient()) {
+            return client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
+        }
+    }
+
+    private int postJsonStatus(String path, String authorization, String json) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header("Authorization", authorization)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+        try (HttpClient client = HttpClient.newHttpClient()) {
+            return client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
+        }
+    }
+
+    private int deleteStatus(String path, String authorization) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header("Authorization", authorization)
+                .DELETE()
                 .build();
         try (HttpClient client = HttpClient.newHttpClient()) {
             return client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();

@@ -344,6 +344,20 @@ class McpToolCatalogTest {
     }
 
     @Test
+    void refuse_un_hote_en_lien_local() {
+        // 169.254.169.254 répond aux métadonnées d'instance sur AWS, GCP, Azure et Alibaba : sans
+        // ce refus, une clé ADMIN compromise transformerait « ajouter un serveur MCP » en vol des
+        // identifiants d'infrastructure de l'hôte.
+        McpServerRegistration registration = new McpServerRegistration("metadata", "HTTP",
+                "http://169.254.169.254/latest/meta-data/", "/mcp", null, Map.of(),
+                null, List.of(), Map.of(), true, Set.of(), Map.of());
+
+        assertThatThrownBy(() -> catalog(true).test(registration))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("URL MCP");
+    }
+
+    @Test
     void refuse_deux_sources_d_authorization_http() {
         McpServerRegistration registration = new McpServerRegistration("double-auth", "HTTP",
                 "https://mcp.example.net", "/mcp", "bearer", Map.of("Authorization", "Basic secret"),

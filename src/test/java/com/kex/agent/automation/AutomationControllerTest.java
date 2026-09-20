@@ -8,6 +8,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
@@ -44,5 +45,23 @@ class AutomationControllerTest {
 
         controller.delete(principal, "a-1");
         verify(service).delete("user1", "a-1");
+    }
+
+    @Test
+    void un_cron_invalide_rend_400_plutot_qu_une_erreur_generique() {
+        assertThat(controller.invalidArgument(new IllegalArgumentException("Cron invalide")).getStatus())
+                .isEqualTo(HttpStatus.BAD_REQUEST.value());
+    }
+
+    @Test
+    void une_automatisation_inconnue_rend_404_plutot_qu_une_erreur_generique() {
+        assertThat(controller.unknownAutomation(new UnknownAutomationException()).getStatus())
+                .isEqualTo(HttpStatus.NOT_FOUND.value());
+    }
+
+    @Test
+    void une_automatisation_en_cours_d_execution_rend_409_plutot_qu_une_erreur_generique() {
+        assertThat(controller.conflict(new IllegalStateException("Automatisation en cours d'exécution")).getStatus())
+                .isEqualTo(HttpStatus.CONFLICT.value());
     }
 }
