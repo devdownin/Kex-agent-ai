@@ -35,6 +35,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
 import reactor.core.publisher.Sinks;
 
 @Service
@@ -175,9 +176,11 @@ public class AgentService {
         // que spring.mvc.async.request-timeout suppose déjà empêché. Le compte à rebours part de
         // la souscription et couvre tout l'échange, comme sur le chemin bloquant ; contrairement à
         // lui, il annule réellement l'amont.
+        StringBuilder answer = new StringBuilder();
         Flux<AgentEvent> tokens = request(conversation, message, recorder, execution)
                 .stream()
                 .content()
+                .doOnNext(answer::append)
                 .<AgentEvent>map(AgentEvent.Token::new)
                 .takeUntilOther(Mono.delay(timeout)
                         .flatMap(tick -> Mono.error(new AgentTimeoutException(timeout, id))))
@@ -187,6 +190,16 @@ public class AgentService {
                 .transformDeferred(CircuitBreakerOperator.of(modelCircuitBreaker))
                 .doFinally(signal -> {
                     execution.cancel();
+                    // Seul un flux qui va jusqu'à son terme normal compte comme un échange réussi :
+                    // une erreur, un timeout ou une déconnexion client (`ON_COMPLETE` est le seul
+                    // signal qui l'atteste) ne doivent pas nourrir la mémoire long-terme d'une
+                    // réponse tronquée. Sans cette écriture, /chat/stream — le chemin que la
+                    // console emprunte par défaut — n'alimentait jamais ce second système de
+                    // mémoire, contrairement à ask/askStructured.
+                    if (longTermMemory != null && signal == SignalType.ON_COMPLETE) {
+                        longTermMemory.recordSuccessfulTask(conversation.owner(), conversation.id(), message,
+                                answer.toString(), recorder.calls());
+                    }
                     tools.tryEmitComplete();
                 });
 

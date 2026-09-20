@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -23,4 +24,19 @@ class AutomationController {
     @PostMapping @ResponseStatus(HttpStatus.CREATED) Automation create(Principal p, @Valid @RequestBody AutomationRequest r) { return service.create(p.getName(), r); }
     @PutMapping("/{id}") Automation update(Principal p, @PathVariable String id, @Valid @RequestBody AutomationRequest r) { return service.update(p.getName(), id, r); }
     @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void delete(Principal p, @PathVariable String id) { service.delete(p.getName(), id); }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    ProblemDetail invalidArgument(IllegalArgumentException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(UnknownAutomationException.class)
+    ProblemDetail unknownAutomation(UnknownAutomationException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    ProblemDetail conflict(IllegalStateException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
 }

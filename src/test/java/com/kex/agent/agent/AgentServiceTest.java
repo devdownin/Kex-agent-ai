@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import com.kex.agent.config.AgentProperties;
+import com.kex.agent.memory.LongTermMemoryService;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
@@ -34,6 +35,7 @@ import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.converter.StructuredOutputConverter;
+import org.springframework.beans.factory.ObjectProvider;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
@@ -41,7 +43,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
@@ -71,6 +75,9 @@ class AgentServiceTest {
     @Mock
     TokenBudgetService tokenBudget;
 
+    @Mock
+    LongTermMemoryService longTermMemory;
+
     private static AgentProperties properties(Duration timeout) {
         return new AgentProperties("prompt", 40, 4000, false, "", Map.of(), Map.of(), timeout);
     }
@@ -89,6 +96,15 @@ class AgentServiceTest {
 
     private AgentService service(Duration timeout) {
         return new AgentService(chatClient, chatMemory, properties(timeout), CircuitBreakerRegistry.ofDefaults(), tokenBudget);
+    }
+
+    @SuppressWarnings("unchecked")
+    private AgentService serviceWithLongTermMemory(Duration timeout) {
+        given(longTermMemory.context(anyString())).willReturn("");
+        ObjectProvider<LongTermMemoryService> provider = mock(ObjectProvider.class);
+        given(provider.getIfAvailable()).willReturn(longTermMemory);
+        return new AgentService(chatClient, chatMemory, properties(timeout), CircuitBreakerRegistry.ofDefaults(),
+                tokenBudget, provider);
     }
 
     private void blockingCall() {
@@ -253,6 +269,38 @@ class AgentServiceTest {
                 .thenConsumeWhile(event -> event instanceof AgentEvent.Token)
                 .expectError(AgentTimeoutException.class)
                 .verify(Duration.ofSeconds(5));
+    }
+
+    /**
+     * /chat/stream est le chemin que la console emprunte par défaut. Sans ce branchement, la
+     * mémoire long-terme (résumés, compétences proposées) n'était jamais alimentée en usage
+     * normal via la console — seuls ask/askStructured le faisaient.
+     */
+    @Test
+    void alimente_la_memoire_long_terme_a_la_fin_d_un_flux_reussi() {
+        streamingCall();
+        given(streamSpec.content()).willReturn(Flux.just("pong"));
+
+        StepVerifier.create(serviceWithLongTermMemory(Duration.ofSeconds(10)).stream("conv-1", "ping").events())
+                .expectNext(new AgentEvent.Token("pong"))
+                .verifyComplete();
+
+        verify(longTermMemory).recordSuccessfulTask(eq("kex-internal"), eq("conv-1"), eq("ping"), eq("pong"), any());
+    }
+
+    /**
+     * Un flux interrompu par le plafond de durée n'a pas produit une réponse complète : l'écrire
+     * dans la mémoire long-terme y ferait passer une réponse tronquée pour un échange réussi.
+     */
+    @Test
+    void n_alimente_pas_la_memoire_long_terme_quand_le_flux_echoue_par_timeout() {
+        streamingCall();
+        given(streamSpec.content()).willReturn(Flux.never());
+
+        StepVerifier.create(serviceWithLongTermMemory(Duration.ofMillis(100)).stream("conv-1", "ping").events())
+                .expectError(AgentTimeoutException.class).verify();
+
+        verify(longTermMemory, never()).recordSuccessfulTask(any(), any(), any(), any(), any());
     }
 
     @Test

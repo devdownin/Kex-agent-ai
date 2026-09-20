@@ -114,20 +114,23 @@ opposées sous un seul interrupteur et un seul jeu de seuils.
 propriété `kex.agent.learning.*` dédiée (capacité, rétention, activation) ne devrait pas se
 distinguer de `kex.agent.memory.*`.
 
-### 2.2 Le chemin par défaut de la console n'alimente jamais le second système de mémoire
+### 2.2 Le chemin par défaut de la console n'alimentait jamais le second système de mémoire — **corrigé**
 
 `AgentService.streamForTask` (`AgentService.java:165-194`, ce que `/chat/stream` — « la console
-l'emprunte par défaut », commentaire `AgentService.java:154` — expose) appelle bien
-`request(...)`, qui injecte `longTermMemory.context(...)` (lignes 216-218), mais n'appelle
-**jamais** `longTermMemory.recordSuccessfulTask(...)`, contrairement à `ask`/`askStructured`
-(lignes 116-117, 141-142). En usage normal via la console, aucun résumé ni aucune proposition de
-compétence n'est donc jamais enregistré — seuls les appels via l'API bloquante (`/chat`,
-`/chat/structured`) le déclenchent. Vérifié : `AgentServiceTest` ne teste ce branchement dans
-aucun des deux sens.
+l'emprunte par défaut », commentaire `AgentService.java:154` — expose) appelait bien
+`request(...)`, qui injecte `longTermMemory.context(...)`, mais n'appelait **jamais**
+`longTermMemory.recordSuccessfulTask(...)`, contrairement à `ask`/`askStructured`. En usage normal
+via la console, aucun résumé ni aucune proposition de compétence n'était donc jamais enregistré —
+seuls les appels via l'API bloquante (`/chat`, `/chat/structured`) le déclenchaient.
 
-**Suggestion** : soit brancher `recordSuccessfulTask` sur la fin du flux (dans `doFinally`, avec le
-texte accumulé), soit documenter explicitement que le chemin flux n'alimente pas ce système —
-l'état actuel silencieux est la pire des deux options.
+**Correctif** : le texte émis par le flux est accumulé (`doOnNext(answer::append)` sur
+`.content()`), et `recordSuccessfulTask` est appelé depuis `doFinally` **seulement** quand le
+signal terminal est `SignalType.ON_COMPLETE` — jamais sur une erreur, un plafond de durée dépassé
+ou une déconnexion client, pour ne pas faire passer une réponse tronquée pour un échange réussi
+(la même garde que documente déjà `LongTermMemoryService.recordSuccessfulTask` : « Call only after
+a normally completed response »). Testé par
+`AgentServiceTest.alimente_la_memoire_long_terme_a_la_fin_d_un_flux_reussi` et
+`AgentServiceTest.n_alimente_pas_la_memoire_long_terme_quand_le_flux_echoue_par_timeout`.
 
 ### 2.3 `pom.xml` cible Java 21, tout le reste annonce Java 25
 
@@ -139,16 +142,19 @@ le seul fichier qui devrait faire foi.
 
 **Suggestion** : aligner `pom.xml` sur `25`.
 
-### 2.4 `automation/` : erreurs métier rendues en 500 générique
+### 2.4 `automation/` : erreurs métier rendues en 500 générique — **corrigé**
 
-`AutomationController` ne déclare aucun `@ExceptionHandler`, contrairement à `AgentController`
+`AutomationController` ne déclarait aucun `@ExceptionHandler`, contrairement à `AgentController`
 qui mappe systématiquement ses exceptions métier. Une expression cron invalide
 (`AutomationSchedule.java:18-29`), une automatisation inconnue (`UnknownAutomationException`,
 `JdbcAutomationRepository.java:76`) ou un conflit d'exécution (`IllegalStateException`,
-`JdbcAutomationRepository.java:94,106`) remontent donc toutes en `500`, là où le reste de `web/`
-rend `400`/`404`/`409`.
+`JdbcAutomationRepository.java:94,106`) remontaient donc toutes en `500`, là où le reste de
+`web/` rend `400`/`404`/`409`.
 
-**Suggestion** : les mêmes `@ExceptionHandler` que `AgentController`, adaptés à ces trois cas.
+**Correctif** : les trois mêmes `@ExceptionHandler` que `SupervisionController` (même famille
+d'exceptions métier : validation, ressource inconnue, conflit d'état) —
+`IllegalArgumentException` → `400`, `UnknownAutomationException` → `404`,
+`IllegalStateException` → `409`. Testé par `AutomationControllerTest`.
 
 ### 2.5 `automation/` : bail d'exécution indépendant du plafond réel de la tâche
 
@@ -214,8 +220,8 @@ résumés/automatisations sont d'abord un manque de confort opérationnel.
 | 1.1 | SSRF via URL de serveur MCP | Élevé | Faible (fonction pure + test) | Corrigé |
 | 1.2 | Approbation de compétence sous-protégée | Élevé | Faible (une ligne de `SecurityConfig`) | Corrigé |
 | 1.3 | Suppression de résumé sous-protégée | Moyen | Faible (une ligne de `SecurityConfig`) | Corrigé |
-| 2.2 | Flux console n'alimente jamais l'apprentissage | Moyen | Moyen (choix de conception à trancher) | Ouvert |
-| 2.4 | Erreurs `automation/` en 500 | Faible | Faible | Ouvert |
+| 2.2 | Flux console n'alimente jamais l'apprentissage | Moyen | Moyen (choix de conception à trancher) | Corrigé |
+| 2.4 | Erreurs `automation/` en 500 | Faible | Faible | Corrigé |
 | 2.3 | Java 21 vs 25 dans `pom.xml` | Faible | Trivial | Ouvert |
 | 2.5 | Bail d'automatisation découplé du timeout réel | Faible (pas d'exécuteur mutant aujourd'hui) | Moyen | Ouvert |
 | 1.4 / 1.6 | Isolation STDIO et KDF, par défaut faibles | Faible aujourd'hui, à revoir si le périmètre s'élargit | Documentation / Moyen | Ouvert |
