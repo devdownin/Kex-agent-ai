@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.List;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /** Stockage local des connexions MCP créées dans la console. */
@@ -24,6 +25,7 @@ public record McpRuntimeProperties(
                 com.kex.agent.isolation.StdioIsolationProperties.defaults());
     }
 
+    @ConstructorBinding
     public McpRuntimeProperties {
         storageKey = storageKey == null ? "" : storageKey;
         isolation = isolation == null ? com.kex.agent.isolation.StdioIsolationProperties.defaults() : isolation;

@@ -85,7 +85,7 @@ class McpCatalogControllerTest {
 
     @Test
     void requires_admin_and_valid_entry_specific_input_before_any_network_call() throws Exception {
-        mvc.perform(install("microsoft-learn", "{\"connection\":\"docs\"}").principal(null))
+        mvc.perform(unauthenticatedInstall("microsoft-learn", "{\"connection\":\"docs\"}"))
                 .andExpect(status().isUnauthorized());
         mvc.perform(install("microsoft-learn", "{\"connection\":\"docs\"}").principal(auth("ROLE_OPERATOR")))
                 .andExpect(status().isForbidden());
@@ -106,6 +106,11 @@ class McpCatalogControllerTest {
         mvc.perform(install("microsoft-learn", "{\"connection\":\"docs\"}"))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(supervision);
+    }
+
+    private static MockHttpServletRequestBuilder unauthenticatedInstall(String id, String json) {
+        return post("/api/agent/mcp/catalog/" + id + "/install")
+                .contentType(MediaType.APPLICATION_JSON).content(json);
     }
 
     private static MockHttpServletRequestBuilder install(String id, String json) {

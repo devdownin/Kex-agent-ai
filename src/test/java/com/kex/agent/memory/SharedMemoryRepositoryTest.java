@@ -59,8 +59,8 @@ class SharedMemoryRepositoryTest {
 
     @Test
     void une_suppression_par_un_operateur_rejoint_l_audit_de_supervision() {
-        memoryService.remember("fait à effacer via JDBC", null, "conv-1");
-        String id = memoryService.list().stream()
+        memoryService.remember("opérateur", "fait à effacer via JDBC", null, "conv-1");
+        String id = memoryService.list("opérateur").stream()
                 .filter(view -> view.content().equals("fait à effacer via JDBC"))
                 .findFirst().orElseThrow().id();
 

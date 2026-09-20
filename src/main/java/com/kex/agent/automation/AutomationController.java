@@ -6,11 +6,15 @@ import java.security.Principal;
 import java.util.List;
 
 import jakarta.validation.Valid;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/agent/automations")
+@Profile("shared-memory")
+@ConditionalOnProperty(prefix = "kex.agent.automation", name = "enabled", havingValue = "true")
 class AutomationController {
     private final AutomationService service;
     AutomationController(AutomationService service) { this.service = service; }
