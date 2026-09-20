@@ -131,6 +131,17 @@ function appendTranscript(id, turn) {
   }
 }
 
+/** Le composer grandit avec son contenu, jusqu'à `max-height` (`console.css`) puis défile. */
+function resizeComposer(field) {
+  field.style.height = 'auto';
+  field.style.height = `${field.scrollHeight}px`;
+}
+
+/** À cette distance du bas ou moins, on considère que l'utilisateur suit le flux en direct. */
+function nearBottom(container, threshold = 56) {
+  return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+}
+
 function addTurn(role, text) {
   const turn = el('li', `turn ${role}`);
   turn.append(el('span', 'who', role === 'user' ? 'vous' : role === 'error' ? 'erreur' : 'agent'));
@@ -317,8 +328,14 @@ async function sendStreaming(message) {
         appendTranscript(ownConversationId, { role: 'user', text: message });
         touchIndex(ownConversationId, message.slice(0, 48));
       } else if (event.name === 'token') {
+        // Capturé avant d'ajouter le texte : une fois le contenu ajouté, `scrollHeight` a déjà
+        // grandi et la distance au bas ne dit plus si l'utilisateur y était avant ce jeton. Sans
+        // ce garde, remonter lire un passage précédent pendant que la réponse continue de s'écrire
+        // ramenait la vue en bas à chaque jeton, rendant la lecture impossible.
+        const transcript = $('#transcript');
+        const stick = nearBottom(transcript);
         bubble.textContent += event.data;
-        $('#transcript').scrollTop = $('#transcript').scrollHeight;
+        if (stick) transcript.scrollTop = transcript.scrollHeight;
       } else if (event.name === 'tool') {
         calls.push(JSON.parse(event.data));
         renderToolChips(turn, calls);
@@ -431,7 +448,13 @@ export function prefill() {
   const draft = params().get('draft');
   if (!draft) return;
   const field = $('#prompt');
-  if (!field.value) field.value = draft;
+  if (!field.value) {
+    field.value = draft;
+    // Posé par script, donc sans l'événement `input` qui grandit d'habitude le composer : sans cet
+    // appel, un brouillon de plusieurs lignes reste coincé dans une zone d'une seule ligne tant que
+    // l'opérateur n'a pas lui-même tapé un caractère.
+    resizeComposer(field);
+  }
   setParams({ draft: null });
   field.focus();
 }
@@ -480,7 +503,7 @@ export function wire(onUnauthorized) {
 
     addTurn('user', message);
     field.value = '';
-    field.style.height = 'auto';
+    resizeComposer(field);
     renderToolLog([]);
 
     const streaming = $('#stream-mode').checked;
@@ -503,10 +526,7 @@ export function wire(onUnauthorized) {
 
   $('#abort').addEventListener('click', () => inFlight?.abort());
 
-  $('#prompt').addEventListener('input', (event) => {
-    event.target.style.height = 'auto';
-    event.target.style.height = `${event.target.scrollHeight}px`;
-  });
+  $('#prompt').addEventListener('input', (event) => resizeComposer(event.target));
 
   $('#prompt').addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
