@@ -106,9 +106,9 @@ class KexAgentApplicationTests {
     }
 
     @Test
-    void garde_la_memoire_long_terme_en_memoire_hors_du_profil_shared_memory() {
-        assertThat(context.getBean("inMemoryMemoryRepository").getClass().getSimpleName())
-                .isEqualTo("InMemoryMemoryRepository");
+    void garde_la_memoire_long_terme_en_fichier_hors_du_profil_shared_memory() {
+        assertThat(context.getBean("fileMemoryRepository").getClass().getSimpleName())
+                .isEqualTo("FileMemoryRepository");
     }
 
     @Test

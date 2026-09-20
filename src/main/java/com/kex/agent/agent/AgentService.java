@@ -6,8 +6,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.Map;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -29,8 +29,8 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
-import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
@@ -67,7 +67,7 @@ public class AgentService {
     /** Compatibility constructor for focused unit tests and minimal embedding applications. */
     AgentService(ChatClient chatClient, ChatMemory chatMemory, AgentProperties properties,
                  CircuitBreakerRegistry circuitBreakerRegistry, TokenBudgetService tokenBudget) {
-        this(chatClient, chatMemory, properties, circuitBreakerRegistry, tokenBudget, null);
+        this(chatClient, chatMemory, properties, circuitBreakerRegistry, tokenBudget, (LongTermMemoryService) null);
     }
 
     private AgentService(ChatClient chatClient, ChatMemory chatMemory, AgentProperties properties,
