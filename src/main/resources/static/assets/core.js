@@ -111,6 +111,11 @@ export async function api(path, options = {}) {
 
 /* ── Notifications ─────────────────────────────────────────────────────── */
 
+// Une rafale d'actions (approbation groupée, plusieurs échecs à la suite) empilait les toasts sans
+// limite, jusqu'à couvrir une bonne partie de l'écran. Le plus ancien cède la place plutôt que de
+// s'accumuler indéfiniment.
+const MAX_TOASTS = 4;
+
 export function toast(message, kind, action) {
   const node = el('div', kind === 'error' ? 'toast error' : 'toast', message);
   let dismiss = () => node.remove();
@@ -128,7 +133,9 @@ export function toast(message, kind, action) {
   close.setAttribute('aria-label', 'Fermer cette notification');
   close.addEventListener('click', () => dismiss());
   node.append(close);
-  $('#toasts').append(node);
+  const host = $('#toasts');
+  while (host.children.length >= MAX_TOASTS) host.firstElementChild.remove();
+  host.append(node);
   if (kind !== 'error') {
     try {
       localStorage.setItem('kex.agent.last-action', JSON.stringify({ message, at: new Date().toISOString() }));
