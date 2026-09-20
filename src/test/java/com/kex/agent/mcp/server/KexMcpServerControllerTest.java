@@ -112,7 +112,7 @@ class KexMcpServerControllerTest {
     @Test
     void authenticates_every_request_and_checks_roles_origins_and_transport_headers() throws Exception {
         String body = call("kex_run_cycle", "{}");
-        mvc.perform(rpc(body).principal(null)).andExpect(status().isUnauthorized());
+        mvc.perform(unauthenticatedRpc(body)).andExpect(status().isUnauthorized());
         mvc.perform(rpc(body).principal(auth("ROLE_CHAT"))).andExpect(status().isForbidden());
         mvc.perform(rpc(body).header("Origin", "https://evil.example")).andExpect(status().isForbidden());
         mvc.perform(rpc(body).header("Origin", "null")).andExpect(status().isForbidden());
@@ -124,6 +124,11 @@ class KexMcpServerControllerTest {
         verifyNoInteractions(supervision);
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}")
                 .header("Origin", "https://console.example")).andExpect(status().isOk());
+    }
+
+    private static MockHttpServletRequestBuilder unauthenticatedRpc(String body) {
+        return post(PATH).contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM).content(body);
     }
 
     private static MockHttpServletRequestBuilder rpc(String body) {

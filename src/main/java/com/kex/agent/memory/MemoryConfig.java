@@ -2,11 +2,11 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.memory;
 
-import java.time.Clock;
 import java.nio.file.Path;
+import java.time.Clock;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
-
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -35,7 +35,7 @@ class MemoryConfig {
     @Bean
     @ConditionalOnMissingBean(MemoryRepository.class)
     @Profile("!shared-memory")
-    MemoryRepository inMemoryMemoryRepository(MemoryProperties properties, ObjectMapper mapper,
+    MemoryRepository fileMemoryRepository(MemoryProperties properties, ObjectMapper mapper,
             @Value("${kex.agent.memory.storage-directory:${user.home}/.kex/memory}") String directory) {
         return new FileMemoryRepository(mapper, Path.of(directory, "facts.json"), properties.capacity());
     }
