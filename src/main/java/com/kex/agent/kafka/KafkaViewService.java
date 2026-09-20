@@ -114,7 +114,7 @@ public class KafkaViewService {
         catch (RuntimeException ex) {
             // Un serveur injoignable ou un outil absent est un fait à afficher, pas une panne de
             // l'agent : la vue le nomme et le reste de la console continue de fonctionner.
-            log.warn("Vue Kafka : appel de {} sur {} en échec", tool, properties.connection(), ex);
+            log.warn("Vue Kafka : appel de {} sur {} en échec : {}", tool, properties.connection(), ex.getMessage());
             return Envelope.failed("%s sur « %s » : %s".formatted(tool, properties.connection(),
                     ex.getMessage()));
         }
