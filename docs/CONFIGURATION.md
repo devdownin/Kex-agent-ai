@@ -456,5 +456,12 @@ L'exécution se fait sous l'UID `10001`, pas root.
 - `kex.agent.automation.enabled=false` by default and requires `shared-memory`. Set `kex.agent.automation.read-only-tools` explicitly; an empty allowlist refuses startup rather than allowing arbitrary MCP tools.
 - `kex.models.enabled=false` by default. Routes are operator-owned under `kex.models.routes`; `local-only=true` rejects hosted endpoints. `application-ollama.yml` and `application-vllm.yml` provide local OpenAI-compatible profiles.
 - `kex.mcp.server.enabled=false` by default. If enabled, set explicit `kex.mcp.server.allowed-origins` values.
-- `kex.mcp.runtime.isolation.enabled=false` by default. Enabling it requires a pinned image for each allowed stdio command; there is no host fallback.
+- `kex.mcp.runtime.isolation.enabled=false` par défaut : une commande STDIO enregistrée s'exécute
+  alors directement sur l'hôte, pas dans le conteneur `docker run --read-only --network=none
+  --cap-drop=ALL` que `IsolatedStdioCommand` sait construire. La première ligne de défense reste
+  `kex.mcp.runtime.allowed-stdio-commands` (`KEX_MCP_STDIO_ALLOWED_COMMANDS`, liste blanche vide par
+  défaut) : une clé ADMIN compromise ne devient pas un shell arbitraire, isolation activée ou non.
+  Activer l'isolation ajoute une seconde ligne, mais exige alors une image approuvée par commande
+  autorisée (`kex.mcp.runtime.isolation.images`) — sans repli sur l'hôte si aucune image n'est
+  déclarée pour la commande.
 - Automatic procedures are stored as pending skills and need an authenticated operator review before they enter durable context.

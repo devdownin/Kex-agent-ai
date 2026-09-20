@@ -47,6 +47,36 @@ class EncryptedMcpServerStoreTest {
     }
 
     @Test
+    void deux_ecritures_successives_utilisent_un_sel_different() throws Exception {
+        Path file = directory.resolve("servers.enc");
+        McpRuntimeProperties properties = new McpRuntimeProperties(file.toString(), "cle-maitresse-de-test",
+                Duration.ofSeconds(30), 10, List.of());
+        EncryptedMcpServerStore store = new EncryptedMcpServerStore(mapper(), properties);
+
+        store.save(List.of());
+        String firstSalt = Files.readString(file).split("\\.", 4)[1];
+        store.save(List.of());
+        String secondSalt = Files.readString(file).split("\\.", 4)[1];
+
+        // Sans sel propre à chaque écriture, une passphrase faible resterait cassable hors ligne
+        // par une seule table précalculée, quel que soit le nombre d'itérations PBKDF2.
+        assertThat(firstSalt).isNotEqualTo(secondSalt);
+    }
+
+    @Test
+    void refuse_un_fichier_de_l_ancien_format_sans_sel() throws Exception {
+        Path file = directory.resolve("servers.enc");
+        // KEXMCP1 : hachage SHA-256 nu, sans sel, remplacé par KEXMCP2 (PBKDF2 + sel). Un fichier
+        // de l'ancien format doit échouer explicitement, jamais se relire en silence.
+        Files.writeString(file, "KEXMCP1.bm9uY2U.Y2lwaGVydGV4dA");
+        EncryptedMcpServerStore store = new EncryptedMcpServerStore(mapper(),
+                new McpRuntimeProperties(file.toString(), "cle-maitresse-de-test", Duration.ofSeconds(30), 10,
+                        List.of()));
+
+        assertThatThrownBy(store::load).isInstanceOf(IllegalStateException.class).hasMessageContaining("inconnu");
+    }
+
+    @Test
     void n_ecrit_rien_sans_cle_de_stockage() {
         Path file = directory.resolve("disabled.enc");
         EncryptedMcpServerStore store = new EncryptedMcpServerStore(mapper(),

@@ -55,7 +55,7 @@ durable alors qu'il ne peut pas supprimer un simple fait court.
 **Correctif** : `/api/agent/memory/summaries/*` rejoint le motif `ADMIN` existant. Testé par
 `ApiKeyPrincipalTest.seul_un_admin_peut_supprimer_un_resume_durable`.
 
-### 1.4 Isolation Docker des serveurs MCP STDIO : désactivée par défaut
+### 1.4 Isolation Docker des serveurs MCP STDIO : désactivée par défaut — **corrigé (documentation)**
 
 `StdioIsolationProperties.defaults().enabled()` vaut `false`. Sans l'activer, une commande STDIO
 enregistrée (`kex.mcp.runtime.allowed-stdio-commands`) s'exécute directement sur l'hôte plutôt que
@@ -64,8 +64,12 @@ construire. La liste blanche de commandes reste le premier garde-fou (une clé `
 ne devient pas un shell arbitraire), mais l'installation par défaut n'a pas la seconde ligne de
 défense.
 
-**Suggestion** : documenter ce choix dans `docs/CONFIGURATION.md` à côté de
-`allowed-stdio-commands`, pour qu'il soit délibéré plutôt que découvert.
+**Correctif** : ce choix est documenté dans `docs/CONFIGURATION.md` (« Extensions governed by
+default »), à côté de `kex.mcp.runtime.isolation.enabled` — quelle commande s'exécute où par
+défaut, ce que la liste blanche couvre déjà seule, et ce que l'isolation ajoute (une image
+approuvée par commande, sans repli sur l'hôte). Aucun changement de comportement par défaut :
+activer l'isolation par défaut exigerait Docker disponible sur tout déploiement, y compris ceux
+qui ne déclarent aucune commande STDIO.
 
 ### 1.5 Contrôle du rôle `ADMIN` du catalogue MCP porté par le contrôleur, pas par la chaîne de filtres
 
@@ -79,16 +83,22 @@ contrôleur est testé.
 **Suggestion** : ajouter la ligne dans `SecurityConfig.java` par cohérence avec le reste de
 `mcp/`, même si le comportement actuel est déjà correct.
 
-### 1.6 Dérivation de clé sans sel pour le stockage chiffré des serveurs MCP
+### 1.6 Dérivation de clé sans sel pour le stockage chiffré des serveurs MCP — **corrigé**
 
 `EncryptedMcpServerStore` chiffre en AES-256-GCM avec nonce aléatoire par écriture et fichier en
-`rw-------` (`EncryptedMcpServerStore.java:39-127`) — correct. La clé, elle, vient de
-`SHA-256(passphrase)` sans sel ni KDF lente (`:109-117`). Acceptable pour une passphrase
-d'opérateur fournie hors bande, mais sans défense en profondeur si cette passphrase est faible.
+`rw-------` — correct. La clé, elle, venait de `SHA-256(passphrase)` sans sel ni KDF lente :
+acceptable pour une passphrase d'opérateur fournie hors bande, mais sans défense en profondeur si
+cette passphrase est faible.
 
-**Suggestion** : PBKDF2/Argon2 sur `kex.mcp.runtime.storage-key`, en gardant la compatibilité
-ascendante (ou en la cassant explicitement avec une note de migration, la fonctionnalité étant
-récente).
+**Correctif** : la clé AES dérive maintenant de `kex.mcp.runtime.storage-key` par
+PBKDF2-HMAC-SHA256 (210 000 itérations, OWASP 2023), avec un sel aléatoire de 16 octets généré à
+**chaque écriture** — jamais réutilisé — et transporté avec le fichier chiffré plutôt que dans un
+registre séparé. Rupture explicite de format plutôt que compatibilité ascendante silencieuse :
+`KEXMCP2` (avec sel) succède à `KEXMCP1` (hachage nu), et un fichier de l'ancien format échoue à se
+déchiffrer avec un message clair — la fonctionnalité est récente, et les serveurs MCP persistés se
+recréent en quelques clics dans la console, une migration automatique n'a donc pas semblé
+justifiée. Testé par `EncryptedMcpServerStoreTest` : deux écritures successives produisent des sels
+différents, et un fichier `KEXMCP1` est refusé explicitement.
 
 ## 2. Cohérence fonctionnelle
 
@@ -228,4 +238,8 @@ résumés/automatisations sont d'abord un manque de confort opérationnel.
 | 2.4 | Erreurs `automation/` en 500 | Faible | Faible | Corrigé |
 | 2.3 | Java 21 vs 25 dans `pom.xml` | Faible | Trivial | Corrigé |
 | 2.5 | Bail d'automatisation découplé du timeout réel | Faible (pas d'exécuteur mutant aujourd'hui) | Moyen | Corrigé |
-| 1.4 / 1.6 | Isolation STDIO et KDF, par défaut faibles | Faible aujourd'hui, à revoir si le périmètre s'élargit | Documentation / Moyen | Ouvert |
+| 1.4 / 1.6 | Isolation STDIO et KDF, par défaut faibles | Faible aujourd'hui, à revoir si le périmètre s'élargit | Documentation / Moyen | Corrigé |
+
+Les huit constats de cet audit sont désormais traités : sept par un changement de code ou de
+configuration avec test dédié, un (1.4) par une documentation explicite d'un choix déjà
+raisonnable.
