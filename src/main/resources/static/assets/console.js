@@ -617,6 +617,10 @@ async function route() {
     // écran précis reviendrait avec le nom de l'application pour seul repère.
     document.title = `${VIEWS[view].title} — Kex Agent Control Center`;
     $('#announcer').textContent = VIEWS[view].title;
+    // `main` garde son défilement d'un écran à l'autre — ce n'est qu'un attribut `hidden` qui
+    // change, pas un nouveau document. Sans ça, quitter un long tableau de processus scrollé
+    // en bas ouvre l'écran suivant déjà scrollé, avec son en-tête hors champ.
+    $('#main').scrollTop = 0;
     supervision.syncFilters();
     tools.syncFilters();
     await VIEWS[view].load?.();

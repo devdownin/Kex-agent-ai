@@ -143,12 +143,18 @@ body {
 
 /* ── Ossature ───────────────────────────────────────────────────────── */
 
+/* `height`, pas `min-height` : une grille sans hauteur définie dimensionne sa ligne `1fr` sur le
+   contenu de `main` plutôt que sur l'espace restant. Avec un tableau plus haut que l'écran — Audit,
+   Processus, la liste des serveurs MCP — la page entière défilait alors, rail et barre du haut
+   compris : la navigation et le statut de l'agent disparaissaient exactement au moment de parcourir
+   une longue liste. `overflow: auto` sur `main` (ci-dessous) ne prend effet qu'une fois la hauteur
+   de la grille elle-même bornée par celle de l'écran. */
 .shell {
   display: grid;
   grid-template-columns: var(--rail) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas: "rail topbar" "rail main";
-  min-height: 100dvh;
+  height: 100dvh;
 }
 
 .rail {
@@ -1333,7 +1339,18 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   z-index: 50;
   max-width: min(380px, calc(100vw - 32px));
 }
-.toast > button { margin-left: 12px; padding: 4px 10px; }
+.toast > button { margin-left: 8px; padding: 4px 10px; }
+.toast-close {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  vertical-align: middle;
+}
+.toast-close:hover { background: var(--surface-2); color: var(--ink); }
 .action-feedback {
   padding: 10px 14px;
   border: 1px solid var(--line);
