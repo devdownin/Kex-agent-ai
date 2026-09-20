@@ -18,6 +18,25 @@ let lastMetrics = [];
 let runtimeServers = new Map();
 let editingConnection = null;
 let rotatingConnection = null;
+let installTarget = null;
+
+// Miroir du libellé français porté par McpTrustCriterion côté serveur (voir sa javadoc) : le JSON
+// ne rend que le nom de la constante, comme les autres énumérations d'état de cette console —
+// c'est stateTag/LABELS, dans core.js, qui pose déjà cette même règle pour AgentState et consorts.
+const CRITERIA_LABELS = {
+  OFFICIAL_PUBLISHER: 'Éditeur officiel / identité vérifiée',
+  VERIFIABLE_PROVENANCE: 'Provenance source → build vérifiable',
+  ARTIFACT_SIGNATURE: "Signature / attestation de l'artefact",
+  SBOM_AVAILABLE: 'SBOM disponible',
+  DEPENDENCY_CVE_SCAN: 'Analyse CVE / dépendances',
+  ACTIVELY_MAINTAINED: 'Projet activement maintenu',
+  MINIMAL_PERMISSIONS: 'Permissions minimales',
+  DOCUMENTED_TOOLS: 'Outils et effets de bord documentés',
+  CONTAINER_ISOLATION: 'Isolation / conteneur disponible',
+  ADOPTION_REPUTATION: 'Réputation / adoption',
+};
+
+const CRITERION_STATE_LABELS = { MET: 'Validé', NOT_MET: 'Non validé', UNKNOWN: 'Non mesuré' };
 
 export async function servers() {
   // Un panneau d'invocation ouvert porte un résultat en train d'être lu — celui du sondage de fond
@@ -196,6 +215,88 @@ function renderStorageStatus(storage) {
   host.textContent = storage.encryptedPersistence
     ? `Persistance chiffrée active · ${storage.configuredServers} serveur(s) administré(s)`
     : 'Mode mémoire : définissez KEX_MCP_STORAGE_KEY pour conserver les serveurs et secrets après redémarrage.';
+}
+
+/**
+ * Interrogée à la demande, jamais au sondage de fond : chaque appel contacte un service tiers
+ * (Docker Hub ou le registre officiel MCP) — voir le hint du panneau dans index.html.
+ */
+export async function discover() {
+  await render($('#mcp-discovery'), () => api('/api/agent/mcp/catalog/discover'), renderDiscovery);
+}
+
+function renderDiscovery(sources) {
+  if (!sources.length) return empty('Aucune source de découverte configurée.');
+  const container = el('div', 'stack');
+  sources.forEach((source) => container.append(sourceSection(source)));
+  return container;
+}
+
+function sourceSection(source) {
+  const section = el('div');
+  section.append(el('h3', null, source.label));
+  if (!source.enabled) {
+    section.append(empty(`${source.label} est désactivée.`,
+      'kex.mcp.catalog.sources.* reste éteint par défaut, comme chaque extension réseau de l’agent.'));
+    return section;
+  }
+  if (source.error) {
+    section.append(empty(`${source.label} est injoignable.`, source.error));
+    return section;
+  }
+  if (!source.candidates.length) {
+    section.append(empty('Aucun candidat renvoyé par cette source.'));
+    return section;
+  }
+  const grid = el('div', 'cards');
+  source.candidates.forEach((entry) => grid.append(candidateCard(source.sourceId, entry)));
+  section.append(grid);
+  return section;
+}
+
+function candidateCard(sourceId, entry) {
+  const { candidate, score } = entry;
+  const card = el('div', 'card');
+  if (!score.eligible) card.dataset.state = 'ERROR';
+  const header = el('header');
+  header.append(el('h3', null, candidate.title || candidate.name));
+  header.append(el('span', 'time', `${score.total}/100`));
+  card.append(header);
+  if (candidate.description) card.append(el('p', null, candidate.description));
+  if (!score.eligible) {
+    card.append(el('p', 'hint danger', `Disqualifié : ${score.disqualifiers.join(' ; ')}`));
+  }
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.textContent = 'Détail de la note';
+  details.append(summary);
+  const list = el('ul');
+  score.criteria.forEach((result) => list.append(el('li', null,
+    `${CRITERIA_LABELS[result.criterion] || result.criterion} — `
+      + `${CRITERION_STATE_LABELS[result.state] || result.state} (${result.awardedPoints} pt) : ${result.reason}`)));
+  details.append(list);
+  card.append(details);
+  const actions = el('div', 'card-actions');
+  const install = el('button', 'ghost', 'Installer');
+  install.type = 'button';
+  install.setAttribute('aria-label', `Installer ${candidate.title || candidate.name}`);
+  install.disabled = !score.eligible;
+  if (!score.eligible) install.title = 'Candidat disqualifié : voir le détail de la note ci-dessus.';
+  install.addEventListener('click', () => openInstallDialog(sourceId, candidate));
+  actions.append(install);
+  card.append(actions);
+  return card;
+}
+
+function openInstallDialog(sourceId, candidate) {
+  installTarget = { sourceId, candidateId: candidate.id };
+  $('#install-discovered-label').textContent =
+    `${candidate.title || candidate.name} (${sourceId}) — la connexion est créée désactivée, `
+      + "à activer ensuite dans « Serveurs MCP » une fois vérifiée.";
+  $('#install-discovered-form').reset();
+  $('#install-discovered-connection').value = candidate.name.replace(/[^a-zA-Z0-9._-]/g, '-').slice(0, 64);
+  $('#install-discovered').showModal();
+  $('#install-discovered-connection').focus();
 }
 
 function showDiagnostics(host, diagnostics) {
@@ -423,6 +524,13 @@ export async function health() {
 }
 
 export async function view() {
+  // Jamais réinterrogée ici : une source de découverte n'est appelée qu'au clic sur son propre
+  // bouton (voir discover()). Ce placeholder ne s'affiche qu'au tout premier rendu, pour ne pas
+  // effacer un relevé déjà obtenu à chaque passage du sondage de fond — même règle que render().
+  if (!$('#mcp-discovery').firstChild) {
+    $('#mcp-discovery').append(empty('Aucune source interrogée pour l’instant.',
+      'Interroger les sources contacte un service tiers : ce n’est jamais automatique.'));
+  }
   await Promise.all([servers(), kafka.topics(), memory.list(), health()]);
 }
 
@@ -502,6 +610,27 @@ export function wire() {
         });
         rotate.close();
         toast(`Secret de « ${rotatingConnection} » remplacé après test.`);
+        await servers();
+      } catch (error) { report(error); }
+    });
+  });
+
+  $('#discover-mcp').addEventListener('click', () => busy($('#discover-mcp'), discover));
+
+  const install = $('#install-discovered');
+  $('#cancel-install-discovered').addEventListener('click', () => install.close());
+  $('#install-discovered-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const submit = $('#submit-install-discovered');
+    busy(submit, async () => {
+      try {
+        const { sourceId, candidateId } = installTarget;
+        const connection = $('#install-discovered-connection').value.trim();
+        const bearerToken = $('#install-discovered-token').value || undefined;
+        await api(`/api/agent/mcp/catalog/discover/${encodeURIComponent(sourceId)}/`
+          + `${encodeURIComponent(candidateId)}/install`, { method: 'POST', body: { connection, bearerToken } });
+        install.close();
+        toast(`Serveur MCP « ${connection} » installé depuis ${sourceId}, désactivé.`);
         await servers();
       } catch (error) { report(error); }
     });

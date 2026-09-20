@@ -76,7 +76,8 @@ class SecurityConfig {
                                 "/api/agent/knowledge", "/api/agent/skills/*/approve").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/agent/mcp/servers",
                                 "/api/agent/mcp/servers/test", "/api/agent/mcp/servers/*/enabled",
-                                "/api/agent/mcp/servers/*/refresh", "/api/agent/mcp/configuration")
+                                "/api/agent/mcp/servers/*/refresh", "/api/agent/mcp/configuration",
+                                "/api/agent/mcp/catalog/*/install", "/api/agent/mcp/catalog/discover/*/*/install")
                                 .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/agent/mcp/servers/*").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/agent/mcp/servers/*/secret").hasRole("ADMIN")

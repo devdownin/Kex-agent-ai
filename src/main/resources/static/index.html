@@ -477,6 +477,21 @@
         <div class="servers" id="servers"></div>
       </section>
       <section class="panel">
+        <div class="panel-head">
+          <h1>Découverte de serveurs MCP</h1>
+          <div class="panel-actions">
+            <button type="button" class="ghost" id="discover-mcp"
+                    aria-label="Interroger les sources de catalogue MCP"
+                    title="Interroger les sources de catalogue MCP">Interroger les sources</button>
+          </div>
+        </div>
+        <p class="hint">Docker MCP Catalog et le registre officiel MCP, chacun éteint par défaut
+          côté serveur. Chaque candidat porte une note de confiance sur 100 et, le cas échéant, un
+          motif de disqualification — calculés côté serveur, jamais recalculés ici. Une source
+          interrogée à la demande, pas au sondage de fond : elle appelle un service tiers.</p>
+        <div id="mcp-discovery"></div>
+      </section>
+      <section class="panel">
         <div class="panel-head"><h1>Cluster Kafka</h1></div>
         <p class="hint">Relevé par les outils du serveur MCP, jamais recalculé ici : les verdicts de
           retard sont ceux que l'outil rend, et une mesure absente s'affiche « non mesurée », pas zéro.</p>
@@ -675,6 +690,19 @@
     <input id="rotate-mcp-token" type="password" maxlength="4096" autocomplete="new-password" required>
     <div class="row-end"><button type="button" class="ghost" id="cancel-rotate-mcp">Annuler</button>
       <button type="submit" class="primary" id="submit-rotate-mcp">Tester et remplacer</button></div>
+  </form>
+</dialog>
+
+<dialog id="install-discovered">
+  <form class="stack" id="install-discovered-form">
+    <h2>Installer depuis la découverte</h2>
+    <p class="hint" id="install-discovered-label"></p>
+    <label for="install-discovered-connection">Nom de connexion</label>
+    <input id="install-discovered-connection" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}" maxlength="64" required>
+    <label for="install-discovered-token">Bearer (si ce candidat en exige un)</label>
+    <input id="install-discovered-token" type="password" maxlength="4096" autocomplete="new-password">
+    <div class="row-end"><button type="button" class="ghost" id="cancel-install-discovered">Annuler</button>
+      <button type="submit" class="primary" id="submit-install-discovered">Installer</button></div>
   </form>
 </dialog>
 

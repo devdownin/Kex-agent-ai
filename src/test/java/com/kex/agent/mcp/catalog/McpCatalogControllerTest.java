@@ -33,12 +33,13 @@ class McpCatalogControllerTest {
 
     private final McpToolCatalog tools = mock(McpToolCatalog.class);
     private final SupervisionService supervision = mock(SupervisionService.class);
+    private final McpCatalogDiscoveryService discovery = mock(McpCatalogDiscoveryService.class);
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         var beans = new StaticListableBeanFactory(Map.of("supervision", supervision));
-        mvc = MockMvcBuilders.standaloneSetup(new McpCatalogController(new McpRecommendedCatalog(tools),
+        mvc = MockMvcBuilders.standaloneSetup(new McpCatalogController(new McpRecommendedCatalog(tools), discovery,
                 beans.getBeanProvider(SupervisionService.class))).build();
     }
 
@@ -105,6 +106,59 @@ class McpCatalogControllerTest {
         when(tools.register(any())).thenThrow(new IllegalArgumentException("connection exists"));
         mvc.perform(install("microsoft-learn", "{\"connection\":\"docs\"}"))
                 .andExpect(status().isBadRequest());
+        verifyNoInteractions(supervision);
+    }
+
+    @Test
+    void discover_lists_sources_for_an_operator() throws Exception {
+        when(discovery.discover()).thenReturn(java.util.List.of(
+                McpCatalogSourceOverview.disabled("docker", "Docker MCP Catalog")));
+
+        mvc.perform(get("/api/agent/mcp/catalog/discover").principal(auth("ROLE_OPERATOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].sourceId").value("docker"))
+                .andExpect(jsonPath("$[0].enabled").value(false));
+    }
+
+    @Test
+    void discover_refuses_an_unauthenticated_caller() throws Exception {
+        mvc.perform(get("/api/agent/mcp/catalog/discover"))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(discovery);
+    }
+
+    @Test
+    void installs_a_discovered_candidate_and_audits_it() throws Exception {
+        var info = new com.kex.agent.mcp.McpServerInfo("fetch", "kex-agent - fetch", "1.0.0", "2025-06-18", false,
+                "CLOSED", java.util.List.of());
+        when(discovery.install("docker", "fetch", new McpCatalogInstallRequest("fetch", null))).thenReturn(info);
+
+        mvc.perform(post("/api/agent/mcp/catalog/discover/docker/fetch/install").principal(auth("ROLE_ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"connection\":\"fetch\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.connection").value("fetch"));
+
+        verify(supervision).auditAction("admin",
+                "Installation depuis la découverte MCP (docker/fetch)", "Connexion désactivée : fetch");
+    }
+
+    @Test
+    void refuses_installing_a_discovered_candidate_without_admin() throws Exception {
+        mvc.perform(post("/api/agent/mcp/catalog/discover/docker/fetch/install").principal(auth("ROLE_OPERATOR"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"connection\":\"fetch\"}"))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(discovery);
+    }
+
+    @Test
+    void propagates_the_disqualification_status_from_the_discovery_service() throws Exception {
+        when(discovery.install("docker", "shell-tool", new McpCatalogInstallRequest("shell", null)))
+                .thenThrow(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.FORBIDDEN, "Candidat disqualifié : ..."));
+
+        mvc.perform(post("/api/agent/mcp/catalog/discover/docker/shell-tool/install").principal(auth("ROLE_ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"connection\":\"shell\"}"))
+                .andExpect(status().isForbidden());
         verifyNoInteractions(supervision);
     }
 
