@@ -79,7 +79,7 @@ class AgentServiceTest {
     LongTermMemoryService longTermMemory;
 
     private static AgentProperties properties(Duration timeout) {
-        return new AgentProperties("prompt", 40, 4000, false, "", Map.of(), Map.of(), timeout);
+        return new AgentProperties("prompt", 40, 4000, false, "", Map.of(), Map.of(), Map.of(), timeout);
     }
 
     private static ChatResponse response(String text) {

@@ -24,7 +24,7 @@ class ConfigurationPropertiesValidationTest {
 
     @Test
     void refuse_des_bornes_de_conversation_inexploitables() {
-        AgentProperties properties = new AgentProperties("prompt", 0, -1, false, "", Map.of(), Map.of(),
+        AgentProperties properties = new AgentProperties("prompt", 0, -1, false, "", Map.of(), Map.of(), Map.of(),
                 Duration.ZERO);
 
         assertThat(validator.validate(properties))

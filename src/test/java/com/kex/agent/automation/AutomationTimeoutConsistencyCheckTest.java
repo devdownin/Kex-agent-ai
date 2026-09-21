@@ -67,6 +67,6 @@ class AutomationTimeoutConsistencyCheckTest {
     }
 
     private static AgentProperties agent(Duration requestTimeout) {
-        return new AgentProperties("prompt", 40, 4000, false, "", Map.of(), Map.of(), requestTimeout);
+        return new AgentProperties("prompt", 40, 4000, false, "", Map.of(), Map.of(), Map.of(), requestTimeout);
     }
 }

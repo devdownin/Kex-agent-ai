@@ -4,11 +4,13 @@ package com.kex.agent.config;
 
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,6 +18,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -29,7 +32,9 @@ class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, AgentProperties properties,
-                                            RateLimitProperties rateLimit) throws Exception {
+                                            RateLimitProperties rateLimit, OidcProperties oidc,
+                                            ObjectProvider<JwtDecoder> jwtDecoder,
+                                            ObjectProvider<RateLimiter> rateLimiter) throws Exception {
         Map<String, ApiKeyAuthFilter.Credential> credentialsByName = credentialsByName(properties);
         if (credentialsByName.isEmpty()) {
             log.warn("kex.agent.api-key est vide : /api/** répondra 503. Définir KEX_AGENT_API_KEY.");
@@ -104,10 +109,24 @@ class SecurityConfig {
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(new ApiKeyAuthenticationEntryPoint(!credentialsByName.isEmpty())));
 
+        // Présent seulement si un émetteur est configuré : sans lui, l'autoconfiguration de Spring
+        // Boot ne déclare aucun JwtDecoder et la chaîne reste exactement celle d'avant. Avec lui,
+        // les clés API continuent de fonctionner — c'est tout l'objet du résolveur ci-dessous.
+        if (jwtDecoder.getIfAvailable() != null) {
+            List<byte[]> apiKeys = credentialsByName.values().stream()
+                    .map(ApiKeyAuthFilter.Credential::token)
+                    .toList();
+            http.oauth2ResourceServer(oauth2 -> oauth2
+                    .bearerTokenResolver(new ApiKeyAwareBearerTokenResolver(apiKeys))
+                    .jwt(jwt -> jwt.jwtAuthenticationConverter(new JwtActorConverter(oidc))));
+            log.info("Authentification OIDC active : l'audit nommera une personne, claim {}",
+                    oidc.usernameClaim());
+        }
+
         if (rateLimit.enabled()) {
             // Après l'autorisation : un appel non authentifié doit être refusé, pas consommer
             // le quota des appelants légitimes.
-            http.addFilterAfter(new RateLimitFilter(rateLimit), AuthorizationFilter.class);
+            http.addFilterAfter(new RateLimitFilter(rateLimiter.getObject()), AuthorizationFilter.class);
         }
         return http.build();
     }
@@ -120,17 +139,18 @@ class SecurityConfig {
     private static Map<String, ApiKeyAuthFilter.Credential> credentialsByName(AgentProperties properties) {
         Map<String, ApiKeyAuthFilter.Credential> credentials = new LinkedHashMap<>();
         if (StringUtils.hasText(properties.apiKey())) {
-            credentials.put("kex-agent-api", credential(properties.apiKey(), ApiRole.ADMIN));
+            credentials.put("kex-agent-api", credential(properties.apiKey(), ApiRole.ADMIN, "kex-agent-api"));
         }
         properties.apiKeys().forEach((name, token) -> {
             if (StringUtils.hasText(token)) {
-                credentials.put(name, credential(token, properties.apiKeyRoles().getOrDefault(name, ApiRole.CHAT)));
+                credentials.put(name, credential(token, properties.apiKeyRoles().getOrDefault(name, ApiRole.CHAT),
+                        properties.apiKeyTenants().getOrDefault(name, name)));
             }
         });
         return credentials;
     }
 
-    private static ApiKeyAuthFilter.Credential credential(String token, ApiRole role) {
-        return new ApiKeyAuthFilter.Credential(token.getBytes(StandardCharsets.UTF_8), Set.of(role));
+    private static ApiKeyAuthFilter.Credential credential(String token, ApiRole role, String tenant) {
+        return new ApiKeyAuthFilter.Credential(token.getBytes(StandardCharsets.UTF_8), Set.of(role), tenant);
     }
 }

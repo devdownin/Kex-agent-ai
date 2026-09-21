@@ -75,6 +75,14 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-security</artifactId>
     </dependency>
+    <!-- Serveur de ressources OIDC. Inerte tant qu'aucune URL d'émetteur n'est configurée :
+         l'autoconfiguration de Spring Boot ne déclare de JwtDecoder que sur issuer-uri ou
+         jwk-set-uri, et SecurityConfig ne branche la chaîne JWT que si ce bean existe. Une
+         installation à clés API ne voit donc aucune différence. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+    </dependency>
     <!-- Présent, il suffit à activer les compteurs de jetons de Spring AI
          (ChatObservationAutoConfiguration est conditionnel à un MeterRegistry). -->
     <dependency>

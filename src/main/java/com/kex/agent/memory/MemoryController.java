@@ -5,6 +5,7 @@ package com.kex.agent.memory;
 import java.security.Principal;
 import java.util.List;
 
+import com.kex.agent.config.ActorIdentity;
 import com.kex.agent.supervision.SupervisionService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
@@ -43,21 +44,18 @@ class MemoryController {
 
     @GetMapping
     List<MemoryView> list(Principal principal) {
-        return principal == null ? memory.list() : memory.list(principal.getName());
+        return principal == null ? memory.list() : memory.list(ActorIdentity.tenantOf(principal));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void forget(@PathVariable String id, Principal principal) {
         String actor = principal == null ? "Anonyme" : principal.getName();
-        MemoryEntry removed = principal == null ? memory.forget(id) : memory.forget(actor, id);
+        MemoryEntry removed = principal == null ? memory.forget(id)
+                : memory.forget(ActorIdentity.tenantOf(principal), id);
         supervision.auditAction(actor, "Souvenir supprimé", removed.content());
     }
 
-    private static String actor(Principal principal) {
-        if (principal == null) throw new org.springframework.web.server.ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        return principal.getName();
-    }
 
     @ExceptionHandler(UnknownMemoryException.class)
     ProblemDetail unknown(UnknownMemoryException ex) {

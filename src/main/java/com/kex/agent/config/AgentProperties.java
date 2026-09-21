@@ -78,6 +78,16 @@ public record AgentProperties(
         @DefaultValue Map<String, ApiRole> apiKeyRoles,
 
         /**
+         * Locataire de chaque clé nommée : l'espace de données que ses souvenirs, ses compétences,
+         * sa charte et ses automatisations partagent. Une clé absente de cette table est son
+         * propre locataire — c'est le comportement de toute installation existante, et il ne
+         * change pas. Deux clés qui déclarent le même locataire travaillent au même endroit :
+         * {@code ops-console} et {@code ci-pipeline} restent deux acteurs distincts à l'audit tout
+         * en lisant la même charte.
+         */
+        @DefaultValue Map<String, String> apiKeyTenants,
+
+        /**
          * Attente maximale d'un échange complet, tours d'outils compris. Sans elle, 20 appels
          * d'outils à 60s chacun gardent une connexion HTTP ouverte vingt minutes.
          */

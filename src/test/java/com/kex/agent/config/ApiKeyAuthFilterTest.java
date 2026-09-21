@@ -66,7 +66,7 @@ class ApiKeyAuthFilterTest {
     private static ApiKeyAuthFilter filter(Map<String, String> tokens) {
         Map<String, ApiKeyAuthFilter.Credential> credentials = new LinkedHashMap<>();
         tokens.forEach((name, token) -> credentials.put(name, new ApiKeyAuthFilter.Credential(
-                token.getBytes(StandardCharsets.UTF_8), Set.of(ApiRole.CHAT))));
+                token.getBytes(StandardCharsets.UTF_8), Set.of(ApiRole.CHAT), name)));
         return new ApiKeyAuthFilter(credentials);
     }
 
