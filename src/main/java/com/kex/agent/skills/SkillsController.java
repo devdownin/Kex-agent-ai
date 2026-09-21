@@ -47,7 +47,7 @@ class SkillsController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void retire(@PathVariable String id, @Valid @RequestBody Retirement retirement, Principal principal) {
         String actor = actor(principal);
-        skills.retire(tenant(principal), id, actor, retirement.reason());
+        skills.retire(id, actor, retirement.reason());
         supervision.auditAction(actor, "Compétence retirée", id + " : " + retirement.reason());
     }
 
@@ -73,7 +73,7 @@ class SkillsController {
 
     private LearningEntry decide(String id, boolean approve, Review review, Principal principal) {
         String actor = actor(principal);
-        LearningEntry entry = skills.review(tenant(principal), id, approve, actor, review.reason());
+        LearningEntry entry = skills.review(id, approve, actor, review.reason());
         supervision.auditAction(actor, approve ? "Compétence approuvée" : "Compétence rejetée",
                 id + " : " + review.reason());
         return entry;

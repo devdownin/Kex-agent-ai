@@ -45,16 +45,16 @@ class SkillsServiceTest {
 
     @Test
     void reviews_and_filters_approved_skills() {
-        LearningEntry pending = new LearningEntry("s-1", "user1", "SKILL", "Title", "Markdown", "Evidence",
-                "conv-1", clock.instant(), "PENDING", null, null, null);
         LearningEntry approved = new LearningEntry("s-1", "user1", "SKILL", "Title", "Markdown", "Evidence",
                 "conv-1", clock.instant(), "APPROVED", "admin", clock.instant(), "Good procedure");
 
+        // La revue ne suppose plus que l'appelant est le propriétaire : elle le demande au dépôt.
+        given(repository.ownerOf("s-1")).willReturn(java.util.Optional.of("user1"));
         given(repository.review(eq("user1"), eq("s-1"), eq("APPROVED"), eq("admin"), eq(clock.instant()), eq("Good procedure")))
                 .willReturn(true);
         given(repository.list("user1", "SKILL", Instant.EPOCH)).willReturn(List.of(approved));
 
-        LearningEntry reviewed = service.review("user1", "s-1", true, "admin", "Good procedure");
+        LearningEntry reviewed = service.review("s-1", true, "admin", "Good procedure");
         assertThat(reviewed.status()).isEqualTo("APPROVED");
 
         assertThat(service.approved("user1")).containsExactly(approved);
@@ -62,9 +62,10 @@ class SkillsServiceTest {
 
     @Test
     void review_throws_on_unknown_or_already_reviewed_skill() {
+        given(repository.ownerOf("s-99")).willReturn(java.util.Optional.of("user1"));
         given(repository.review(any(), any(), any(), any(), any(), any())).willReturn(false);
 
-        assertThatThrownBy(() -> service.review("user1", "s-99", true, "admin", "Reason"))
+        assertThatThrownBy(() -> service.review("s-99", true, "admin", "Reason"))
                 .isInstanceOf(IllegalStateException.class);
     }
 }

@@ -5,6 +5,7 @@ package com.kex.agent.memory;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -66,5 +67,11 @@ public final class JdbcLearningRepository implements LearningRepository {
     @Override
     public boolean delete(String owner, String id) {
         return jdbc.update("DELETE FROM kex_agent_learning WHERE id = ? AND owner = ?", id, owner) == 1;
+    }
+
+    @Override
+    public Optional<String> ownerOf(String id) {
+        return jdbc.query("SELECT owner FROM kex_agent_learning WHERE id = ?",
+                (rs, row) -> rs.getString("owner"), id).stream().findFirst();
     }
 }

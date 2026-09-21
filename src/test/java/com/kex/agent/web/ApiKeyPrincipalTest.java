@@ -85,6 +85,17 @@ class ApiKeyPrincipalTest {
                 .isEqualTo(409);
     }
 
+    /**
+     * Rejeter engage autant qu'approuver depuis que la revue porte sur n'importe quel propriétaire :
+     * sans cette règle, un opérateur pourrait vider la file de revue d'une autre équipe.
+     */
+    @Test
+    void seul_un_admin_peut_rejeter_une_competence() throws Exception {
+        assertThat(postStatus("/api/agent/skills/inconnue/reject", "Bearer jeton-ops")).isEqualTo(403);
+        assertThat(postJsonStatus("/api/agent/skills/inconnue/reject", "Bearer jeton-admin", "{}"))
+                .isEqualTo(409);
+    }
+
     @Test
     void seul_un_admin_peut_supprimer_un_resume_durable() throws Exception {
         // Même exigence que DELETE /api/agent/memory/{id} pour un fait court : un résumé durable

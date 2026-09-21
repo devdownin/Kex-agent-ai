@@ -92,12 +92,12 @@ class SkillCuratorTest {
     void le_retrait_exige_un_motif_et_une_competence_approuvee() {
         LearningEntry entry = approved("règle", NOW.minus(Duration.ofDays(1)));
 
-        assertThatThrownBy(() -> skills.retire("ops", entry.id(), "admin", " "))
+        assertThatThrownBy(() -> skills.retire(entry.id(), "admin", " "))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> skills.retire("ops", "inconnue", "admin", "obsolète"))
+        assertThatThrownBy(() -> skills.retire("inconnue", "admin", "obsolète"))
                 .isInstanceOf(IllegalStateException.class);
 
-        skills.retire("ops", entry.id(), "admin", "obsolète");
+        skills.retire(entry.id(), "admin", "obsolète");
 
         assertThat(skills.approved("ops")).isEmpty();
     }
@@ -135,6 +135,13 @@ class SkillCuratorTest {
                 }
             }
             return false;
+        }
+
+
+        @Override
+        public java.util.Optional<String> ownerOf(String id) {
+            return entries.stream().filter(entry -> entry.id().equals(id))
+                    .map(LearningEntry::owner).findFirst();
         }
 
         @Override

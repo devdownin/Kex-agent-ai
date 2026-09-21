@@ -1475,6 +1475,29 @@ chaque caractère reçu du modèle. Le défilement automatique ne se redéclench
 prend avant d'ajouter le texte, parce qu'une fois ajouté `scrollHeight` a déjà grandi et ne dit plus
 rien de la position antérieure.
 
+### Qui approuve n'est pas qui propose
+
+La revue d'une compétence exige `ADMIN`. La proposer n'exige rien de plus que de converser — chaque
+échange réussi en propose une — et celles que la boucle d'apprentissage tire des refus appartiennent
+à l'opérateur dont les verdicts les ont provoquées, un rôle `OPERATOR` par définition : refuser une
+décision ne demande pas davantage.
+
+`SkillsService.review` cherchait pourtant l'entrée sous l'identité de l'appelant, le contrôleur lui
+passant le principal authentifié comme propriétaire. Approuver supposait donc d'être à la fois le
+propriétaire **et** administrateur. Aucune clé `OPERATOR` ne l'est : les compétences issues de refus
+étaient structurellement inapprouvables, et restaient `PENDING` à vie. La boucle ne pouvait jamais se
+refermer.
+
+Le propriétaire se résout désormais par l'identifiant — `LearningRepository.ownerOf` — et la
+transition reste atomique sur `(owner, id, PENDING)` : cette résolution ne fait que dire à qui
+l'entrée appartient, elle ne relâche aucune garantie. Une entrée supprimée entre les deux appels fait
+échouer la revue comme une entrée inconnue.
+
+La compétence reste celle de son propriétaire : c'est son contexte qu'elle enrichit une fois
+approuvée, et l'acteur garde trace de qui a tranché. Corollaire nécessaire : rejeter exige `ADMIN`
+comme approuver. Une revue qui porte sur n'importe quel propriétaire et ne demanderait qu'`OPERATOR`
+d'un côté laisserait vider la file de revue d'une autre équipe.
+
 ## Ce que les tests couvrent
 
 | Test | Ce qu'il verrouille |
