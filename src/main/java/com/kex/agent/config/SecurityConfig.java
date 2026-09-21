@@ -78,6 +78,10 @@ class SecurityConfig {
                                 "/api/agent/chat/stream").hasAnyRole("CHAT", "OPERATOR", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/conversations/**")
                                 .hasAnyRole("CHAT", "OPERATOR", "ADMIN")
+                        // Lecture pure, sans effet, ouverte à qui peut déjà converser : savoir à
+                        // quel locataire on écrit n'est pas un privilège de plus.
+                        .requestMatchers(HttpMethod.GET, "/api/agent/whoami")
+                                .hasAnyRole("CHAT", "OPERATOR", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/agent/supervision/cycles",
                                 "/api/agent/supervision/processes/*/maintenance",
                                 "/api/agent/supervision/decisions/*/approve",
