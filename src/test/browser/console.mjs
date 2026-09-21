@@ -848,17 +848,15 @@ await check('annuler un retrait fonctionne sans motif rempli (formnovalidate)', 
   await page.goto(`${BASE}/#/agent`, { waitUntil: 'domcontentloaded' });
   await page.click('[data-agent-tab="governance"]');
   await page.waitForSelector(retireButton, { timeout: 15000 });
+  await page.click(retireButton, { timeout: 10000 });
   try {
-    await page.click(retireButton, { timeout: 10000 });
+    await page.waitForSelector('dialog#confirm[open]', { timeout: 10000 });
   } catch (error) {
-    const box = await page.$eval(retireButton, (n) => JSON.stringify(n.getBoundingClientRect())).catch((e) => String(e));
-    console.log('DEBUG retireButton boundingRect:', box);
-    console.log('DEBUG governance section hidden:', await page.$eval('[data-agent-section="governance"]', (n) => n.hidden).catch((e) => String(e)));
-    console.log('DEBUG open dialogs:', await page.$$eval('dialog[open]', (nodes) => nodes.map((n) => n.id)).catch((e) => String(e)));
-    console.log('DEBUG #skills-curation html:', await page.$eval('#skills-curation', (n) => n.innerHTML).catch((e) => String(e)));
+    console.log('DEBUG dialog outerHTML:', await page.$eval('#confirm', (n) => n.outerHTML).catch((e) => String(e)));
+    console.log('DEBUG retireButton disabled:', await page.$eval(retireButton, (n) => n.disabled).catch((e) => String(e)));
+    console.log('DEBUG retireButton still in DOM count:', await page.$$eval(retireButton, (nodes) => nodes.length).catch((e) => String(e)));
     throw error;
   }
-  await page.waitForSelector('dialog#confirm[open]');
   await page.click('#confirm button[value=cancel]');
   await page.waitForSelector('dialog#confirm:not([open])');
   assert.match(await page.$eval('#skills-curation', (node) => node.textContent),
