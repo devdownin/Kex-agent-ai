@@ -300,6 +300,14 @@ simply stops, which a client cannot tell apart from a finished answer. Exchanges
 - **The direct tool endpoint has no model in the loop.** Authorization is entirely on the caller.
   Read [`docs/ARCHITECTURE.md#the-direct-tool-endpoint`](docs/ARCHITECTURE.md#the-direct-tool-endpoint)
   before exposing it.
+- **The audit can name a person, not just a key.** Set
+  `spring.security.oauth2.resourceserver.jwt.issuer-uri` and the agent accepts OIDC tokens
+  alongside its API keys — the audit then records the username claim rather than an integration
+  name. Roles come from a declared mapping, never from the token's own word for them. Without an
+  issuer nothing changes: no decoder is declared, no JWT chain is wired.
+- **Data isolation is a separate axis from identity.** Long-term memory, approved skills, the
+  charter and automations belong to a *tenant*; the name is what the audit records. Undeclared, a
+  key is its own tenant — existing installations find their data exactly where they left it.
 
 ## 📚 Documentation
 

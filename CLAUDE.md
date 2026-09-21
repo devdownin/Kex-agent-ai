@@ -292,4 +292,58 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   extinction par défaut avec refus de démarrer sans secret. La comparaison de signature passe par
   `MessageDigest.isEqual` — un `equals` sur chaîne fuit par son temps de réponse.
 
+- **`BearerTokenAuthenticationFilter` ne regarde pas si quelqu'un s'est déjà authentifié.** Il
+  résout le jeton et tente de le valider, point. Ajouter le serveur de ressources OIDC aurait donc
+  fait lire chaque clé API comme un JWT malformé et rendu `401` à toute une installation existante,
+  le jour même où on ajoute l'OIDC « sans rien casser ». `ApiKeyAwareBearerTokenResolver` rend les
+  clés connues invisibles au serveur de ressources — `ApiKeyAuthFilter` s'exécute avant et les a
+  déjà traitées. Vérifier ce que fait un filtre amont quand un autre a réussi avant lui, jamais le
+  supposer.
+
+- **Un verrou en mémoire ne protège que ce qui n'existe qu'en mémoire.** `executionLocks` empêchait
+  une décision de s'exécuter deux fois parce que la décision n'existait que dans cette réplique. La
+  partager entre répliques a retiré cette protection sans toucher au verrou : deux opérateurs sur
+  deux écrans auraient redémarré le consumer deux fois. Sortir un état de la mémoire du processus
+  oblige à relire *tout* ce qui le protégeait. La réservation (`claim`) se prend avant d'agir,
+  jamais après — détecter la course une fois l'outil MCP appelé ne répare rien.
+
+- **Le critère du partage, c'est ce que la divergence produit, pas l'importance de la donnée.** Un
+  tableau de bord discordant se rafraîchit ; une pause qu'une réplique ignore laisse l'agent agir
+  alors que quelqu'un croit l'avoir arrêté. Cycles, anomalies et relevés restent donc en mémoire ;
+  décisions, pause et fenêtres de maintenance n'y restent pas.
+
+- **Un `ENV` du `Dockerfile` qui ne correspond à aucune propriété ne fait rien échouer.** L'agent
+  démarre, et se contente d'écrire ailleurs. La faute de frappe ne se voit qu'au redémarrage
+  suivant, quand la mémoire est vide. `DurableStorageLayoutTest` passe par la traduction réelle de
+  Spring (`SystemEnvironmentPropertySource`) plutôt qu'une règle de nommage réécrite à la main :
+  c'est elle qui décide qu'un `_` devient tantôt un point, tantôt un tiret.
+
+- **`user.home` n'a pas de valeur garantie sous un uid sans entrée dans `/etc/passwd`.**
+  `getpwuid` ne rend rien pour l'uid `10001` de l'image, et le repli dépend de la JVM. Un chemin de
+  stockage se pose en absolu.
+
+- **Le locataire dit à qui appartient la donnée, jamais qui a agi.** Partout où le code passait
+  `principal.getName()`, il fallait se demander laquelle des deux questions il posait : propriétaire
+  (mémoire, compétences, charte, automatisations, conversation) ou acteur (audit). Les confondre dans
+  l'autre sens — inscrire `exploitation` là où l'audit disait `ops-console` — remplacerait une
+  personne par une équipe dans une pièce de conformité, exactement le défaut que l'axe locataire
+  est censé ne pas introduire. Sans déclaration, les deux coïncident : c'est tout ce qui rend le
+  changement compatible avec une installation existante.
+
+- **Sous OIDC, un locataire par personne est le mauvais défaut.** Il ne fuit rien, mais il rend la
+  fonctionnalité inutile : une compétence approuvée par un opérateur n'agirait jamais pour son
+  collègue. Un émetteur dessert une organisation — `default-tenant` unique, et un claim pour en
+  sortir.
+
+- **Un `UPSERT` portable s'écrit `UPDATE` puis `INSERT`, avec reprise sur `DuplicateKeyException`.**
+  `MERGE` (H2) et `ON CONFLICT` (Postgres) ne s'écrivent pas pareil. Et la course entre les deux
+  ordres n'est pas théorique ici : deux répliques qui déclarent la même maintenance à la même
+  seconde est le cas que ce dépôt existe pour servir. Sans la reprise, l'une rend une erreur pour
+  une opération qui a pourtant abouti.
+
+- **Ajouter un composant à un `record` de `@ConfigurationProperties` casse les constructeurs
+  positionnels des tests.** Toujours, et le message d'erreur ne dit pas lequel manque. Corollaire :
+  après une signature modifiée, `rm -rf target/test-classes` — la compilation incrémentale rapporte
+  un succès sur des classes de test périmées.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

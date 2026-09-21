@@ -51,9 +51,16 @@ arrive.
 | `api-key` | *(vide)* | Bearer de l'API sous le principal anonyme `kex-agent-api`. Vide = API fermée (`503`) |
 | `api-keys.<nom>` | *(vide)* | Bearers nommés, en plus ou à la place d'`api-key` : chaque nom devient le principal authentifié, donc l'acteur inscrit à l'audit de supervision |
 | `api-key-roles.<nom>` | `CHAT` | Rôle d'un bearer nommé : `CHAT`, `OPERATOR` ou `ADMIN`. La clé historique `api-key` reste administrateur |
+| `api-key-tenants.<nom>` | *(le nom)* | Locataire d'une clé : l'espace où vivent ses souvenirs, compétences, charte et automatisations. Deux clés du même locataire travaillent au même endroit tout en restant deux acteurs distincts à l'audit |
+| `oidc.username-claim` | `preferred_username` | Claim porteur de l'acteur inscrit à l'audit. Repli sur `sub` |
+| `oidc.roles-claim` | `roles` | Claim des rôles, liste de chaînes ou chaîne séparée par des espaces |
+| `oidc.role-mappings.<valeur>` | *(vide)* | Valeur du claim → `CHAT`, `OPERATOR` ou `ADMIN`. Une valeur absente est essayée telle quelle contre ces trois noms, à la casse près |
+| `oidc.default-role` | `CHAT` | Rôle d'un jeton valide dont rien ne se traduit — même plancher qu'une clé absente d'`api-key-roles` |
+| `oidc.tenant-claim` | *(vide)* | Claim porteur du locataire. Vide, tous les porteurs partagent `default-tenant` |
+| `oidc.default-tenant` | `default` | Locataire de tous les porteurs de jeton quand `tenant-claim` est vide |
 | `request-timeout` | `120s` | Attente maximale d'un échange, tours d'outils compris |
 | `rate-limit.enabled` | `true` | Limite de débit sur `/api/agent/chat`, `/chat/stream` et l'invocation directe `POST /mcp/servers/{connection}/tools/{tool}` — l'introspection MCP en lecture reste libre |
-| `rate-limit.requests-per-minute` | `60` | Débit soutenu, **par principal authentifié** — un seau par nom d'`api-keys`, un seul avec `api-key` |
+| `rate-limit.requests-per-minute` | `60` | Débit soutenu, **par principal authentifié** — un seau par nom d'`api-keys`, un seul avec `api-key`. Sous `shared-memory` le seau est partagé entre répliques et le seuil vaut pour l'installation ; sinon chaque réplique tient le sien |
 | `rate-limit.burst` | `20` | Pointe tolérée au-delà du débit soutenu, par principal également |
 | `memory.enabled` | `true` | Outils `remember_fact` / `recall_facts` (mémoire long-terme, distincte de `max-history-messages`) |
 | `memory.capacity` | `200` | Souvenirs actifs conservés, le plus ancien évincé au-delà |
@@ -296,11 +303,39 @@ SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/kex \
 Le profil annule la liste `spring.autoconfigure.exclude` d'`application.yml` : sans cela, le starter
 JDBC sur le classpath fait échouer le démarrage quand aucune base n'est configurée.
 
-Le même bascule active `JdbcAuditRepository` : l'audit de supervision (`GET
-/api/agent/supervision/audit`) persiste dans `kex_supervision_audit`, table créée par
-`CREATE TABLE IF NOT EXISTS` au démarrage. Cycles, anomalies et décisions restent en mémoire du
-processus, donc mono-instance — voir « L'historique est en mémoire, donc mono-instance — l'audit
-seul en sort » dans ARCHITECTURE.md.
+Le même bascule fait passer en base tout ce dont la divergence entre répliques produirait une
+action fausse, et rien d'autre. Tables créées par `CREATE TABLE IF NOT EXISTS` au démarrage :
+
+| Table | Contenu | Pourquoi elle n'est pas restée en mémoire |
+|---|---|---|
+| `kex_supervision_audit` | L'audit (`GET /api/agent/supervision/audit`) | Une pièce de conformité partielle ne vaut rien |
+| `kex_supervision_decision` | Décisions, avec leur réservation d'exécution | Une décision qui n'existe que sur une réplique rend `404` à l'opérateur qui approuve depuis une autre |
+| `kex_supervision_flag` | La pause de l'agent | En pause sur une réplique, l'agent continuait d'agir depuis les autres |
+| `kex_supervision_maintenance` | Les fenêtres de maintenance | Déclarée sur une réplique, elle ne taisait les alertes que là |
+| `kex_rate_limit` | Les seaux à jetons | Trois répliques accordaient trois fois le seuil annoncé |
+
+Cycles, anomalies brutes et relevés de processus restent en mémoire du processus : leur divergence
+se voit et ne coûte qu'un rafraîchissement — voir « Ce qui peut diverger entre répliques, et ce qui
+ne le peut pas » dans ARCHITECTURE.md.
+
+### Authentification OIDC
+
+Les clés API restent le défaut et continuent de fonctionner. Déclarer un émetteur ajoute une
+seconde forme d'authentification sur le même en-tête :
+
+```bash
+SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://idp.exemple.fr/realms/exploitation KEX_AGENT_OIDC_ROLE_MAPPINGS_KEX_ADMINS=ADMIN KEX_AGENT_OIDC_ROLE_MAPPINGS_KEX_OPS=OPERATOR ./mvnw spring-boot:run
+```
+
+L'audit inscrit alors le claim de nom — une personne — là où une clé ne nomme qu'une intégration.
+Sans `issuer-uri` (ou `jwk-set-uri`), Spring Boot ne déclare aucun `JwtDecoder` et la chaîne JWT
+n'est pas branchée : rien ne change pour une installation existante.
+
+### Stockage durable en conteneur
+
+L'image pose `/var/lib/kex` (`KEX_AGENT_MEMORY_STORAGE_DIRECTORY`,
+`KEX_MCP_RUNTIME_STORAGE_PATH`) et le déclare en `VOLUME`. `docker-compose.yml` y monte un volume
+nommé. Hors Docker, la valeur par défaut reste `${user.home}/.kex/memory`.
 
 <a id="choisir-le-fournisseur-de-modele"></a>
 

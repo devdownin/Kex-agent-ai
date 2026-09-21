@@ -9,9 +9,11 @@ import java.util.function.Function;
 
 /**
  * Historique borné, du plus récent au plus ancien. En mémoire du processus, donc mono-instance :
- * derrière un load balancer, chaque réplique tiendrait le sien et l'audit serait partiel. C'est
- * assumé et documenté plutôt que masqué — la persistance partagée est une décision d'exploitation,
- * pas un défaut à corriger en douce.
+ * derrière un load balancer, chaque réplique tient le sien.
+ *
+ * <p>Ce qui reste ici est ce dont la divergence entre répliques se voit et ne coûte qu'un
+ * rafraîchissement : cycles, anomalies brutes, relevés de processus. Ce dont la divergence produit
+ * une action fausse en est sorti — voir {@link SupervisionStateRepository}.
  */
 final class History<T> {
 
