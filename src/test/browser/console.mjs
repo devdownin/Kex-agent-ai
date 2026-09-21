@@ -832,13 +832,17 @@ for (let i = 0; i < 5; i += 1) {
   assert.equal(fillerApproved.status(), 200, 'une approbation de remplissage a échoué en amont du test');
 }
 
+// Ciblé par aria-label, pas par texte générique : plusieurs compétences peuvent devenir dormantes
+// à la fois, chacune avec son propre bouton « Retirer ».
+const retireButton = `#skills-curation button[aria-label="Retirer : ${proposed.title}"]`;
+
 await check('annuler un retrait fonctionne sans motif rempli (formnovalidate)', async () => {
   // Défaut possible : un textarea required dans le même <form method="dialog"> que le bouton
   // Confirmer bloquerait aussi Annuler côté navigateur, sans formnovalidate sur ce bouton-là.
   await page.reload({ waitUntil: 'networkidle' });
   await page.click('[data-agent-tab="governance"]');
-  await page.waitForSelector('#skills-curation button:has-text("Retirer")');
-  await page.click('#skills-curation button:has-text("Retirer")');
+  await page.waitForSelector(retireButton);
+  await page.click(retireButton);
   await page.waitForSelector('dialog#confirm[open]');
   await page.click('#confirm button[value=cancel]');
   await page.waitForSelector('dialog#confirm:not([open])');
@@ -849,7 +853,7 @@ await check('annuler un retrait fonctionne sans motif rempli (formnovalidate)', 
 await check('retirer avec un motif la fait disparaître de la bibliothèque', async () => {
   // Les cinq compétences de remplissage restent approuvées et injectées : la bibliothèque n'est pas
   // vide après ce retrait, seule la compétence dormante retirée en a disparu.
-  await page.click('#skills-curation button:has-text("Retirer")');
+  await page.click(retireButton);
   await page.waitForSelector('dialog#confirm[open]');
   await page.fill('#confirm-reason', 'Vérification navigateur : nettoyage');
   const removed = page.waitForResponse((response) =>
