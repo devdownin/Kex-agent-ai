@@ -840,12 +840,14 @@ await check('annuler un retrait fonctionne sans motif rempli (formnovalidate)', 
   // Défaut possible : un textarea required dans le même <form method="dialog"> que le bouton
   // Confirmer bloquerait aussi Annuler côté navigateur, sans formnovalidate sur ce bouton-là.
   // Un aller-retour de vue plutôt qu'un rechargement complet : route() ne recharge un écran que
-  // sur un changement de vue détecté, et c'est ce détour qui fait relire la curation à jour, sans
-  // dépendre du délai d'inactivité réseau qu'un rechargement complet attend.
-  await page.goto(`${BASE}/#/overview`, { waitUntil: 'networkidle' });
-  await page.goto(`${BASE}/#/agent`, { waitUntil: 'networkidle' });
+  // sur un changement de vue détecté, et c'est ce détour qui fait relire la curation à jour. La
+  // vue d'ensemble sonde son propre fond en continu : attendre l'inactivité réseau (networkidle)
+  // après y être passé peut ne jamais aboutir. `waitForSelector` ci-dessous est déjà la vraie
+  // synchronisation — domcontentloaded suffit ici.
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/agent`, { waitUntil: 'domcontentloaded' });
   await page.click('[data-agent-tab="governance"]');
-  await page.waitForSelector(retireButton);
+  await page.waitForSelector(retireButton, { timeout: 15000 });
   await page.click(retireButton);
   await page.waitForSelector('dialog#confirm[open]');
   await page.click('#confirm button[value=cancel]');
