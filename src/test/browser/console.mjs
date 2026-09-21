@@ -840,28 +840,19 @@ await check('annuler un retrait fonctionne sans motif rempli (formnovalidate)', 
   // Défaut possible : un textarea required dans le même <form method="dialog"> que le bouton
   // Confirmer bloquerait aussi Annuler côté navigateur, sans formnovalidate sur ce bouton-là.
   // Un aller-retour de vue plutôt qu'un rechargement complet : route() ne recharge un écran que
-  // sur un changement de vue détecté, et c'est ce détour qui fait relire la curation à jour. La
-  // vue d'ensemble sonde son propre fond en continu : attendre l'inactivité réseau (networkidle)
-  // après y être passé peut ne jamais aboutir. `waitForSelector` ci-dessous est déjà la vraie
-  // synchronisation — domcontentloaded suffit ici.
+  // sur un changement de vue détecté, et c'est ce détour qui fait relire la curation à jour.
   await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
   await page.goto(`${BASE}/#/agent`, { waitUntil: 'domcontentloaded' });
   await page.click('[data-agent-tab="governance"]');
-  await page.waitForSelector(retireButton, { timeout: 15000 });
-  await page.click(retireButton, { timeout: 10000 });
-  await page.waitForSelector('dialog#confirm[open]', { timeout: 10000 });
-  await page.click('#confirm button[value=cancel]', { timeout: 10000 });
-  try {
-    await page.waitForSelector('dialog#confirm:not([open])', { timeout: 10000 });
-  } catch (error) {
-    console.log('DEBUG dialog outerHTML after cancel click:', await page.$eval('#confirm', (n) => n.outerHTML).catch((e) => String(e)));
-    console.log('DEBUG dialog.open:', await page.$eval('#confirm', (n) => n.open).catch((e) => String(e)));
-    const validity = await page.$$eval('#confirm textarea, #confirm input', (nodes) =>
-      nodes.map((n) => ({ id: n.id, required: n.required, valid: n.checkValidity(), value: n.value })))
-      .catch((e) => String(e));
-    console.log('DEBUG confirm form field validity:', JSON.stringify(validity));
-    throw error;
-  }
+  await page.waitForSelector(retireButton);
+  await page.click(retireButton);
+  await page.waitForSelector('dialog#confirm[open]');
+  await page.click('#confirm button[value=cancel]');
+  // Un <dialog> sans l'attribut open devient display:none par défaut : attendre qu'il « ne
+  // matche plus [open] » avec l'état visible implicite de waitForSelector ne se résout jamais,
+  // puisqu'un dialogue fermé n'est justement plus visible. C'est sa disparition qu'il faut
+  // attendre, pas une variante du même sélecteur.
+  await page.waitForSelector('dialog#confirm', { state: 'hidden' });
   assert.match(await page.$eval('#skills-curation', (node) => node.textContent),
     /Vérifier le lag avant un redémarrage/);
 });

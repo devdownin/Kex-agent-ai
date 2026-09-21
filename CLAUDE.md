@@ -377,4 +377,12 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   contrat que pour l'appelant qui le demande explicitement (`reasonLabel` fourni) — jamais pour
   ceux qui ne savent pas qu'il existe.
 
+- **`page.waitForSelector('sélecteur:not([attribut])')` sur un `<dialog>` ne se résout jamais après
+  fermeture.** L'état par défaut attendu est « visible » ; un `<dialog>` sans `open` devient
+  `display: none` par défaut, donc justement invisible — la négation matche le sélecteur mais
+  jamais l'état qu'on attend. Prouvé en isolant chaque étape du test en échec : le dialogue se
+  fermait bel et bien (`dialog.open` valait déjà `false`), seule l'attente échouait. Attendre la
+  disparition d'un `<dialog>` se fait sur le sélecteur positif avec `{ state: 'hidden' }`, jamais
+  sur sa négation.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

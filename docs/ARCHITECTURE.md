@@ -1638,6 +1638,15 @@ native du formulaire entier, Annuler compris, à moins que ce bouton précis por
 `SlackInteractivityWiringTest` avait déjà montré, pour une autre raison, qu'un défaut de ce genre
 ne se découvre qu'en conduisant un vrai navigateur, jamais en relisant le code.
 
+**Un second piège, cette fois dans le test lui-même.** La première version attendait
+`page.waitForSelector('dialog#confirm:not([open])')` pour confirmer la fermeture après Annuler —
+un sélecteur qui matche bien un dialogue fermé, mais que l'état « visible » implicite de
+`waitForSelector` ne peut jamais satisfaire, puisqu'un `<dialog>` sans `open` devient `display:
+none`. Le formulaire se fermait correctement à chaque essai ; seule l'attente échouait,
+systématiquement, ce que des exécutions répétées avec un état propre ont fini par isoler en
+instrumentant chaque étape jusqu'à trouver laquelle bloquait réellement. La correction attend la
+disparition du dialogue (`{ state: 'hidden' }`) sur le sélecteur positif, jamais sur sa négation.
+
 ## Ce que les tests couvrent
 
 | Test | Ce qu'il verrouille |
