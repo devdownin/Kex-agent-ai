@@ -151,6 +151,10 @@ Avec Kafka SQL Explorer branché, le modèle a de vrais verbes au lieu d'un vagu
 Le modèle choisit l'outil ; le serveur applique les garde-fous. L'Explorer est en lecture seule par
 défaut, avec deny-list, rate limit et journal d'audit — **l'agent en hérite, il ne les remplace pas.**
 
+D'autres prompts — mémoire durable d'une conversation à l'autre, sortie structurée, comment naît
+une compétence réutilisable, et les refus qui sont la vraie démonstration — sont dans
+[`docs/EXEMPLES.md`](docs/EXEMPLES.md), avec les capacités qui ne sont *pas* des prompts.
+
 ## 🧩 Comment ça marche
 
 ```mermaid
@@ -283,6 +287,7 @@ bloquante répond `504`.
 | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) | Toutes les propriétés, les profils, lancer depuis les sources |
 | [`docs/OBSERVABILITE.md`](docs/OBSERVABILITE.md) | Métriques de coût et d'outils, scraping, seuils d'alerte |
 | [`docs/CONNAISSANCE.md`](docs/CONNAISSANCE.md) | La base de connaissance : pourquoi éteinte, comment l'allumer, l'alimenter et la diagnostiquer |
+| [`docs/EXEMPLES.md`](docs/EXEMPLES.md) | Exemples de prompts par capacité, ce que l'agent refuse, et une démonstration de cinq minutes |
 
 ## 🧪 Tests
 

@@ -174,6 +174,10 @@ With Kafka SQL Explorer connected, the model has real verbs instead of vague rec
 The model picks the tool; the server enforces the guardrails. Explorer is read-only by default, with
 a deny-list, rate limiting and an audit trail — **the agent inherits those, it does not replace them.**
 
+More prompts — durable memory across conversations, structured output, how a reusable skill is born,
+and the refusals that are the real demo — are in [`docs/EXEMPLES.md`](docs/EXEMPLES.md), together
+with the capabilities that are *not* prompts at all.
+
 ## 🧩 How it works
 
 ```mermaid
@@ -306,6 +310,7 @@ simply stops, which a client cannot tell apart from a finished answer. Exchanges
 | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) | Every property and environment variable, the profiles, running from source |
 | [`docs/OBSERVABILITE.md`](docs/OBSERVABILITE.md) | Cost and tool metrics, scraping them, what to alert on |
 | [`docs/CONNAISSANCE.md`](docs/CONNAISSANCE.md) | The knowledge base: why it is off, how to turn it on, how to feed and debug it |
+| [`docs/EXEMPLES.md`](docs/EXEMPLES.md) | Example prompts per capability, what the agent refuses, and a five-minute demo |
 
 ## 🧪 Tests
 
