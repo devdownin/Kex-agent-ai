@@ -847,7 +847,13 @@ await check('annuler un retrait fonctionne sans motif rempli (formnovalidate)', 
   await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
   await page.goto(`${BASE}/#/agent`, { waitUntil: 'domcontentloaded' });
   await page.click('[data-agent-tab="governance"]');
-  await page.waitForSelector(retireButton, { timeout: 15000 });
+  try {
+    await page.waitForSelector(retireButton, { timeout: 15000 });
+  } catch (error) {
+    console.log('DEBUG #skills-curation:', await page.$eval('#skills-curation', (n) => n.innerHTML).catch((e) => String(e)));
+    console.log('DEBUG governance section hidden:', await page.$eval('[data-agent-section="governance"]', (n) => n.hidden).catch((e) => String(e)));
+    throw error;
+  }
   await page.click(retireButton);
   await page.waitForSelector('dialog#confirm[open]');
   await page.click('#confirm button[value=cancel]');
