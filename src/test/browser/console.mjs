@@ -839,7 +839,11 @@ const retireButton = `#skills-curation button[aria-label="Retirer : ${proposed.t
 await check('annuler un retrait fonctionne sans motif rempli (formnovalidate)', async () => {
   // Défaut possible : un textarea required dans le même <form method="dialog"> que le bouton
   // Confirmer bloquerait aussi Annuler côté navigateur, sans formnovalidate sur ce bouton-là.
-  await page.reload({ waitUntil: 'networkidle' });
+  // Un aller-retour de vue plutôt qu'un rechargement complet : route() ne recharge un écran que
+  // sur un changement de vue détecté, et c'est ce détour qui fait relire la curation à jour, sans
+  // dépendre du délai d'inactivité réseau qu'un rechargement complet attend.
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/#/agent`, { waitUntil: 'networkidle' });
   await page.click('[data-agent-tab="governance"]');
   await page.waitForSelector(retireButton);
   await page.click(retireButton);
