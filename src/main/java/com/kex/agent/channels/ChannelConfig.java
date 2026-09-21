@@ -51,6 +51,19 @@ class ChannelConfig {
         return new ChannelNotifier(adapters, properties.consoleUrl(), clock);
     }
 
+    /**
+     * Le secret est exigé ici, au démarrage, et pas au premier appel : une route ouverte qui
+     * n'apprend qu'elle ne sait pas vérifier qu'au moment où on l'appelle a déjà accepté la requête.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "kex.agent.channels.inbound", name = "enabled", havingValue = "true")
+    InboundSignature inboundSignature(ChannelProperties properties, Clock clock) {
+        if (properties.inbound().operators().isEmpty()) {
+            throw new IllegalArgumentException("channels.inbound.enabled exige au moins un opérateur déclaré");
+        }
+        return new InboundSignature(properties.inbound().secret(), properties.inbound().tolerance(), clock);
+    }
+
     private static boolean present(String value) {
         return value != null && !value.isBlank();
     }

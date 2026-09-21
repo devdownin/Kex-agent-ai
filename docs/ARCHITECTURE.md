@@ -1300,6 +1300,103 @@ l'attrapait à la souris. `toast()`, dans `core.js`, ajoute un bouton `.toast-cl
 suspend sa minuterie tant que le pointeur reste dessus — le temps déjà écoulé est conservé, pas
 remis à zéro, pour ne pas prolonger indéfiniment un toast qu'on survole par inadvertance.
 
+### La bibliothèque de compétences ne fait que grandir, et seules les premières agissaient
+
+Chaque échange terminé normalement propose une procédure, qu'un humain approuve ou rejette. Rien ne
+retirait jamais rien : la bibliothèque grossit à chaque succès, pendant que `LongTermMemoryService`
+n'en injectait que cinq — `skills.approved(owner).stream().limit(5)`, dans l'ordre où le dépôt les
+rendait. La sixième compétence approuvée n'agissait donc jamais, et aucun écran ne le disait.
+
+Deux corrections, distinctes. D'abord l'ordre : `SkillsService.ranked` trie par fraîcheur du verdict
+humain — la plus récemment approuvée d'abord. Faute de télémétrie d'usage, c'est le seul critère qui
+ne soit pas inventé ; noter une compétence sur sa « qualité » sans savoir si elle a jamais servi
+serait exactement le chiffre inventé que le reste de la console s'interdit. Ensuite la visibilité :
+`SkillCurator` rend ce que la bibliothèque fait au prompt — ce qui agit, ce qui dort au-delà du
+plafond, ce qui se répète au titre près, ce qui n'a plus été revu depuis la fenêtre configurée.
+
+Le curateur ne retire rien. Une compétence approuvée change le comportement de toutes les
+conversations suivantes du même propriétaire : la retirer est le même geste que l'approuver, donc le
+même circuit — `POST /api/agent/skills/{id}/retire`, réservé à `ADMIN`, motif obligatoire, tracé.
+Il n'est pas non plus branché sur une minuterie : en multi-instance, chaque réplique rendrait le même
+verdict et notifierait en double, le piège déjà documenté pour le cycle de supervision.
+
+### Un refus humain dit ce qu'un plancher de confiance ne dira jamais
+
+Un refus alimentait déjà le durcissement automatique du plancher de la capacité concernée. Mais un
+plancher ne retient que « moins souvent » : il ne garde rien de *ce que* l'humain reprochait, qui
+n'existe que dans le motif écrit au moment du refus.
+
+`SupervisionService.reject` compte désormais les refus concordants sur une même capacité dans une
+fenêtre glissante et publie `RepeatedRefusals` au-delà du seuil. Publié, et pas appelé directement :
+la supervision sait compter des verdicts, elle n'a pas à savoir qu'une bibliothèque de compétences
+existe — sans quoi les deux paquets se tiendraient l'un l'autre. `RefusalSkillProposer`, côté
+`skills`, écoute et propose une compétence qui reprend ces motifs, en attente d'approbation comme
+toutes les autres.
+
+Le texte proposé est déterministe, sans appel au modèle : les mêmes refus produisent le même
+Markdown, ce qui permet de reconnaître une proposition déjà en attente plutôt que d'en empiler une
+par refus. Une proposition reformulée à chaque passage échapperait à cette comparaison, et la file
+de revue verrait dix fois la même règle. La compétence appartient à l'humain dont les verdicts l'ont
+provoquée : c'est à lui qu'elle demande un arbitrage.
+
+### Le battement est régulier, la décision d'analyser ne l'est pas
+
+Le cycle autonome tournait à intervalle fixe. Une cadence unique doit choisir entre réagir vite à un
+incident et ne pas brûler le budget de jetons journalier quand rien ne bouge ; elle ne peut pas faire
+les deux. `kex.agent.supervision.schedule.adaptive` indexe le délai minimum entre deux cycles sur ce
+que le dernier a vu : resserré après une anomalie, relâché au repos.
+
+L'intervalle de `@Scheduled` ne bouge pas pour autant — le reprogrammer à chaud demanderait de
+manipuler l'ordonnanceur, là où un battement régulier qui s'abstient se lit dans les journaux et se
+teste sans horloge réelle. Un battement qui s'abstient ne prend pas le verrou : une réplique qui juge
+le cycle non dû n'a pas à empêcher les autres de conclure autrement. Un cycle en échec compte comme
+dégradé : il n'affirme rien sur l'état du cluster, et la cadence resserrée est celle qui redonne le
+plus vite une lecture fiable.
+
+### Une charte d'exploitation, éditable, qui ne peut pas réécrire la gouvernance
+
+Le prompt système est figé au démarrage, et c'est ce qui le rend opposable. Mais il n'existait aucun
+endroit où poser une consigne durable — « ne jamais redémarrer en heures ouvrées » — sans redéployer.
+
+`CharterService` tient une charte par propriétaire, écrite par un humain nommé avec un motif
+obligatoire, chaque version conservée plutôt que remplacée : une charte relue six mois plus tard sans
+son auteur ni son motif est aussi inexplicable qu'une décision sans sa version de politique. Elle
+entre en tête du contexte durable, sous le même avertissement que les résumés et les compétences —
+donnée de référence, jamais gouvernance. Elle peut restreindre ce que l'agent propose, jamais élargir
+une autonomie, une permission ou une approbation : le même sens unique que le mode d'exécution face
+à l'autonomie d'une capacité.
+
+Elle n'est pas soumise à revue, contrairement à une compétence, et pour une raison précise : une
+compétence naît d'une proposition du modèle, la charte n'a pas d'autre auteur qu'un `ADMIN`
+authentifié. La faire approuver reviendrait à se faire approuver par soi-même.
+
+### Approuver depuis la messagerie : la seule route qui décide sans bearer
+
+La notification d'une demande de validation portait déjà un lien vers la console. D'astreinte, à deux
+heures du matin, ce lien suppose d'ouvrir un navigateur et de retrouver un jeton. `ChannelAdapter`
+n'avait qu'un `send` : la moitié du chemin.
+
+`POST /api/agent/channels/callback` ferme la boucle, et c'est la seule route de l'API qui tranche
+sans bearer — Slack et Teams n'en émettent pas. Elle s'en remet donc à trois verrous cumulés, dont
+aucun ne suffit seul :
+
+1. **Signature HMAC-SHA256 sur le corps brut, horodatage compris.** Signer le seul corps rendrait une
+   requête interceptée rejouable pour toujours ; signer le seul horodatage laisserait réécrire la
+   décision visée. La comparaison passe par `MessageDigest.isEqual` : un `equals` sur chaîne s'arrête
+   au premier caractère différent, et ce temps de réponse suffit à reconstruire une signature octet
+   par octet.
+2. **Correspondance explicite expéditeur → acteur d'audit.** Rien n'est déduit du message. Un
+   expéditeur non déclaré est refusé plutôt que rattaché à un acteur générique, sans quoi l'audit
+   dirait « approuvé par slack », qui n'est pas une personne.
+3. **Éteinte par défaut**, et refusant de démarrer sans secret ni opérateur déclaré. Une route
+   ouverte qui n'apprend qu'elle ne sait pas vérifier qu'au moment où on l'appelle a déjà accepté la
+   requête.
+
+Elle n'ajoute aucun pouvoir : elle emprunte `approve` et `reject` avec leurs verrous d'idempotence,
+leur expiration et leur audit. Le motif du refus est refusé en clair côté réponse — dire « signature
+invalide » plutôt que « horodatage hors fenêtre » renseignerait qui tâtonne ; le détail reste dans
+les journaux.
+
 ## Ce que les tests couvrent
 
 | Test | Ce qu'il verrouille |

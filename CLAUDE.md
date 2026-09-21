@@ -257,4 +257,39 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   sur desktop. `overflow: auto` sur `main` ne s'active qu'une fois `.shell` en `height: 100dvh`, pas
   `min-height`.
 
+- **Une troncature sans critère de tri choisit au hasard.** `limit(5)` sur les compétences
+  approuvées suivait l'ordre du dépôt : la sixième n'agissait jamais et rien ne le disait. Un
+  plafond se double toujours d'un ordre explicite (`SkillsService.ranked`, la plus récemment
+  approuvée d'abord) et d'un endroit où lire ce qui tombe au-delà (`/api/agent/skills/curation`).
+
+- **Noter une compétence sans télémétrie d'usage, c'est inventer un chiffre.** Le curateur ne dit que
+  ce qui est mesurable — laquelle agit, laquelle dort, laquelle en double une autre, laquelle n'a pas
+  été revue depuis longtemps. Il ne retire rien non plus : retirer change le prompt de toutes les
+  conversations suivantes, donc même circuit humain que l'approbation.
+
+- **Un plancher de confiance ne retient pas ce que l'humain reprochait.** Il dit « moins souvent » ;
+  le motif de refus, lui, dit pourquoi. Au-delà de N refus concordants, `RepeatedRefusals` part vers
+  `skills`, qui en propose une règle — par événement, pour que la supervision n'ait pas à connaître
+  la bibliothèque de compétences, ni l'inverse.
+
+- **Une proposition reformulée à chaque passage échappe à la déduplication.** Le texte tiré des refus
+  est déterministe et sans appel au modèle : sinon la file de revue voit dix fois la même règle.
+
+- **Un battement d'ordonnanceur se garde régulier ; c'est la décision d'agir qui s'adapte.**
+  Reprogrammer `@Scheduled` à chaud demanderait de manipuler l'ordonnanceur ; un battement fixe qui
+  s'abstient se lit dans les journaux et se teste sans horloge réelle. Et il ne prend pas le verrou
+  quand il s'abstient : une réplique qui juge le cycle non dû n'a pas à bloquer les autres.
+
+- **La charte ne passe pas par une revue, contrairement à une compétence.** Une compétence naît d'une
+  proposition du modèle ; la charte n'a pas d'autre auteur qu'un `ADMIN` authentifié, et la faire
+  approuver reviendrait à se faire approuver par soi-même. Elle reste de la donnée de référence : elle
+  restreint ce que l'agent propose, elle n'élargit jamais une autonomie.
+
+- **Le rappel de messagerie est la seule route qui décide sans bearer.** Slack et Teams n'en émettent
+  pas. Trois verrous cumulés, aucun suffisant seul : HMAC sur le corps brut *avec* l'horodatage
+  (signer l'un sans l'autre laisse rejouer ou réécrire), correspondance explicite expéditeur → acteur
+  d'audit (un acteur générique ferait dire « approuvé par slack », qui n'est pas une personne), et
+  extinction par défaut avec refus de démarrer sans secret. La comparaison de signature passe par
+  `MessageDigest.isEqual` — un `equals` sur chaîne fuit par son temps de réponse.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

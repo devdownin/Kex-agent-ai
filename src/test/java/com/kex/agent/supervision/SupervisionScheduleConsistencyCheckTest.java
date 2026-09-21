@@ -68,8 +68,10 @@ class SupervisionScheduleConsistencyCheckTest {
         return new SupervisionProperties(true, List.of(), ExecutionMode.SUPERVISED, 0.85,
                 new Thresholds(1000, 2.0, Duration.ofMinutes(5), 50, Duration.ofMinutes(15)),
                 Map.of(), Map.of(), Map.of(), 200, Duration.ofMinutes(30), Duration.ofMinutes(15),
-                new SupervisionProperties.Schedule(scheduleEnabled, Duration.ofMinutes(5), Duration.ofMinutes(10)),
+                new SupervisionProperties.Schedule(scheduleEnabled, Duration.ofMinutes(5), Duration.ofMinutes(10),
+                        new SupervisionProperties.Adaptive(false, Duration.ofMinutes(5), Duration.ofMinutes(30))),
                 new SupervisionProperties.AutoAdjust(false, 5, 0.5, 0.05),
+                new SupervisionProperties.Learning(false, 3, Duration.ofDays(30)),
                 new SupervisionProperties.Correlation(true, 3), false);
     }
 }

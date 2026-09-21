@@ -65,6 +65,8 @@ public record SupervisionProperties(
 
         @DefaultValue @Valid AutoAdjust autoAdjust,
 
+        @DefaultValue @Valid Learning learning,
+
         @DefaultValue @Valid Correlation correlation,
 
         /**
@@ -89,7 +91,26 @@ public record SupervisionProperties(
      */
     public record Schedule(@DefaultValue("false") boolean enabled,
                            @DefaultValue("5m") @DurationMin(millis = 1) java.time.Duration interval,
-                           @DefaultValue("10m") @DurationMin(millis = 1) java.time.Duration lockAtMostFor) {
+                           @DefaultValue("10m") @DurationMin(millis = 1) java.time.Duration lockAtMostFor,
+                           @DefaultValue @Valid Adaptive adaptive) {
+    }
+
+    /**
+     * Cadence indexée sur l'état constaté au dernier cycle, plutôt qu'un intervalle unique. Une
+     * cadence fixe choisit entre réagir vite à un incident et ne pas brûler le budget de jetons
+     * journalier quand tout va bien ; elle ne peut pas faire les deux.
+     *
+     * <p>{@code interval} reste le battement : c'est lui qui rythme les tentatives, et chaque
+     * battement décide seulement s'il y a lieu de lancer un cycle. Un intervalle adaptatif porté par
+     * l'ordonnanceur lui-même supposerait de reprogrammer la tâche à chaud, là où un battement
+     * régulier qui s'abstient se lit dans les journaux et se teste sans horloge réelle.
+     *
+     * @param degraded délai minimum entre deux cycles quand le dernier a vu une anomalie
+     * @param healthy  délai minimum entre deux cycles quand le dernier n'a rien vu
+     */
+    public record Adaptive(@DefaultValue("false") boolean enabled,
+                           @DefaultValue("5m") @DurationMin(millis = 1) java.time.Duration degraded,
+                           @DefaultValue("30m") @DurationMin(millis = 1) java.time.Duration healthy) {
     }
 
     /**
@@ -109,6 +130,23 @@ public record SupervisionProperties(
                              @DefaultValue("0.5") @DecimalMin("0.0") @DecimalMax("1.0") double minRelevance,
                              @DefaultValue("0.05") @DecimalMin(value = "0.0", inclusive = false)
                              @DecimalMax("1.0") double increment) {
+    }
+
+    /**
+     * Ce que l'agent tire des refus humains, au-delà du plancher de confiance. Un refus porte un
+     * motif écrit ; répété sur la même capacité, il décrit une règle que l'agent n'a pas. Une
+     * compétence candidate est alors proposée — en attente, comme toute compétence, jamais active
+     * d'elle-même.
+     *
+     * @param minRefusals refus concordants requis avant de proposer quoi que ce soit : deux refus
+     *                    peuvent tenir à deux situations sans rapport, et une proposition par refus
+     *                    ferait du bruit là où on attend un constat
+     * @param window      fenêtre d'observation ; au-delà, un refus ancien ne décrit plus la même
+     *                    installation
+     */
+    public record Learning(@DefaultValue("true") boolean enabled,
+                           @DefaultValue("3") @Positive int minRefusals,
+                           @DefaultValue("30d") @DurationMin(millis = 1) java.time.Duration window) {
     }
 
     /**

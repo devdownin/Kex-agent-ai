@@ -107,6 +107,107 @@ forcément anticipé au démarrage.
 L'état réel du processus reste relevé et affiché normalement : la fenêtre mute l'alerte et la
 décision, jamais l'observation.
 
+### `kex.agent.supervision.schedule.adaptive.*`
+
+Cadence du cycle autonome indexée sur ce que le dernier a vu. Éteinte par défaut — l'intervalle reste
+alors seul maître, comme avant.
+
+```yaml
+kex.agent.supervision.schedule.adaptive:
+  enabled: true
+  degraded: 5m    # délai minimum entre deux cycles après une anomalie, ou après un cycle en échec
+  healthy: 30m    # délai minimum quand le dernier cycle n'a rien vu
+```
+
+`interval` reste le battement : c'est lui qui rythme les tentatives, et chaque battement décide
+seulement s'il y a lieu d'analyser. Une cadence unique doit choisir entre réagir vite à un incident et
+ménager le budget de jetons journalier quand rien ne bouge ; ces deux délais lèvent ce compromis. Un
+cycle en échec compte comme dégradé : il n'affirme rien sur l'état du cluster.
+
+### `kex.agent.supervision.learning.*`
+
+Ce que l'agent tire des refus humains, au-delà du plancher de confiance.
+
+```yaml
+kex.agent.supervision.learning:
+  enabled: true
+  min-refusals: 3   # refus concordants sur une même capacité avant de proposer quoi que ce soit
+  window: 30d
+```
+
+Au-delà du seuil, une compétence candidate reprend les motifs de refus et part en revue comme toute
+compétence — jamais active d'elle-même. Elle appartient à l'opérateur dont les verdicts l'ont
+provoquée. Sans `kex.agent.memory.enabled`, personne n'écoute : les refus ne font alors que durcir le
+plancher, comme avant.
+
+### `kex.agent.memory.skills.*`
+
+Ce que la bibliothèque de compétences approuvées pèse dans le prompt.
+
+```yaml
+kex.agent.memory.skills:
+  injected: 5                # compétences réellement injectées, les plus récemment approuvées
+  characters-per-skill: 3000
+  stale-after: 90d           # au-delà, signalée comme candidate à la revue — jamais retirée seule
+```
+
+| Endpoint | Rôle |
+|---|---|
+| `GET /api/agent/skills/curation` | Ce qui agit, ce qui dort au-delà du plafond, les doublons de titre, ce qui n'a plus été revu |
+| `POST /api/agent/skills/{id}/retire` | `{"reason":"..."}` — `ADMIN`, motif obligatoire, tracé dans l'audit |
+
+Le curateur signale, il ne retire rien de lui-même : retirer une compétence change le comportement de
+toutes les conversations suivantes du même propriétaire, exactement ce qu'une approbation humaine
+nommée existe pour trancher.
+
+### `POST|GET /api/agent/charter`
+
+Consignes durables de l'exploitant, éditables sans redéployer, là où le prompt système reste figé au
+démarrage.
+
+| Endpoint | Rôle |
+|---|---|
+| `GET /api/agent/charter` | La charte en vigueur, avec son auteur et le motif du dernier changement |
+| `GET /api/agent/charter/versions` | L'historique, de la plus récente à la plus ancienne |
+| `PUT /api/agent/charter` | `{"markdown":"...","reason":"..."}` — `ADMIN`, motif obligatoire |
+
+La charte entre en tête du contexte durable, sous le même avertissement que les résumés et les
+compétences : donnée de référence, jamais gouvernance. Elle peut restreindre ce que l'agent propose,
+jamais élargir une autonomie, une permission ou une approbation.
+
+### `kex.agent.channels.inbound.*`
+
+Approuver ou refuser une demande de validation depuis la messagerie qui l'a annoncée. **Éteint par
+défaut**, et c'est la seule route de l'API qui tranche sans bearer — Slack et Teams n'en émettent pas.
+
+```yaml
+kex.agent.channels:
+  enabled: true
+  inbound:
+    enabled: true
+    secret: "${KEX_CHANNEL_INBOUND_SECRET}"  # exigé : sans lui, la route refuse de démarrer
+    tolerance: 5m                            # fenêtre d'horodatage acceptée
+    operators:
+      U0123456789: alice                     # identifiant chez le fournisseur → acteur d'audit
+```
+
+L'appelant signe `<horodatage>.<corps brut>` en HMAC-SHA256 avec ce secret, et transmet :
+
+| En-tête | Contenu |
+|---|---|
+| `X-Kex-Timestamp` | Secondes Unix, dans la fenêtre `tolerance` |
+| `X-Kex-Signature` | HMAC-SHA256 en hexadécimal |
+
+```json
+{"sender": "U0123456789", "decisionId": "…", "approve": false, "reason": "pas en heures ouvrées"}
+```
+
+`sender` est l'identifiant chez le fournisseur, jamais un nom d'affichage — celui-ci se change. Un
+expéditeur non déclaré dans `operators` est refusé plutôt que rattaché à un acteur générique : sans
+cela, l'audit dirait « approuvé par slack », qui n'est pas une personne. La réponse ne distingue pas
+les motifs de refus — dire « signature invalide » plutôt que « horodatage hors fenêtre » renseignerait
+qui tâtonne ; le détail reste dans les journaux.
+
 ### `kex.resilience.*`
 
 Disjoncteur et réessai des intégrations externes (serveurs MCP, fournisseur du modèle) — voir
@@ -421,6 +522,11 @@ un `push` réussi dit que les couches sont parties, pas que le manifeste est ser
 
 `linux/amd64` seulement. Une image arm64 supposerait QEMU et une compilation Maven émulée, soit un
 ordre de grandeur de plus sur la durée.
+
+La page du dépôt Docker Hub est poussée depuis [`DOCKERHUB.md`](../DOCKERHUB.md), pas depuis le
+`README.md` : la vitrine du dépôt s'adresse à qui lit le code, la page du registre à qui lance
+l'image sans l'avoir clonée — tags disponibles, variables d'environnement, sondes. Les liens relatifs
+du README, eux, ne mènent nulle part depuis Docker Hub.
 
 ### Utiliser l'image publiée
 

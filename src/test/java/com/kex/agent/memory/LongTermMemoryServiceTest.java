@@ -9,6 +9,8 @@ import java.time.ZoneId;
 import java.util.List;
 
 import com.kex.agent.agent.AgentEvent;
+import com.kex.agent.skills.Charter;
+import com.kex.agent.skills.CharterService;
 import com.kex.agent.skills.SkillsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,15 +24,20 @@ import static org.mockito.Mockito.verify;
 
 class LongTermMemoryServiceTest {
 
+    private static final MemoryProperties.Skills SKILLS =
+            new MemoryProperties.Skills(5, 3000, Duration.ofDays(90));
+
     private final LearningRepository repository = mock(LearningRepository.class);
     private final SkillsService skills = mock(SkillsService.class);
-    private final MemoryProperties properties = new MemoryProperties(true, 100, 1000, Duration.ofDays(7));
+    private final CharterService charter = mock(CharterService.class);
+    private final MemoryProperties properties = new MemoryProperties(true, 100, 1000, Duration.ofDays(7), SKILLS);
     private final Clock clock = Clock.fixed(Instant.parse("2026-09-20T12:00:00Z"), ZoneId.of("UTC"));
     private LongTermMemoryService service;
 
     @BeforeEach
     void setUp() {
-        service = new LongTermMemoryService(repository, skills, properties, clock);
+        given(charter.current(any())).willReturn(Charter.NONE);
+        service = new LongTermMemoryService(repository, skills, charter, properties, clock);
     }
 
     @Test

@@ -30,6 +30,7 @@ import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -63,6 +64,7 @@ public class SupervisionService {
     private final AuditRepository auditRepository;
     private final WebhookNotifier notifier;
     private final TokenBudgetService tokenBudget;
+    private final ApplicationEventPublisher events;
 
     private final AtomicReference<SupervisionPolicy> policy = new AtomicReference<>();
     private final AtomicInteger policyRevision = new AtomicInteger(1);
@@ -108,7 +110,7 @@ public class SupervisionService {
                        SupervisionProperties properties, Clock clock, ModelAvailability model,
                        Tracer tracer, CircuitBreakerRegistry circuitBreakerRegistry,
                        AuditRepository auditRepository, WebhookNotifier notifier,
-                       TokenBudgetService tokenBudget) {
+                       TokenBudgetService tokenBudget, ApplicationEventPublisher events) {
         this.agentService = agentService;
         this.toolCatalog = toolCatalog;
         this.properties = properties;
@@ -119,6 +121,7 @@ public class SupervisionService {
         this.auditRepository = auditRepository;
         this.notifier = notifier;
         this.tokenBudget = tokenBudget;
+        this.events = events;
         this.cycles = new History<>(properties.historySize());
         this.anomalies = new History<>(properties.historySize());
         this.decisions = new History<>(properties.historySize());
@@ -773,7 +776,31 @@ public class SupervisionService {
         store(rejected);
         record(actor, "Refus : " + decision.action(), decision.processId(), id, reason, "Refusée");
         maybeAutoAdjustThreshold(decision.capability());
+        maybePublishRepeatedRefusals(actor, decision.capability());
         return rejected;
+    }
+
+    /**
+     * Le plancher de confiance se durcit déjà sur les refus, mais un plancher ne dit que « moins
+     * souvent » : il ne retient pas *ce que* l'humain reprochait, qui n'existe que dans le motif
+     * écrit. Au-delà de quelques refus concordants sur la même capacité, l'événement laisse à qui
+     * sait écrire une compétence le soin d'en proposer une — toujours en attente d'approbation.
+     */
+    private void maybePublishRepeatedRefusals(String actor, Capability capability) {
+        SupervisionProperties.Learning learning = properties.learning();
+        if (!learning.enabled()) {
+            return;
+        }
+        Instant since = clock.instant().minus(learning.window());
+        List<Decision> refusals = decisions().stream()
+                .filter(d -> d.capability() == capability && d.status() == DecisionStatus.REJECTED)
+                .filter(d -> d.resolvedAt() != null && d.resolvedAt().isAfter(since))
+                .sorted(Comparator.comparing(Decision::resolvedAt).reversed())
+                .toList();
+        if (refusals.size() < learning.minRefusals()) {
+            return;
+        }
+        events.publishEvent(new RepeatedRefusals(actor, capability, refusals));
     }
 
     /**

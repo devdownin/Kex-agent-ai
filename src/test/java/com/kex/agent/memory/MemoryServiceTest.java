@@ -20,7 +20,8 @@ class MemoryServiceTest {
 
     private MemoryService service(int capacity, int maxContentLength, Duration retention) {
         return new MemoryService(new InMemoryMemoryRepository(capacity),
-                new MemoryProperties(true, capacity, maxContentLength, retention), clock);
+                new MemoryProperties(true, capacity, maxContentLength, retention,
+                        new MemoryProperties.Skills(5, 3000, Duration.ofDays(90))), clock);
     }
 
     private static List<String> contents(MemoryService service) {
