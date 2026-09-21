@@ -5,6 +5,7 @@ package com.kex.agent.skills;
 import java.security.Principal;
 import java.util.List;
 
+import com.kex.agent.config.ActorIdentity;
 import com.kex.agent.memory.LearningEntry;
 import com.kex.agent.supervision.SupervisionService;
 import jakarta.validation.Valid;
@@ -32,13 +33,13 @@ class SkillsController {
 
     @GetMapping
     List<LearningEntry> list(Principal principal) {
-        return skills.list(actor(principal));
+        return skills.list(tenant(principal));
     }
 
     /** Ce que la bibliothèque fait au prompt : ce qui agit, ce qui dort, ce qui se répète. */
     @GetMapping("/curation")
     SkillCuration curation(Principal principal) {
-        return curator.curate(actor(principal));
+        return curator.curate(tenant(principal));
     }
 
     /** Le curateur signale, un humain nommé retire — jamais l'inverse. */
@@ -54,7 +55,7 @@ class SkillsController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     LearningEntry propose(@Valid @RequestBody Proposal proposal, Principal principal) {
-        LearningEntry entry = skills.propose(actor(principal), proposal.title(), proposal.markdown(),
+        LearningEntry entry = skills.propose(tenant(principal), proposal.title(), proposal.markdown(),
                 proposal.evidence(), proposal.conversationId());
         supervision.auditAction(actor(principal), "Compétence proposée", entry.id());
         return entry;
@@ -81,6 +82,15 @@ class SkillsController {
     private static String actor(Principal principal) {
         if (principal == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         return principal.getName();
+    }
+
+    /**
+     * Une compétence approuvée enrichit le contexte de tout le locataire : c'est lui qui la
+     * possède, pas l'administrateur qui a tranché — l'audit garde qui.
+     */
+    private static String tenant(Principal principal) {
+        actor(principal);
+        return ActorIdentity.tenantOf(principal);
     }
 
     @ExceptionHandler(IllegalStateException.class)

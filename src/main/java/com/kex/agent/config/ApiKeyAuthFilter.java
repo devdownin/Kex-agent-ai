@@ -25,7 +25,12 @@ class ApiKeyAuthFilter extends OncePerRequestFilter {
 
     private static final String PREFIX = "Bearer ";
 
-    record Credential(byte[] token, Set<ApiRole> roles) {
+    /**
+     * {@code tenant} est l'espace de données de la clé, distinct de son nom — voir
+     * {@link ActorIdentity}. Sans déclaration, il vaut le nom : l'installation existante retrouve
+     * ses souvenirs, ses compétences et sa charte là où elle les avait laissés.
+     */
+    record Credential(byte[] token, Set<ApiRole> roles, String tenant) {
         Credential {
             token = token.clone();
             roles = Set.copyOf(roles);
@@ -54,8 +59,9 @@ class ApiKeyAuthFilter extends OncePerRequestFilter {
         for (Map.Entry<String, Credential> candidate : credentialsByName.entrySet()) {
             if (MessageDigest.isEqual(candidate.getValue().token(), presented)) {
                 SecurityContext context = SecurityContextHolder.createEmptyContext();
-                context.setAuthentication(new UsernamePasswordAuthenticationToken(
-                        candidate.getKey(), null, AuthorityUtils.createAuthorityList(candidate.getValue().roles().stream()
+                context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
+                        new ActorIdentity(candidate.getKey(), candidate.getValue().tenant()), null,
+                        AuthorityUtils.createAuthorityList(candidate.getValue().roles().stream()
                                 .map(role -> "ROLE_" + role.name())
                                 .toArray(String[]::new))));
                 SecurityContextHolder.setContext(context);

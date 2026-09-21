@@ -240,7 +240,8 @@ class SupervisionServiceTest {
         when(traceContext.traceId()).thenReturn("trace-42");
         SupervisionService service = new SupervisionService(agentService, toolCatalog,
                 properties(List.of(), Map.of(), Map.of()), clock, keyMissing, tracer,
-                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200), notifier, tokenBudget, events);
+                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200), notifier, tokenBudget,
+                events, new InMemorySupervisionStateRepository(200));
 
         service.pause("opérateur");
 
@@ -251,7 +252,8 @@ class SupervisionServiceTest {
     void ne_correle_rien_hors_d_une_trace_en_cours() {
         SupervisionService service = new SupervisionService(agentService, toolCatalog,
                 properties(List.of(), Map.of(), Map.of()), clock, keyMissing, mock(Tracer.class),
-                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200), notifier, tokenBudget, events);
+                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200), notifier, tokenBudget,
+                events, new InMemorySupervisionStateRepository(200));
 
         service.pause("opérateur");
 
@@ -264,7 +266,8 @@ class SupervisionServiceTest {
         registry.circuitBreaker("mcp-tool");
         SupervisionService service = new SupervisionService(agentService, toolCatalog,
                 properties(List.of(), Map.of(), Map.of()), clock, keyMissing, mock(Tracer.class),
-                registry, new InMemoryAuditRepository(200), notifier, tokenBudget, events);
+                registry, new InMemoryAuditRepository(200), notifier, tokenBudget, events,
+                new InMemorySupervisionStateRepository(200));
 
         assertThat(service.status().circuitBreakers())
                 .extracting(CircuitBreakerStatus::name)
@@ -982,7 +985,8 @@ class SupervisionServiceTest {
         given(notifier.send(any(), any())).willReturn(Optional.empty());
         return new SupervisionService(agentService, toolCatalog, properties, clock, model,
                 mock(Tracer.class), CircuitBreakerRegistry.ofDefaults(),
-                new InMemoryAuditRepository(properties.historySize()), notifier, tokenBudget, events);
+                new InMemoryAuditRepository(properties.historySize()), notifier, tokenBudget, events,
+                new InMemorySupervisionStateRepository(properties.historySize()));
     }
 
     private void analysisReturns(Map<String, Object> content) {

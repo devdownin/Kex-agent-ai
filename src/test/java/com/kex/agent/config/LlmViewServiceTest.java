@@ -22,7 +22,7 @@ class LlmViewServiceTest {
     @BeforeEach
     void setUp() {
         environment = new MockEnvironment();
-        agentProperties = new AgentProperties("prompt", 40, 4000, true, "secret", Map.of(), Map.of(), Duration.ofSeconds(120));
+        agentProperties = new AgentProperties("prompt", 40, 4000, true, "secret", Map.of(), Map.of(), Map.of(), Duration.ofSeconds(120));
         knowledgeProperties = new KnowledgeProperties(false, 4, 0.6, "");
         service = new LlmViewService(environment, agentProperties, knowledgeProperties);
     }

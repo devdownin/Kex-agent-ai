@@ -3,8 +3,6 @@
 package com.kex.agent.config;
 
 import java.io.IOException;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -25,10 +23,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * la supervision sans rien préserver.
  *
  * <p>Un seau par principal authentifié, pas un seau unique pour l'instance : avec
- * {@code kex.agent.api-keys}, plusieurs opérateurs partagent l'instance sans partager leur
- * budget — une clé qui tourne en boucle ne doit pas affamer les autres. Avec le seul bearer
- * historique, il n'existe qu'un principal, donc qu'un seau : le comportement d'une installation à
- * une seule clé ne change pas.
+ * {@code kex.agent.api-keys} ou un émetteur OIDC, plusieurs appelants partagent l'instance sans
+ * partager leur budget — une clé qui tourne en boucle ne doit pas affamer les autres. Où le seau
+ * est tenu — dans le processus ou dans une ligne que les répliques partagent — est la seule chose
+ * que {@link RateLimiter} décide.
  */
 class RateLimitFilter extends OncePerRequestFilter {
 
@@ -36,11 +34,10 @@ class RateLimitFilter extends OncePerRequestFilter {
     private static final String DIRECT_TOOL_CALL_PATTERN = "/api/agent/mcp/servers/*/tools/*";
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
-    private final RateLimitProperties properties;
-    private final Map<String, TokenBucket> bucketsByPrincipal = new ConcurrentHashMap<>();
+    private final RateLimiter limiter;
 
-    RateLimitFilter(RateLimitProperties properties) {
-        this.properties = properties;
+    RateLimitFilter(RateLimiter limiter) {
+        this.limiter = limiter;
     }
 
     @Override
@@ -55,9 +52,7 @@ class RateLimitFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
 
-        TokenBucket bucket = bucketsByPrincipal.computeIfAbsent(principalName(),
-                name -> new TokenBucket(properties.burst(), properties.requestsPerMinute()));
-        if (bucket.tryConsume()) {
+        if (limiter.tryConsume(principalName())) {
             chain.doFilter(request, response);
             return;
         }

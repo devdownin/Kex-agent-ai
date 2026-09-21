@@ -76,6 +76,22 @@ still can. [Every setting, with its reasons](https://github.com/devdownin/Kex-ag
 
 The container exposes `8081` and runs as an unprivileged user (`10001:10001`).
 
+## Persistence
+
+`/var/lib/kex` holds everything the agent remembers outside a database: long-term facts, skills a
+human approved, the operating charter, and the encrypted MCP connections created from the console.
+It is declared as a volume — mount a named one over it, or those survive only as long as the
+container does:
+
+```bash
+docker run --rm -p 8081:8081 -v kex_state:/var/lib/kex ... compagnonsdudev/kex-agent-ai:latest
+```
+
+With the `shared-memory` profile and a PostgreSQL datasource, memory, skills, the supervision audit
+and the decision state move to the database instead — which is what you want behind a load
+balancer, where a decision approved on one replica has to exist for the others. The encrypted MCP
+connections stay on disk either way, so the volume is never pointless.
+
 ## What it will not do
 
 The Kafka SQL Explorer MCP server is **read-only** — fifteen tools, none of them mutating. In front

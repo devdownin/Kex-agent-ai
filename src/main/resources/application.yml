@@ -176,6 +176,32 @@ kex:
     api-key-roles: {}
       # ops-console: OPERATOR
       # ci-pipeline: CHAT
+    # Le locataire d'une clé : l'espace où vivent ses souvenirs, ses compétences approuvées, sa
+    # charte et ses automatisations. Une clé absente de cette table est son propre locataire —
+    # le comportement de toute installation existante. Deux clés qui déclarent le même locataire
+    # travaillent au même endroit tout en restant deux acteurs distincts à l'audit.
+    api-key-tenants: {}
+      # ops-console: exploitation
+      # ci-pipeline: exploitation
+
+    # Lecture d'un jeton OIDC. Rien ici n'active quoi que ce soit : la chaîne JWT n'existe que si
+    # spring.security.oauth2.resourceserver.jwt.issuer-uri est renseignée, et les clés API
+    # continuent alors de fonctionner en parallèle. Sans émetteur, l'audit ne peut nommer qu'une
+    # clé — « approuvé par ops-console » n'est pas une personne.
+    oidc:
+      username-claim: ${KEX_AGENT_OIDC_USERNAME_CLAIM:preferred_username}
+      roles-claim: ${KEX_AGENT_OIDC_ROLES_CLAIM:roles}
+      # Valeur du claim -> rôle de l'agent. Une valeur absente est essayée telle quelle contre
+      # CHAT/OPERATOR/ADMIN, à la casse près ; si rien ne se traduit, default-role s'applique.
+      role-mappings: {}
+        # kex-admins: ADMIN
+        # kex-ops: OPERATOR
+      # Vide, tous les porteurs de jeton partagent default-tenant : un émetteur dessert une
+      # organisation, et donner à chacun son espace ferait qu'une compétence approuvée par l'un
+      # n'agirait jamais pour l'autre.
+      tenant-claim: ${KEX_AGENT_OIDC_TENANT_CLAIM:}
+      default-tenant: ${KEX_AGENT_OIDC_DEFAULT_TENANT:default}
+      default-role: ${KEX_AGENT_OIDC_DEFAULT_ROLE:CHAT}
 
     kafka:
       # Vue technique du cluster, adossée aux outils de Kafka SQL Explorer. Les noms d'outils sont
@@ -298,8 +324,10 @@ kex:
         window: 30d
 
     rate-limit:
-      # Limite d'instance, pas par appelant : le bearer est unique et partagé. Elle protège le
-      # budget ; en multi-instance, diviser le seuil par le nombre de répliques.
+      # Par appelant authentifié, pas par instance : avec un seul bearer il n'existe qu'un
+      # appelant, donc le seuil se lit comme avant. Sous le profil `shared-memory`, le seau vit
+      # dans une ligne partagée et le seuil vaut pour l'installation entière ; sans ce profil,
+      # chaque réplique tient le sien — diviser le seuil par leur nombre.
       enabled: true
       requests-per-minute: 60
       burst: 20

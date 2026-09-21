@@ -83,20 +83,18 @@ public class SupervisionService {
      */
     private final Map<String, ReentrantLock> executionLocks = new ConcurrentHashMap<>();
 
+    /**
+     * Cycles, anomalies brutes et relevés restent en mémoire du processus : leur divergence entre
+     * répliques se voit et ne coûte qu'un rafraîchissement. Décisions, pause et fenêtres de
+     * maintenance sont passées derrière {@link SupervisionStateRepository}, où leur divergence
+     * n'était pas un écran discordant mais une action fausse.
+     */
     private final History<CycleReport> cycles;
     private final History<Anomaly> anomalies;
-    private final History<Decision> decisions;
     private final History<SnapshotSet> snapshotHistory;
-    private final Map<String, Decision> decisionsById = new ConcurrentHashMap<>();
-
-    /**
-     * Fenêtres de maintenance déclarées, par processus. En mémoire du processus, comme la pause de
-     * l'agent : une intention passagère, pas un état à répliquer entre instances.
-     */
-    private final Map<String, MaintenanceWindow> maintenance = new ConcurrentHashMap<>();
+    private final SupervisionStateRepository state;
 
     private volatile List<ProcessSnapshot> snapshots = List.of();
-    private volatile boolean paused;
     private volatile ActiveCycle activeCycle;
 
     private record ActiveCycle(String id, Instant startedAt, List<CycleEvent> events) {
@@ -110,7 +108,8 @@ public class SupervisionService {
                        SupervisionProperties properties, Clock clock, ModelAvailability model,
                        Tracer tracer, CircuitBreakerRegistry circuitBreakerRegistry,
                        AuditRepository auditRepository, WebhookNotifier notifier,
-                       TokenBudgetService tokenBudget, ApplicationEventPublisher events) {
+                       TokenBudgetService tokenBudget, ApplicationEventPublisher events,
+                       SupervisionStateRepository state) {
         this.agentService = agentService;
         this.toolCatalog = toolCatalog;
         this.properties = properties;
@@ -122,9 +121,9 @@ public class SupervisionService {
         this.notifier = notifier;
         this.tokenBudget = tokenBudget;
         this.events = events;
+        this.state = state;
         this.cycles = new History<>(properties.historySize());
         this.anomalies = new History<>(properties.historySize());
-        this.decisions = new History<>(properties.historySize());
         this.snapshotHistory = new History<>(properties.historySize());
         this.policy.set(new SupervisionPolicy("policy-v1", properties.mode(),
                 Map.copyOf(properties.autonomy()), properties.confidenceThreshold(),
@@ -282,16 +281,12 @@ public class SupervisionService {
 
     public List<Decision> decisions() {
         expireStalePendings();
-        return decisions.list();
+        return state.decisions();
     }
 
     public Decision decision(String id) {
         expireStalePendings();
-        Decision decision = decisionsById.get(id);
-        if (decision == null) {
-            throw new UnknownDecisionException(id);
-        }
-        return decision;
+        return state.decision(id).orElseThrow(() -> new UnknownDecisionException(id));
     }
 
     public List<Decision> pending() {
@@ -306,7 +301,7 @@ public class SupervisionService {
                 : null;
         SupervisionPolicy current = policy.get();
         Diagnosis diagnosis = diagnose(last, staleSince);
-        return new AgentStatus(diagnosis.state(), current.mode(), paused, cycleLock.isLocked(),
+        return new AgentStatus(diagnosis.state(), current.mode(), state.paused(), cycleLock.isLocked(),
                 lastAt, last == null ? null : last.id(), staleSince, current.version(),
                 current.confidenceThreshold(), diagnosis.reason(), circuitBreakers());
     }
@@ -332,7 +327,7 @@ public class SupervisionService {
     }
 
     private Diagnosis diagnose(CycleReport last, Instant staleSince) {
-        if (paused) {
+        if (state.paused()) {
             return Diagnosis.of(AgentState.PAUSED);
         }
         if (cycleLock.isLocked()) {
@@ -400,7 +395,7 @@ public class SupervisionService {
         MonitoredProcess process = findProcess(processId);
         Instant until = clock.instant().plus(duration);
         MaintenanceWindow window = new MaintenanceWindow(processId, process.name(), until, reason, actor);
-        maintenance.put(processId, window);
+        state.putMaintenance(window);
         record(actor, "Maintenance déclarée : " + process.name(), processId, null, reason,
                 "Jusqu'à " + until);
         return window;
@@ -408,7 +403,7 @@ public class SupervisionService {
 
     public void endMaintenance(String processId, String actor) {
         MonitoredProcess process = findProcess(processId);
-        MaintenanceWindow removed = maintenance.remove(processId);
+        MaintenanceWindow removed = state.removeMaintenance(processId);
         if (removed != null) {
             record(actor, "Maintenance levée : " + process.name(), processId, null, null, "Levée avant terme");
         }
@@ -416,14 +411,11 @@ public class SupervisionService {
 
     /** Nettoie les fenêtres expirées au passage : lues, jamais accumulées indéfiniment. */
     private List<MaintenanceWindow> activeMaintenanceWindows() {
-        Instant now = clock.instant();
-        maintenance.values().removeIf(window -> !now.isBefore(window.until()));
-        return List.copyOf(maintenance.values());
+        return state.activeMaintenance(clock.instant());
     }
 
     private boolean isUnderMaintenance(String processId, Instant now) {
-        MaintenanceWindow window = maintenance.get(processId);
-        return window != null && now.isBefore(window.until());
+        return state.activeMaintenance(now).stream().anyMatch(window -> window.processId().equals(processId));
     }
 
     private MonitoredProcess findProcess(String processId) {
@@ -487,13 +479,13 @@ public class SupervisionService {
     /* ── Pilotage ──────────────────────────────────────────────────────── */
 
     public AgentStatus pause(String actor) {
-        paused = true;
+        state.paused(true);
         record(actor, "Agent mis en pause", null, null, null, "Aucune analyse ne sera exécutée");
         return status();
     }
 
     public AgentStatus resume(String actor) {
-        paused = false;
+        state.paused(false);
         record(actor, "Agent repris", null, null, null, "Les analyses peuvent repartir");
         return status();
     }
@@ -525,7 +517,7 @@ public class SupervisionService {
     /* ── Cycle ─────────────────────────────────────────────────────────── */
 
     public CycleReport runCycle(String actor) {
-        if (paused) {
+        if (state.paused()) {
             throw new AgentPausedException();
         }
         if (!cycleLock.tryLock()) {
@@ -753,7 +745,7 @@ public class SupervisionService {
             throw new DecisionInProgressException(id);
         }
         try {
-            Decision decision = pendingOrFail(id);
+            Decision decision = claimedOrFail(id);
             Decision executed = execute(decision, actor);
             store(executed);
             record(actor, "Validation : " + decision.action(), decision.processId(), id,
@@ -770,7 +762,7 @@ public class SupervisionService {
     }
 
     public Decision reject(String id, String reason, String actor) {
-        Decision decision = pendingOrFail(id);
+        Decision decision = claimedOrFail(id);
         Decision rejected = decision.resolvedAs(DecisionStatus.REJECTED,
                 StringUtils.hasText(reason) ? reason : "Refusée par " + actor, actor, clock.instant());
         store(rejected);
@@ -848,12 +840,22 @@ public class SupervisionService {
                 SYSTEM);
     }
 
+    /**
+     * Le verrou par décision ci-dessus vit dans le processus : il suffisait tant que la décision
+     * n'existait que là. Partagée entre répliques, elle se tranche depuis n'importe laquelle —
+     * la réservation, elle, est atomique côté dépôt et vaut pour toutes.
+     */
+    private Decision claimedOrFail(String id) {
+        Decision decision = pendingOrFail(id);
+        if (!state.claim(id)) {
+            throw new DecisionInProgressException(id);
+        }
+        return decision;
+    }
+
     private Decision pendingOrFail(String id) {
         expireStalePendings();
-        Decision decision = decisionsById.get(id);
-        if (decision == null) {
-            throw new UnknownDecisionException(id);
-        }
+        Decision decision = state.decision(id).orElseThrow(() -> new UnknownDecisionException(id));
         if (decision.status() != DecisionStatus.PENDING_APPROVAL) {
             throw new DecisionNotPendingException(id, decision.status());
         }
@@ -866,7 +868,7 @@ public class SupervisionService {
      */
     private void expireStalePendings() {
         Instant now = clock.instant();
-        List<Decision> expired = decisionsById.values().stream()
+        List<Decision> expired = state.decisions().stream()
                 .filter(d -> d.status() == DecisionStatus.PENDING_APPROVAL)
                 .filter(d -> d.expiresAt() != null && now.isAfter(d.expiresAt()))
                 .toList();
@@ -944,16 +946,7 @@ public class SupervisionService {
     }
 
     private void store(Decision decision) {
-        Decision previous = decisionsById.put(decision.id(), decision);
-        if (previous == null) {
-            Decision evicted = decisions.add(decision);
-            if (evicted != null) {
-                decisionsById.remove(evicted.id());
-            }
-        }
-        else {
-            decisions.replace(entry -> entry.id().equals(decision.id()) ? decision : entry);
-        }
+        state.store(decision);
     }
 
     private void record(String actor, String action, String processId, String decisionId, String reason,

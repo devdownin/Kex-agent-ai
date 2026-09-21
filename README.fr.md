@@ -277,6 +277,15 @@ bloquante répond `504`.
 - **L'endpoint d'appel direct n'a pas de modèle dans la boucle.** L'autorisation est entièrement à la
   charge de l'appelant. Lire
   [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#the-direct-tool-endpoint) avant de l'exposer.
+- **L'audit peut nommer une personne, pas seulement une clé.** Renseigner
+  `spring.security.oauth2.resourceserver.jwt.issuer-uri` et l'agent accepte des jetons OIDC à côté
+  de ses clés API : l'audit inscrit alors le claim de nom plutôt qu'un nom d'intégration. Les rôles
+  viennent d'une table déclarée, jamais de ce que le jeton dit de lui-même. Sans émetteur, rien ne
+  change — aucun décodeur n'est déclaré, aucune chaîne JWT n'est branchée.
+- **Le cloisonnement des données est un axe distinct de l'identité.** Mémoire long terme,
+  compétences approuvées, charte et automatisations appartiennent à un *locataire* ; le nom est ce
+  que l'audit inscrit. Sans déclaration, une clé est son propre locataire — une installation
+  existante retrouve ses données exactement là où elle les avait laissées.
 
 ## 📚 Documentation
 

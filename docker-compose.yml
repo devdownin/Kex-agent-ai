@@ -109,6 +109,11 @@ services:
       # Le token doit être identique des deux côtés : c'est le même bearer.
       EXPLORER_MCP_AUTH_TOKEN: ${EXPLORER_MCP_AUTH_TOKEN:?requis, generer avec openssl rand -hex 32}
       KAFKA_EXPLORER_URL: http://explorer:8080
+    volumes:
+      # Ce que l'agent retient hors base. Sous le profil `shared-memory` souvenirs et compétences
+      # vivent en Postgres, mais les connexions MCP chiffrées restent ici quoi qu'il arrive :
+      # ce volume n'est donc jamais inutile.
+      - agent_state:/var/lib/kex
     healthcheck:
       # /dev/tcp plutôt qu'un appel à /actuator/health : l'image JRE n'a ni curl ni wget,
       # et la sonde ne vaut pas une couche apt de plus.
@@ -124,3 +129,4 @@ volumes:
   kafka_data:
   explorer_logs:
   explorer_data:
+  agent_state:

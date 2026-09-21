@@ -6,9 +6,11 @@ import java.time.Instant;
 
 /**
  * Fenêtre pendant laquelle un processus déclaré ne produit ni alerte ni décision, même en anomalie
- * réelle — un déploiement connu ne doit pas se lire comme un incident. En mémoire du processus,
- * comme la pause de l'agent : elle ne prétend décrire qu'une intention passagère, pas un état à
- * répliquer entre instances.
+ * réelle — un déploiement connu ne doit pas se lire comme un incident.
+ *
+ * <p>Tenue par {@link SupervisionStateRepository}, donc partagée entre répliques sous
+ * {@code shared-memory} : déclarée sur une seule, elle ne taisait les alertes que là, et le
+ * déploiement redevenait un incident — puis une décision — vu depuis les autres.
  */
 public record MaintenanceWindow(String processId, String processName, Instant until, String reason,
                                 String declaredBy) {

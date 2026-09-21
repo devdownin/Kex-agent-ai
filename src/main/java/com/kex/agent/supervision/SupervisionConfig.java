@@ -4,6 +4,7 @@ package com.kex.agent.supervision;
 
 import java.time.Clock;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -35,10 +36,20 @@ class SupervisionConfig {
         return new InMemoryAuditRepository(properties.historySize());
     }
 
+    /** Défaut mono-instance, remplacé sous {@code shared-memory} comme l'audit ci-dessous. */
+    @Bean
+    @ConditionalOnMissingBean(SupervisionStateRepository.class)
+    SupervisionStateRepository inMemorySupervisionState(SupervisionProperties properties) {
+        return new InMemorySupervisionStateRepository(properties.historySize());
+    }
+
     /**
-     * L'audit seul bascule sur Postgres avec la mémoire de conversation : c'est la pièce de
-     * conformité, là où cycles, anomalies et décisions restent un tableau de bord qu'une réplique
-     * peut se permettre de ne pas partager avec les autres.
+     * Audit et état décisionnel basculent ensemble sur Postgres avec la mémoire de conversation :
+     * l'audit parce que c'est la pièce de conformité, les décisions, la pause et les fenêtres de
+     * maintenance parce qu'en multi-instance leur divergence ne se lit pas comme un écran
+     * discordant mais comme une action fausse — voir {@link SupervisionStateRepository}. Cycles,
+     * anomalies et relevés restent, eux, un tableau de bord qu'une réplique peut se permettre de
+     * ne pas partager.
      */
     @Configuration(proxyBeanMethods = false)
     @Profile("shared-memory")
@@ -47,6 +58,13 @@ class SupervisionConfig {
         @Bean
         AuditRepository jdbcAuditRepository(JdbcTemplate jdbcTemplate) {
             return new JdbcAuditRepository(jdbcTemplate);
+        }
+
+        @Bean
+        SupervisionStateRepository jdbcSupervisionState(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
+                                                       Clock clock, SupervisionProperties properties) {
+            return new JdbcSupervisionStateRepository(jdbcTemplate, objectMapper, clock,
+                    properties.historySize());
         }
     }
 

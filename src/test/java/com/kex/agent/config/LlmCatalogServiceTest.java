@@ -57,7 +57,7 @@ class LlmCatalogServiceTest {
     }
 
     private static AgentProperties agent() {
-        return new AgentProperties("prompt", 40, 4000, false, "secret", Map.of(), Map.of(),
+        return new AgentProperties("prompt", 40, 4000, false, "secret", Map.of(), Map.of(), Map.of(),
                 Duration.ofSeconds(120));
     }
 

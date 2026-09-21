@@ -292,6 +292,25 @@ d'avoir le starter JDBC sur le classpath fait échouer le démarrage sans base
 `application.yml`, et le profil **annule** cette liste — une liste de propriétés n'est pas fusionnée
 entre sources, la source la plus prioritaire gagne en entier.
 
+### Ce que l'agent retient hors base a besoin d'un volume
+
+Souvenirs long terme, compétences approuvées par un humain, charte et connexions MCP chiffrées
+vivent dans des fichiers tant que `shared-memory` n'est pas actif. Ils vivaient donc dans la couche
+d'écriture du conteneur, qui part avec lui : un `docker compose up --force-recreate` les emportait,
+sans que rien ne le dise — l'agent redémarrait très bien, simplement amnésique, et une compétence
+qu'un administrateur avait pris le temps d'approuver n'existait plus.
+
+Le chemin est posé explicitement (`KEX_AGENT_MEMORY_STORAGE_DIRECTORY`,
+`KEX_MCP_RUNTIME_STORAGE_PATH`) plutôt que laissé à `user.home` : l'uid `10001` n'a pas d'entrée
+dans `/etc/passwd`, `getpwuid` n'a donc rien à rendre, et la valeur de repli dépend de la JVM. Un
+chemin absolu ne dépend d'aucune des deux. `VOLUME /var/lib/kex` empêche l'écriture dans la couche
+du conteneur ; `docker-compose.yml` monte un volume nommé par-dessus, qui reste préférable.
+
+`DurableStorageLayoutTest` lit le `Dockerfile` et vérifie que les noms déclarés alimentent bien les
+propriétés que le code lit, en passant par la traduction réelle de Spring
+(`SystemEnvironmentPropertySource`) plutôt qu'une règle réécrite : une faute de frappe dans un
+`ENV` ne fait rien échouer au démarrage, elle rend seulement l'agent amnésique.
+
 ### Mémoire long-terme : un outil que le modèle choisit d'appeler, jamais une capture automatique
 
 `MessageWindowChatMemory` oublie par troncature : passé `max-history-messages`, un fait dit plus tôt
@@ -589,11 +608,96 @@ unique d'avant : rien de configuré, `503`.
 
 Plusieurs principals distincts posaient une question que le limiteur de débit ignorait encore :
 `RateLimitFilter` tenait un unique `TokenBucket` pour toute l'instance, hérité de l'époque où un
-seul jeton pouvait appeler `/api/agent/chat`. Un seau par principal (`bucketsByPrincipal`, tenu par
-le nom que renvoie l'authentification déjà posée à ce point de la chaîne) referme ce trou : une clé
-CI qui tourne en boucle épuise son propre seau, jamais celui d'un autre opérateur. Avec le seul
-bearer historique, il n'existe qu'un principal, donc qu'un seau — le comportement d'une
-installation à une seule clé ne change pas.
+seul jeton pouvait appeler `/api/agent/chat`. Un seau par principal referme ce trou : une clé CI
+qui tourne en boucle épuise son propre seau, jamais celui d'un autre opérateur. Avec le seul bearer
+historique, il n'existe qu'un principal, donc qu'un seau — le comportement d'une installation à une
+seule clé ne change pas.
+
+### Le débit se compte pour l'installation, pas pour la réplique
+
+Un seau par appelant réglait le partage entre appelants, pas entre répliques : chacune tenait les
+siens, et la propriété mentait sans le dire. `requests-per-minute: 60` avec trois répliques
+laissait passer cent quatre-vingt requêtes par minute, et rien dans les journaux ne l'aurait
+signalé — un plafond silencieusement triplé est pire qu'un plafond absent, parce qu'on croit
+l'avoir.
+
+`RateLimiter` abstrait où vit le seau. `InMemoryRateLimiter` reste le défaut : la plupart des
+installations n'ont qu'une instance et n'ont pas à payer une base pour compter des requêtes.
+`JdbcRateLimiter` prend le relais sous `shared-memory`, où une base existe déjà.
+
+Le calcul de remplissage est celui de `TokenBucket`, tenu en Java, avec un compare-and-set sur une
+colonne de révision plutôt qu'un `UPDATE` calculé en SQL — lisible sur n'importe quel moteur. Un
+tour de base par requête limitée : le chemin protégé appelle un modèle de langage ou un serveur MCP
+juste après, la comparaison n'est pas serrée. Un refus n'écrit rien, le remplissage se recalculant
+à la lecture suivante depuis la même base de temps.
+
+Deux réserves assumées. Le temps est celui de l'appelant, pas celui de la base : deux répliques
+dont les horloges divergent se décalent d'autant sur le remplissage — une seconde d'écart sur une
+fenêtre d'une minute déplace le seuil de moins de deux pour cent, et un écart plus grand est déjà
+un problème pour les horodatages d'audit. L'écoulement négatif, celui de la réplique en retard, est
+ramené à zéro plutôt que de retirer des jetons aux autres. Et au-delà de trois tentatives de
+compare-and-set, l'appel est refusé : la contention vient alors de l'appelant lui-même, exactement
+ce que la limite existe pour freiner, et une boucle d'attente transformerait un dépassement de
+débit en saturation du pool de connexions.
+
+### L'audit peut nommer une personne, pas seulement une clé
+
+Une clé nommée est un progrès sur un jeton anonyme, mais `ops-console` reste une intégration :
+« approuvé par ops-console » n'est pas une signature, et c'est précisément ce qu'un registre de
+conformité ne doit pas dire. Le starter serveur de ressources OAuth2 est sur le classpath et reste
+**inerte** tant que `spring.security.oauth2.resourceserver.jwt.issuer-uri` n'est pas renseignée :
+sans émetteur, Spring Boot ne déclare aucun `JwtDecoder`, et `SecurityConfig` ne branche la chaîne
+JWT que si ce bean existe. Une installation à clés API ne voit aucune différence.
+
+`JwtActorConverter` traduit le jeton validé en `ActorIdentity`. Le nom vient d'un claim
+configurable (`preferred_username` par défaut), avec repli sur `sub` — illisible, mais unique et
+vrai, ce qui vaut mieux qu'un acteur inventé. Les rôles passent par une table déclarée
+(`kex.agent.oidc.role-mappings`) : un claim qui s'annoncerait `ADMIN` sans correspondance ne
+l'obtient pas, sinon n'importe quel émetteur pourrait s'attribuer la politique de supervision.
+L'émetteur décide qui entre, l'exploitant décide ce qu'on y fait ; ce qui ne se traduit pas retombe
+sur `default-role`, `CHAT` — le même plancher qu'une clé nommée absente de `api-key-roles`.
+
+**Le piège, et la raison d'`ApiKeyAwareBearerTokenResolver`.** Les deux formes d'authentification
+arrivent dans le même en-tête, et `BearerTokenAuthenticationFilter` n'examine pas si quelqu'un
+s'est authentifié avant lui : il aurait lu une clé API comme un JWT malformé et rendu `401`. Le
+jour où on ajoute l'OIDC « sans rien casser », toute une installation existante serait tombée. Le
+résolveur rend donc invisibles au serveur de ressources les jetons qui sont des clés API connues —
+`ApiKeyAuthFilter` les a déjà traitées — et laisse passer tout le reste. Comparaison en temps
+constant, comme dans le filtre : un jeton se distingue aussi par le temps qu'on met à le refuser.
+
+Les deux chemins produisent le même type de jeton d'authentification, avec le même principal : tout
+ce qui lit l'appelant en aval — audit, locataire, limitation de débit — n'a qu'une forme à
+connaître.
+
+### Qui a agi et à qui appartient la donnée sont deux questions
+
+Mémoire long terme, compétences approuvées, charte et automatisations étaient cloisonnées sur le
+nom du principal — donc sur le nom d'une clé API. `ops-console` et `ci-pipeline`, deux intégrations
+de la même équipe, lisaient deux chartes différentes et deux bibliothèques de compétences
+différentes, et rien à l'écran ne le disait. Sous OIDC, ç'aurait été une charte par personne.
+
+`ActorIdentity(name, tenant)` sépare les deux. `name` part à l'audit : c'est une personne sous
+OIDC, un nom d'intégration avec une clé. `tenant` désigne l'espace de données. La règle est
+unique — partout où le code passait `principal.getName()` comme **propriétaire**, il passe
+désormais le locataire ; partout où il le passait comme **acteur**, rien ne change. Une charte
+écrite par `ops-console` pour le locataire `exploitation` reste inscrite à l'audit sous
+`ops-console` : remplacer une personne par une équipe dans une pièce de conformité serait
+exactement le défaut que cet axe est censé ne pas introduire.
+
+**Sans déclaration, le locataire vaut le nom.** Ce repli est toute la compatibilité : une
+installation existante retrouve ses souvenirs, ses compétences et sa charte là où elle les avait
+laissés, parce qu'ils y sont rangés sous le nom de la clé. On déclare ensuite
+`kex.agent.api-key-tenants` pour qu'une équipe travaille au même endroit, ou
+`kex.agent.oidc.tenant-claim` pour le lire du jeton.
+
+Côté OIDC, l'absence de claim de locataire ne donne pas à chacun le sien : tous les porteurs
+partagent `default-tenant`. Un émetteur dessert une organisation, et l'autre défaut ferait qu'une
+compétence approuvée par un opérateur n'agirait jamais pour son collègue — le contraire du but.
+
+La conversation suit le locataire comme le reste : `memoryId(owner, conversationId)` la range dans
+son espace. Une équipe partage donc son historique de conversation comme elle partage sa charte,
+ce qui est la posture d'une console d'exploitation ; ce n'est pas celle d'une messagerie, et c'est
+à dire plutôt qu'à découvrir.
 
 ### Un échec du fournisseur du modèle ne recopie pas notre propre 401
 
@@ -708,8 +812,11 @@ partir d'une simple simultanéité serait plus trompeur que de ne rien dire.
 ### Une fenêtre de maintenance mute l'alerte et la décision, jamais l'observation
 
 `POST /api/agent/supervision/processes/{id}/maintenance` (`{"duration":"PT2H","reason":"..."}`) et
-son pendant `DELETE` déclarent une intention passagère, en mémoire du processus comme la pause de
-l'agent — pas une propriété à redéployer pour un déploiement qu'on n'a pas anticipé au démarrage.
+son pendant `DELETE` déclarent une intention passagère — pas une propriété à redéployer pour un
+déploiement qu'on n'a pas anticipé au démarrage. Passagère ne veut pas dire locale : la fenêtre est
+tenue par `SupervisionStateRepository`, donc partagée entre répliques sous `shared-memory`. Sans
+cela, déclarée sur une réplique, elle ne taisait les alertes que là, et le déploiement redevenait
+un incident — puis une décision — vu depuis les autres.
 
 Pendant la fenêtre, les anomalies du processus couvert n'entrent ni dans `alerts()` ni dans les
 décisions prises : un déploiement connu ne doit pas se lire comme un incident, ni déclencher une
@@ -933,21 +1040,60 @@ de plus pour l'instant, sans être en panne pour autant.
 Tenu en mémoire par instance, comme le seau de `rate-limit` : en multi-instance, chaque réplique a
 son propre budget, à diviser le seuil en conséquence plutôt que d'y voir un budget partagé.
 
-### L'historique est en mémoire, donc mono-instance — l'audit seul en sort
+### Ce qui peut diverger entre répliques, et ce qui ne le peut pas
 
-Cycles, anomalies et décisions vivent dans des `History` bornés, en mémoire du processus. Derrière
-un load balancer, chaque réplique tiendrait le sien : un tableau de bord opérationnel qui diverge
-un peu d'une instance à l'autre est un inconvénient, pas une régression de conformité. C'est assumé
-et écrit ici plutôt que masqué.
+Le critère n'est pas l'importance de la donnée, c'est ce que sa divergence produit. Un tableau de
+bord qui diffère un peu d'une instance à l'autre est un inconvénient : on rafraîchit. Un état
+décisionnel qui diffère produit une action fausse, et personne ne le voit passer.
 
-L'audit, lui, est la pièce de conformité, et ne supporte pas d'être partiel : `AuditRepository`
-l'abstrait derrière `InMemoryAuditRepository` (défaut, mono-instance, un `History` comme les
-autres) et `JdbcAuditRepository`, actif sous le profil `shared-memory` — le même bascule qui sert
-déjà la mémoire de conversation, puisque `JdbcTemplate` existe alors déjà. `CREATE TABLE IF NOT
-EXISTS` à la construction plutôt qu'un outil de migration pour une seule table, même raisonnement
-que `spring.ai.chat.memory.repository.jdbc.initialize-schema: always`. Cycles, anomalies et
-décisions restent volontairement hors de ce bascule : les y ajouter suppose une sémantique de mise
-à jour (une décision se résout après coup) que l'audit, purement additif, n'a pas à porter.
+**Restent en mémoire du processus**, dans des `History` bornés : cycles, anomalies brutes, relevés
+de processus. Les partager voudrait dire écrire en base à chaque relevé de chaque cycle, pour un
+historique que l'audit double déjà sur tout ce qui engage. Assumé et écrit ici plutôt que masqué.
+
+**Passent en base sous `shared-memory`**, derrière `SupervisionStateRepository` — trois pièces, et
+chacune corrigeait un comportement faux :
+
+- **Les décisions.** La demande de validation naissait sur la réplique qui avait lancé le cycle et
+  n'existait pour aucune autre. L'opérateur qui approuvait tombait une fois sur deux sur un `404`,
+  et rien ne disait que ce n'était pas la décision qui avait expiré.
+- **La pause.** Le verrou de `SupervisionScheduler` empêche deux cycles simultanés, pas un cycle
+  que quelqu'un croit avoir arrêté : mis en pause sur une réplique, l'agent continuait d'analyser
+  et d'agir depuis les autres.
+- **Les fenêtres de maintenance.** Déclarée sur une réplique, la fenêtre ne taisait les alertes que
+  là. Un déploiement connu redevenait un incident — et une décision — vu depuis les autres.
+
+**L'audit** est la pièce de conformité et bascule pour sa propre raison : il ne supporte pas d'être
+partiel. `AuditRepository` l'abstrait derrière `InMemoryAuditRepository` (défaut, mono-instance) et
+`JdbcAuditRepository`. `CREATE TABLE IF NOT EXISTS` à la construction plutôt qu'un outil de
+migration pour trois tables, même raisonnement que
+`spring.ai.chat.memory.repository.jdbc.initialize-schema: always`.
+
+Une `Decision` voyage en JSON dans une colonne, avec son identifiant, sa date et son statut en
+colonnes propres. Elle porte ses observations imbriquées : les éclater demanderait une seconde
+table et une jointure pour une donnée que rien n'interroge autrement que par décision entière. Le
+statut est sorti parce que c'est le seul champ sur lequel on filtre. Les `UPSERT` s'écrivent en
+`UPDATE` puis `INSERT` — `MERGE` et `ON CONFLICT` ne s'écrivent pas pareil selon le moteur — avec
+reprise sur `DuplicateKeyException` : deux répliques qui déclarent la même maintenance à la même
+seconde est précisément le cas que ce dépôt existe pour servir, il ne doit pas rendre une erreur
+pour une opération qui a abouti.
+
+#### Corollaire : le verrou par décision ne suffisait plus
+
+`executionLocks` est une `ReentrantLock` par identifiant, en mémoire du processus. Elle protégeait
+parce que la décision n'existait que là. Partagée, la décision se tranche depuis n'importe quelle
+réplique : deux opérateurs sur deux écrans différents exécuteraient l'action deux fois — un
+redémarrage de consumer, un rejeu de messages. Rien dans l'enchaînement lire-exécuter-écrire ne
+l'en empêche.
+
+`SupervisionStateRepository.claim(id)` est un `UPDATE … WHERE claimed_at IS NULL` : c'est la base
+qui tranche la course, en un seul ordre, là où lire puis écrire en laisserait toujours une. La
+réservation est prise **avant** d'agir, jamais après — détecter la course une fois l'outil MCP
+appelé ne répare rien. Elle ne se relâche pas : la réplique qui tombe en pleine exécution laisse
+une décision que personne ne peut plus trancher, et qui expire donc normalement. Devoir re-décider
+est le bon biais pour une action sur un cluster de production ; l'exécuter deux fois ne l'est pas.
+
+Le verrou local reste devant : il rend à la même réplique un `409` immédiat sur un double-clic,
+sans tour de base.
 
 L'acteur inscrit à l'audit est le principal authentifié. Avec le seul `kex.agent.api-key`
 historique, il désigne le jeton, pas une personne : tracer une identité que le système ne connaît

@@ -5,6 +5,7 @@ package com.kex.agent.skills;
 import java.security.Principal;
 import java.util.List;
 
+import com.kex.agent.config.ActorIdentity;
 import com.kex.agent.memory.LearningEntry;
 import com.kex.agent.supervision.SupervisionService;
 import jakarta.validation.Valid;
@@ -30,19 +31,19 @@ class CharterController {
 
     @GetMapping
     Charter current(Principal principal) {
-        return charter.current(actor(principal));
+        return charter.current(tenant(principal));
     }
 
     /** L'historique, parce qu'une charte sans ses versions antérieures ne s'explique pas. */
     @GetMapping("/versions")
     List<LearningEntry> versions(Principal principal) {
-        return charter.versions(actor(principal));
+        return charter.versions(tenant(principal));
     }
 
     @PutMapping
     Charter update(@Valid @RequestBody Update update, Principal principal) {
         String actor = actor(principal);
-        Charter written = charter.update(actor, update.markdown(), actor, update.reason());
+        Charter written = charter.update(tenant(principal), update.markdown(), actor, update.reason());
         supervision.auditAction(actor, "Charte mise à jour", update.reason());
         return written;
     }
@@ -50,6 +51,15 @@ class CharterController {
     private static String actor(Principal principal) {
         if (principal == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         return principal.getName();
+    }
+
+    /**
+     * La charte appartient à l'équipe, pas à l'administrateur qui l'a écrite : deux
+     * administrateurs du même locataire écrivent la même, et l'audit garde lequel a signé.
+     */
+    private static String tenant(Principal principal) {
+        actor(principal);
+        return ActorIdentity.tenantOf(principal);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -25,6 +25,29 @@ COPY --from=build /build/target/*.jar /app/app.jar
 # jusqu'à ce qu'une image de base amont le corrige. `-f` : ne pas faire échouer la construction si
 # une future image de base ne le porte plus.
 RUN rm -f /usr/bin/pebble
+
+# Tout ce que l'agent retient hors base : souvenirs long terme, compétences approuvées, charte,
+# et les connexions MCP chiffrées créées dans la console. Le chemin est posé explicitement plutôt
+# que laissé à `user.home` : l'uid 10001 n'a pas d'entrée dans /etc/passwd, `getpwuid` n'a donc
+# rien à rendre, et la valeur de repli varie selon la JVM. Un chemin absolu ne dépend d'aucune de
+# ces deux choses.
+#
+# VOLUME pour que ces fichiers n'atterrissent jamais dans la couche d'écriture du conteneur, qui
+# part avec lui : sans lui, une compétence approuvée par un humain disparaissait au premier
+# `docker compose up --force-recreate`. Un volume nommé reste préférable, et docker-compose.yml
+# en monte un — celui-ci n'est que le filet.
+ENV KEX_AGENT_MEMORY_STORAGE_DIRECTORY=/var/lib/kex/memory \
+    KEX_MCP_RUNTIME_STORAGE_PATH=/var/lib/kex/mcp-servers.enc
+# `chown` et pas `install -o` : `install` résout son propriétaire par `getpwnam`, et le refuse
+# quand il est numérique et absent de /etc/passwd — soit exactement la situation que le paragraphe
+# ci-dessus décrit. `chown` accepte un uid numérique sans entrée correspondante. Le coreutils de
+# certaines machines de développement l'accepte, celui de l'image de base non : l'erreur
+# n'apparaît donc qu'à la construction de l'image.
+RUN mkdir -p /var/lib/kex/memory \
+    && chmod 700 /var/lib/kex /var/lib/kex/memory \
+    && chown -R 10001:10001 /var/lib/kex
+VOLUME /var/lib/kex
+
 EXPOSE 8081
 USER 10001:10001
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "/app/app.jar"]

@@ -15,6 +15,7 @@ import com.kex.agent.agent.AgentStructuredAnswer;
 import com.kex.agent.agent.AgentTimeoutException;
 import com.kex.agent.agent.InvalidJsonSchemaException;
 import com.kex.agent.agent.StructuredOutputException;
+import com.kex.agent.config.ActorIdentity;
 import com.kex.agent.mcp.McpConfigurationBundle;
 import com.kex.agent.mcp.McpConnectionTestResult;
 import com.kex.agent.mcp.McpResourceContent;
@@ -84,14 +85,14 @@ class AgentController {
     @PostMapping("/chat")
     AgentAnswer chat(@Valid @RequestBody ChatRequest request, Principal principal) {
         if (request.task() != null) {
-            return agentService.askForTask(actor(principal), request.conversationId(), request.message(), request.task());
+            return agentService.askForTask(tenant(principal), request.conversationId(), request.message(), request.task());
         }
-        return agentService.ask(actor(principal), request.conversationId(), request.message());
+        return agentService.ask(tenant(principal), request.conversationId(), request.message());
     }
 
     @PostMapping("/chat/structured")
     AgentStructuredAnswer chatStructured(@Valid @RequestBody StructuredChatRequest request, Principal principal) {
-        return agentService.askStructured(actor(principal), request.conversationId(), request.message(), request.schema());
+        return agentService.askStructured(tenant(principal), request.conversationId(), request.message(), request.schema());
     }
 
     /**
@@ -104,8 +105,8 @@ class AgentController {
     @PostMapping(path = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     Flux<ServerSentEvent<String>> stream(@Valid @RequestBody ChatRequest request, Principal principal) {
         AgentStream stream = request.task() == null
-                ? agentService.stream(actor(principal), request.conversationId(), request.message())
-                : agentService.streamForTask(actor(principal), request.conversationId(), request.message(), request.task());
+                ? agentService.stream(tenant(principal), request.conversationId(), request.message())
+                : agentService.streamForTask(tenant(principal), request.conversationId(), request.message(), request.task());
         return Flux.concat(
                         Flux.just(event("conversation", stream.conversationId())),
                         stream.events().map(AgentController::event))
@@ -145,7 +146,7 @@ class AgentController {
     @DeleteMapping("/conversations/{conversationId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void clear(@PathVariable String conversationId, Principal principal) {
-        agentService.clear(actor(principal), conversationId);
+        agentService.clear(tenant(principal), conversationId);
     }
 
     @GetMapping("/mcp/servers")
@@ -269,6 +270,16 @@ class AgentController {
 
     private static String actor(Principal principal) {
         return principal == null ? "Anonyme" : principal.getName();
+    }
+
+    /**
+     * L'espace de données de l'appelant, pas son nom : ce que le modèle retient d'un échange
+     * appartient à l'équipe, là où l'audit doit nommer la personne. Sans locataire déclaré les
+     * deux coïncident — voir {@link ActorIdentity}.
+     */
+    private static String tenant(Principal principal) {
+        String tenant = ActorIdentity.tenantOf(principal);
+        return tenant == null ? "Anonyme" : tenant;
     }
 
     @GetMapping("/mcp/servers/{connection}/resources")
