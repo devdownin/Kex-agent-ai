@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -59,6 +60,12 @@ public final class FileLearningRepository implements LearningRepository {
         if (next.size() == entries.size()) return false;
         save(next);
         return true;
+    }
+
+    @Override
+    public synchronized Optional<String> ownerOf(String id) {
+        return entries.stream().filter(entry -> entry.id().equals(id))
+                .map(LearningEntry::owner).findFirst();
     }
 
     private void save(List<LearningEntry> next) {

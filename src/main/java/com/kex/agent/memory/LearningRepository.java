@@ -4,6 +4,7 @@ package com.kex.agent.memory;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 public interface LearningRepository {
     void add(LearningEntry entry);
@@ -11,4 +12,16 @@ public interface LearningRepository {
     /** Atomic transition. Only a pending skill owned by this principal may change. */
     boolean review(String owner, String id, String status, String actor, Instant at, String reason);
     boolean delete(String owner, String id);
+
+    /**
+     * Le propriétaire d'une entrée, sans le connaître d'avance. Approuver exige {@code ADMIN} ;
+     * proposer n'exige que de converser, et une compétence tirée de refus appartient à l'opérateur
+     * qui a refusé. Chercher l'entrée sous l'identité de l'appelant rendait donc inapprouvable tout
+     * ce qu'un non-administrateur avait proposé.
+     *
+     * <p>La transition, elle, reste atomique sur {@code (owner, id, PENDING)} : ceci ne fait que
+     * dire à qui elle appartient. Une entrée supprimée entre les deux appels fait simplement
+     * échouer la revue, comme une entrée inconnue.
+     */
+    Optional<String> ownerOf(String id);
 }

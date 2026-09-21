@@ -60,12 +60,12 @@ public final class SkillsService {
      * Retire une compétence approuvée de la bibliothèque. Jamais automatique : le curateur signale,
      * un humain nommé retire — même exigence que l'approbation, et pour la même raison.
      */
-    public void retire(String owner, String id, String actor, String reason) {
-        MemoryIdentity.require(owner);
+    public void retire(String id, String actor, String reason) {
         MemoryIdentity.require(actor);
         if (reason == null || reason.isBlank() || reason.length() > 2000) {
             throw new IllegalArgumentException("Motif de retrait requis et limité à 2000 caractères");
         }
+        String owner = ownerOrFail(id, "Compétence inconnue ou non approuvée");
         if (approved(owner).stream().noneMatch(entry -> entry.id().equals(id))) {
             throw new IllegalStateException("Compétence inconnue ou non approuvée");
         }
@@ -74,15 +74,30 @@ public final class SkillsService {
         }
     }
 
-    public LearningEntry review(String owner, String id, boolean approve, String actor, String reason) {
-        MemoryIdentity.require(owner);
+    /**
+     * Approuve ou rejette, quel que soit le propriétaire. La revue est un geste d'administration :
+     * elle exige {@code ADMIN}, là où proposer ne demande que de converser et où une compétence
+     * tirée de refus appartient à l'opérateur qui a refusé. Chercher l'entrée sous l'identité de
+     * l'appelant rendait donc inapprouvable tout ce qu'un non-administrateur avait proposé — la
+     * proposition restait {@code PENDING} à vie, faute d'un principal à la fois propriétaire et
+     * administrateur.
+     *
+     * <p>La compétence reste celle de son propriétaire : c'est son contexte qu'elle enrichit une
+     * fois approuvée, et {@code actor} garde trace de qui a tranché.
+     */
+    public LearningEntry review(String id, boolean approve, String actor, String reason) {
         MemoryIdentity.require(actor);
         if (reason == null) reason = "";
         if (reason.length() > 2000) throw new IllegalArgumentException("Motif limité à 2000 caractères");
+        String owner = ownerOrFail(id, "Compétence inconnue ou déjà examinée");
         if (!repository.review(owner, id, approve ? "APPROVED" : "REJECTED", actor, clock.instant(), reason)) {
             throw new IllegalStateException("Compétence inconnue ou déjà examinée");
         }
         return list(owner).stream().filter(entry -> entry.id().equals(id)).findFirst().orElseThrow();
+    }
+
+    private String ownerOrFail(String id, String message) {
+        return repository.ownerOf(id).orElseThrow(() -> new IllegalStateException(message));
     }
 
     private static void requireText(String value, int limit, String field) {

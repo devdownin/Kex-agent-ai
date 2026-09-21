@@ -292,4 +292,13 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   extinction par défaut avec refus de démarrer sans secret. La comparaison de signature passe par
   `MessageDigest.isEqual` — un `equals` sur chaîne fuit par son temps de réponse.
 
+- **Chercher une entrée sous l'identité de l'appelant, c'est supposer qu'il en est propriétaire.**
+  Approuver une compétence exige `ADMIN` ; en proposer une ne demande que de converser, et celles que
+  la boucle de refus produit appartiennent à l'opérateur qui a refusé. `review` cherchait l'entrée
+  sous le principal appelant : il fallait donc être à la fois propriétaire *et* administrateur, ce
+  qu'aucune clé `OPERATOR` n'est jamais — ces compétences restaient `PENDING` à vie. Le propriétaire
+  se résout désormais par l'identifiant (`LearningRepository.ownerOf`), la transition restant atomique
+  sur `(owner, id, PENDING)`. Corollaire : rejeter exige `ADMIN` comme approuver, sans quoi un
+  opérateur viderait la file de revue d'une autre équipe.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
