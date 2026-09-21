@@ -18,3 +18,11 @@ spring:
         repository:
           jdbc:
             initialize-schema: always
+  # Migrations des tables propres à l'agent (V1__baseline.sql et ce qui suivra). baseline-version
+  # à 0, sous la première migration, plutôt que le défaut à 1 : V1 doit réellement s'exécuter, pas
+  # être sautée comme « déjà là » — c'est elle qui écrit ce qui manque encore sur une base qui
+  # tournait déjà sous une version antérieure à cette migration, via ses `IF NOT EXISTS`. Sur une
+  # base neuve elle s'exécute tout autant, et crée tout normalement.
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: "0"

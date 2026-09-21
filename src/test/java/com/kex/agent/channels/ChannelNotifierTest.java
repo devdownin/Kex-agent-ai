@@ -89,9 +89,9 @@ class ChannelNotifierTest {
 
     @Test
     void payload_builders_build_valid_structures() {
-        ChannelMessage msg = new ChannelMessage("subject text", "body text", URI.create("https://action.example"), Instant.parse("2026-09-20T13:00:00Z"));
+        ChannelMessage msg = new ChannelMessage("subject text", "body text", URI.create("https://action.example"), Instant.parse("2026-09-20T13:00:00Z"), null);
 
-        Map<String, Object> slackPayload = SlackChannelAdapter.payload(msg);
+        Map<String, Object> slackPayload = SlackChannelAdapter.payload(msg, false);
         assertThat(slackPayload).containsEntry("text", "Notification Kex");
 
         Map<String, Object> teamsPayload = TeamsChannelAdapter.payload(msg);

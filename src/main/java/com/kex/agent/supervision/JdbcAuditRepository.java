@@ -10,9 +10,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Actif sous le profil {@code shared-memory}, où {@code JdbcTemplate} existe déjà pour la mémoire
- * de conversation. {@code CREATE TABLE IF NOT EXISTS} à la construction, comme
- * {@code spring.ai.chat.memory.repository.jdbc.initialize-schema: always} pour la même raison :
- * une seule ligne à retenir plutôt qu'un outil de migration pour une table.
+ * de conversation. Schéma posé par {@code db/migration/V1__baseline.sql} — voir cette migration
+ * pour pourquoi ce n'est plus un {@code CREATE TABLE IF NOT EXISTS} à la construction.
  *
  * <p>Une ligne par entrée, aucune mise à jour : l'audit ne se corrige pas, il s'accumule.
  */
@@ -22,20 +21,6 @@ class JdbcAuditRepository implements AuditRepository {
 
     JdbcAuditRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS kex_supervision_audit (
-                  id VARCHAR(64) PRIMARY KEY,
-                  occurred_at TIMESTAMP NOT NULL,
-                  actor VARCHAR(255),
-                  action VARCHAR(255),
-                  process_id VARCHAR(255),
-                  decision_id VARCHAR(64),
-                  reason VARCHAR(2000),
-                  policy_version VARCHAR(64),
-                  result VARCHAR(2000),
-                  correlation_id VARCHAR(64),
-                  trace_id VARCHAR(64)
-                )""");
     }
 
     @Override

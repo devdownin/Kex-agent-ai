@@ -59,13 +59,6 @@ class JdbcRateLimiter implements RateLimiter {
         this.capacity = properties.burst() * SCALE;
         this.refillPerMinute = properties.requestsPerMinute() * SCALE;
         this.millisToFill = this.capacity * MILLIS_PER_MINUTE / this.refillPerMinute;
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS kex_rate_limit (
-                  principal VARCHAR(255) PRIMARY KEY,
-                  tokens BIGINT NOT NULL,
-                  refilled_at TIMESTAMP NOT NULL,
-                  revision BIGINT NOT NULL
-                )""");
     }
 
     @Override

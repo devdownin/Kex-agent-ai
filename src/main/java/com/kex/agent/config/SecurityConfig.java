@@ -66,11 +66,14 @@ class SecurityConfig {
                         // qu'une future route servie ici n'hérite pas de l'ouverture.
                         .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**").permitAll()
                         // Le rappel de messagerie ne porte pas de bearer : Slack ou Teams n'en
-                        // émettent pas. Il n'est pas ouvert pour autant — la route n'existe que si
-                        // kex.agent.channels.inbound.enabled, exige une signature HMAC sur le corps
-                        // brut avec fenêtre d'horodatage, et n'agit que pour un expéditeur déclaré.
-                        // Énumérée au chemin exact, jamais par un joker sur /api/agent/channels.
-                        .requestMatchers(HttpMethod.POST, "/api/agent/channels/callback").permitAll()
+                        // émettent pas. Ni l'une ni l'autre route n'est ouverte pour autant — l'une
+                        // n'existe que si kex.agent.channels.inbound.enabled, l'autre que si
+                        // channels.slack-signing-secret est renseignée ; chacune exige sa propre
+                        // signature HMAC sur le corps brut avec fenêtre d'horodatage, et n'agit que
+                        // pour un expéditeur déclaré. Énumérées au chemin exact, jamais par un
+                        // joker sur /api/agent/channels.
+                        .requestMatchers(HttpMethod.POST, "/api/agent/channels/callback",
+                                "/api/agent/channels/slack/interactivity").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/agent/chat", "/api/agent/chat/structured",
                                 "/api/agent/chat/stream").hasAnyRole("CHAT", "OPERATOR", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/conversations/**")
@@ -99,6 +102,10 @@ class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/mcp/servers/*").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/agent/supervision/policy",
                                 "/api/agent/charter").hasRole("ADMIN")
+                        // Transverse par construction — voir SkillsController.reviewQueue — donc
+                        // au même niveau d'accès que trancher elle-même, pas celui d'une lecture
+                        // ordinaire de compétences.
+                        .requestMatchers(HttpMethod.GET, "/api/agent/skills/review-queue").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/memory/*",
                                 "/api/agent/memory/summaries/*", "/api/agent/knowledge")
                                 .hasRole("ADMIN")

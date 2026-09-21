@@ -8,7 +8,7 @@ La fenêtre de conversation reste bornée. En complément, Kex conserve des rés
 
 ## Canaux et planification
 
-Slack, Teams et e-mail sont des sorties configurées par l'administrateur. Un message d'approbation ouvre la console ; le clic ne donne aucun droit et l'action exige toujours une authentification, une décision encore pendante et les seuils Kex.
+Slack, Teams et e-mail sont des sorties configurées par l'administrateur. Par défaut, un message d'approbation ouvre la console ; le clic ne donne aucun droit et l'action exige toujours une authentification, une décision encore pendante et les seuils Kex. Avec `channels.slack-signing-secret` renseignée, Slack gagne aussi deux boutons Approuver/Refuser qui agissent directement — la signature propre à l'interactivité de Slack et une correspondance expéditeur → opérateur déclaré remplacent alors le bearer, jamais le contournent. Teams n'a pas d'équivalent : une Adaptive Card ne livre nulle part sans un Bot Framework enregistré, son message reste un lien.
 
 Les automatisations sont désactivées par défaut. Une tâche récurrente possède un cron à six champs, un fuseau IANA et une liste d'outils en lecture seule configurée par l'administrateur. La revendication atomique en base évite les doublons entre instances.
 

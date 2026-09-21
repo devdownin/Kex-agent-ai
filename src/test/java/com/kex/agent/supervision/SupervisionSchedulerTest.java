@@ -10,6 +10,7 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 import javax.sql.DataSource;
 
+import com.kex.agent.testsupport.FlywayTestSchema;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,7 @@ class SupervisionSchedulerTest {
     void setUp() {
         JdbcDataSource dataSource = new JdbcDataSource();
         dataSource.setURL("jdbc:h2:mem:supervision-lock-" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
+        FlywayTestSchema.migrate(dataSource);
         jdbcTemplate = new JdbcTemplate((DataSource) dataSource);
         supervision = mock(SupervisionService.class);
     }

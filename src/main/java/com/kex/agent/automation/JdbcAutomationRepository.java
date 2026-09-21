@@ -15,7 +15,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.JdbcTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Atomic compare-and-set claims; advancing next_run before execution prevents occurrence replay. */
+/**
+ * Atomic compare-and-set claims; advancing next_run before execution prevents occurrence replay.
+ * Schema (both tables, both indexes) laid down by {@code db/migration/V1__baseline.sql}.
+ */
 final class JdbcAutomationRepository {
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
@@ -23,37 +26,6 @@ final class JdbcAutomationRepository {
     JdbcAutomationRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
         this.transaction = new TransactionTemplate(new JdbcTransactionManager(jdbc.getDataSource()));
-        jdbc.execute("""
-                CREATE TABLE IF NOT EXISTS kex_automation (
-                  id VARCHAR(36) PRIMARY KEY,
-                  owner VARCHAR(160) NOT NULL,
-                  name VARCHAR(160) NOT NULL,
-                  prompt TEXT NOT NULL,
-                  cron VARCHAR(120) NOT NULL,
-                  zone VARCHAR(80) NOT NULL,
-                  enabled BOOLEAN NOT NULL,
-                  next_run TIMESTAMP NOT NULL,
-                  last_run TIMESTAMP,
-                  status VARCHAR(32) NOT NULL,
-                  result TEXT NOT NULL,
-                  created_at TIMESTAMP NOT NULL,
-                  updated_at TIMESTAMP NOT NULL,
-                  locked_until TIMESTAMP NOT NULL,
-                  claim_id VARCHAR(36) NOT NULL,
-                  revision BIGINT NOT NULL
-                )""");
-        jdbc.execute("CREATE INDEX IF NOT EXISTS kex_automation_due ON kex_automation (enabled, next_run)");
-        jdbc.execute("""
-                CREATE TABLE IF NOT EXISTS kex_automation_audit (
-                  id VARCHAR(36) PRIMARY KEY,
-                  automation_id VARCHAR(36) NOT NULL,
-                  owner VARCHAR(160) NOT NULL,
-                  at TIMESTAMP NOT NULL,
-                  actor VARCHAR(160) NOT NULL,
-                  action VARCHAR(32) NOT NULL,
-                  result TEXT NOT NULL
-                )""");
-        jdbc.execute("CREATE INDEX IF NOT EXISTS kex_automation_audit_owner ON kex_automation_audit (owner, at)");
     }
 
     Automation create(String owner, AutomationRequest request, Instant now, Instant next) {

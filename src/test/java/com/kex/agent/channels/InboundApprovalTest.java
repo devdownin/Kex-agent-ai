@@ -135,7 +135,7 @@ class InboundApprovalTest {
     }
 
     private static ChannelProperties properties(Map<String, String> operators) {
-        return new ChannelProperties(true, "https://console.example.com", "", "",
+        return new ChannelProperties(true, "https://console.example.com", "", "", "",
                 new ChannelProperties.Email(false, "", java.util.List.of()),
                 new ChannelProperties.Inbound(true, SECRET, Duration.ofMinutes(5), operators));
     }

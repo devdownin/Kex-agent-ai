@@ -86,6 +86,16 @@ class ApiKeyPrincipalTest {
     }
 
     /**
+     * Même niveau d'accès que la revue qu'elle rend trouvable — pas celui d'une lecture ordinaire
+     * de compétences, qu'{@code OPERATOR} a déjà.
+     */
+    @Test
+    void seul_un_admin_peut_lister_la_file_de_revue() throws Exception {
+        assertThat(status("/api/agent/skills/review-queue", "Bearer jeton-ops")).isEqualTo(403);
+        assertThat(status("/api/agent/skills/review-queue", "Bearer jeton-admin")).isEqualTo(200);
+    }
+
+    /**
      * Rejeter engage autant qu'approuver depuis que la revue porte sur n'importe quel propriétaire :
      * sans cette règle, un opérateur pourrait vider la file de revue d'une autre équipe.
      */

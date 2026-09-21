@@ -181,6 +181,20 @@
       <artifactId>postgresql</artifactId>
       <scope>runtime</scope>
     </dependency>
+    <!-- Migrations versionnées pour les tables propres à l'agent (audit, décisions, mémoire,
+         débit) sous shared-memory. Inerte comme le starter JDBC ci-dessus : conditionnelle à un
+         bean DataSource, elle ne s'active pas hors de ce profil. La mémoire de conversation garde
+         son propre schéma, posé par Spring AI via initialize-schema — deux mécanismes distincts
+         pour deux propriétaires distincts du schéma qu'ils couvrent. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-flyway</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
 
     <dependency>
       <groupId>org.springframework.boot</groupId>

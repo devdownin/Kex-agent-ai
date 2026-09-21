@@ -10,6 +10,7 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 import javax.sql.DataSource;
 
+import com.kex.agent.testsupport.FlywayTestSchema;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.SimpleDriverDataSource;
@@ -30,6 +31,7 @@ class JdbcRateLimiterTest {
         SimpleDriverDataSource dataSource = new SimpleDriverDataSource();
         dataSource.setDriverClass(org.h2.Driver.class);
         dataSource.setUrl("jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
+        FlywayTestSchema.migrate(dataSource);
         return dataSource;
     }
 

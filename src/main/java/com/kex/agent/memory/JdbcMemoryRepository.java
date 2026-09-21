@@ -12,9 +12,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Actif sous le profil {@code shared-memory}, où {@code JdbcTemplate} existe déjà pour la mémoire
- * de conversation et l'audit. {@code CREATE TABLE IF NOT EXISTS} à la construction, même raison
- * que {@code JdbcAuditRepository} : une seule ligne à retenir plutôt qu'un outil de migration pour
- * une table.
+ * de conversation et l'audit. Schéma posé par {@code db/migration/V1__baseline.sql}, colonne
+ * {@code owner} comprise — elle y arrive par un {@code ALTER TABLE ADD COLUMN IF NOT EXISTS},
+ * seule façon de couvrir à la fois une base neuve et une base qui portait déjà la table sans elle.
  */
 class JdbcMemoryRepository implements MemoryRepository {
 
@@ -24,16 +24,6 @@ class JdbcMemoryRepository implements MemoryRepository {
     JdbcMemoryRepository(JdbcTemplate jdbcTemplate, int capacity) {
         this.jdbcTemplate = jdbcTemplate;
         this.capacity = capacity;
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS kex_agent_memory (
-                  id VARCHAR(64) PRIMARY KEY,
-                  content VARCHAR(2000) NOT NULL,
-                  conversation_id VARCHAR(64),
-                  created_at TIMESTAMP NOT NULL,
-                  superseded_by VARCHAR(64),
-                  owner VARCHAR(255) NOT NULL DEFAULT 'kex-internal'
-                )""");
-        jdbcTemplate.execute("ALTER TABLE kex_agent_memory ADD COLUMN IF NOT EXISTS owner VARCHAR(255) NOT NULL DEFAULT 'kex-internal'");
     }
 
     @Override

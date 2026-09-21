@@ -78,6 +78,28 @@ class SkillReviewOwnershipTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
+    /**
+     * Le complément qui manquait à cette PR-ci : un administrateur peut trancher n'importe quel
+     * propriétaire, mais ne pouvait *trouver* une compétence en attente qu'en lisant son
+     * identifiant dans l'audit. La file de revue rend transverse la découverte, comme la revue
+     * elle-même l'est déjà — et se vide au fur et à mesure des décisions.
+     */
+    @Test
+    void la_file_de_revue_traverse_les_proprietaires_et_se_vide_a_la_decision(@TempDir Path directory) {
+        SkillsService skills = skills(directory);
+        LearningEntry deOpsConsole = skills.propose("ops-console", "Ne pas redémarrer en journée",
+                "# procédure", "preuve", null);
+        skills.propose("ci-pipeline", "Ne pas rejouer un sujet en pointe", "# procédure", "preuve", null);
+
+        assertThat(skills.pendingReviews()).extracting(LearningEntry::owner)
+                .containsExactlyInAnyOrder("ops-console", "ci-pipeline");
+
+        skills.review(deOpsConsole.id(), true, "admin", "règle juste");
+
+        assertThat(skills.pendingReviews()).extracting(LearningEntry::owner)
+                .containsExactly("ci-pipeline");
+    }
+
     private SkillsService skills(Path directory) {
         LearningRepository repository = new FileLearningRepository(new ObjectMapper().findAndRegisterModules(),
                 directory.resolve("learning.json"), 200);

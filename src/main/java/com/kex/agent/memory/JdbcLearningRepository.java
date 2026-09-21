@@ -9,6 +9,7 @@ import java.util.Optional;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 
+/** Schéma posé par {@code db/migration/V1__baseline.sql}, index compris. */
 public final class JdbcLearningRepository implements LearningRepository {
     private final JdbcTemplate jdbc;
     private final int capacity;
@@ -16,15 +17,6 @@ public final class JdbcLearningRepository implements LearningRepository {
     public JdbcLearningRepository(JdbcTemplate jdbc, int capacity) {
         this.jdbc = jdbc;
         this.capacity = Math.max(1, capacity);
-        jdbc.execute("""
-                CREATE TABLE IF NOT EXISTS kex_agent_learning (
-                  id VARCHAR(64) PRIMARY KEY, owner VARCHAR(255) NOT NULL,
-                  kind VARCHAR(16) NOT NULL, title VARCHAR(200) NOT NULL,
-                  markdown TEXT NOT NULL, evidence TEXT NOT NULL, conversation_id VARCHAR(255),
-                  created_at TIMESTAMP NOT NULL, status VARCHAR(16) NOT NULL,
-                  reviewed_by VARCHAR(255), reviewed_at TIMESTAMP, review_reason VARCHAR(2000)
-                )""");
-        jdbc.execute("CREATE INDEX IF NOT EXISTS kex_learning_owner_kind ON kex_agent_learning(owner, kind, created_at)");
     }
 
     @Override
@@ -73,5 +65,19 @@ public final class JdbcLearningRepository implements LearningRepository {
     public Optional<String> ownerOf(String id) {
         return jdbc.query("SELECT owner FROM kex_agent_learning WHERE id = ?",
                 (rs, row) -> rs.getString("owner"), id).stream().findFirst();
+    }
+
+    @Override
+    public List<LearningEntry> pending(String kind) {
+        return jdbc.query("""
+                SELECT * FROM kex_agent_learning WHERE kind = ? AND status = 'PENDING'
+                ORDER BY created_at ASC, id ASC""", (rs, row) -> {
+                    Timestamp reviewedAt = rs.getTimestamp("reviewed_at");
+                    return new LearningEntry(rs.getString("id"), rs.getString("owner"), rs.getString("kind"),
+                            rs.getString("title"), rs.getString("markdown"), rs.getString("evidence"),
+                            rs.getString("conversation_id"), rs.getTimestamp("created_at").toInstant(),
+                            rs.getString("status"), rs.getString("reviewed_by"),
+                            reviewedAt == null ? null : reviewedAt.toInstant(), rs.getString("review_reason"));
+                }, kind);
     }
 }

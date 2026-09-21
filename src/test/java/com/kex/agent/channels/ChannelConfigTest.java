@@ -29,6 +29,7 @@ class ChannelConfigTest {
         ChannelProperties properties = new ChannelProperties(true,
                 "https://console.example.com",
                 "https://hooks.slack.com/services/1",
+                "",
                 "https://outlook.office.com/webhook/1",
                 new ChannelProperties.Email(true, "from@example.com", List.of("to@example.com")), NO_INBOUND);
 
@@ -51,7 +52,7 @@ class ChannelConfigTest {
         @SuppressWarnings("unchecked")
         ObjectProvider<JavaMailSender> mailProvider = mock(ObjectProvider.class);
 
-        ChannelProperties invalidSlack = new ChannelProperties(true, "https://console.example.com", "http://insecure.slack.com", "",
+        ChannelProperties invalidSlack = new ChannelProperties(true, "https://console.example.com", "http://insecure.slack.com", "", "",
                 new ChannelProperties.Email(false, "", List.of()), NO_INBOUND);
 
         assertThatThrownBy(() -> config.channelNotifier(invalidSlack, builder, mailProvider, clock))
@@ -65,7 +66,7 @@ class ChannelConfigTest {
         @SuppressWarnings("unchecked")
         ObjectProvider<JavaMailSender> mailProvider = mock(ObjectProvider.class);
 
-        ChannelProperties empty = new ChannelProperties(true, "https://console.example.com", "", "",
+        ChannelProperties empty = new ChannelProperties(true, "https://console.example.com", "", "", "",
                 new ChannelProperties.Email(false, "", List.of()), NO_INBOUND);
 
         assertThatThrownBy(() -> config.channelNotifier(empty, builder, mailProvider, clock))
