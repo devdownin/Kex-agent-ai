@@ -301,4 +301,62 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   sur `(owner, id, PENDING)`. Corollaire : rejeter exige `ADMIN` comme approuver, sans quoi un
   opérateur viderait la file de revue d'une autre équipe.
 
+- **Restreindre la revue d'une compétence au locataire de l'appelant referait le même blocage,
+  par une autre porte.** Sans locataire déclaré, une clé est son propre locataire : `admin` et
+  `ops-console` n'en partagent jamais un par défaut. Exiger que le locataire de l'approbateur
+  coïncide avec celui du propriétaire rendrait donc à nouveau inapprouvable, par défaut, tout ce
+  que `ownerOf` a été introduit pour rendre approuvable. La revue reste un geste de plateforme,
+  transverse par construction — ce qui manquait n'était pas une restriction mais une découverte
+  (`GET /api/agent/skills/review-queue`), pour ne plus dépendre de l'audit pour trouver un
+  identifiant à trancher.
+
+- **Un `CREATE TABLE IF NOT EXISTS` posé à la construction n'est pas une migration, même
+  idempotent.** Il ne rejoue rien dans l'ordre et ne dit jamais ce qu'une base donnée porte
+  réellement — `kex_agent_memory` avait déjà eu besoin d'un second `ALTER TABLE ADD COLUMN IF NOT
+  EXISTS` pour `owner`, preuve que « ça ne change jamais » ne tenait pas. Flyway prend le relais
+  sous `shared-memory`, avec la même exclusion par défaut que `DataSourceAutoConfiguration` :
+  `FlywayAutoConfiguration` ne se déclenche que sur `flyway-core` au classpath
+  (`@ConditionalOnClass`), pas sur un bean `DataSource` déjà là — sans l'exclusion, elle tenterait
+  de migrer une base absente hors de ce profil.
+
+- **Retrofiter Flyway sur une base qui tournait déjà sous l'ancien mécanisme veut dire que `V1` doit
+  réellement s'exécuter, pas être sautée.** Le défaut de Flyway (`baseline-version: 1`) marquerait
+  la première migration « déjà appliquée » sans l'exécuter dès qu'un schéma non vide et non géré
+  est détecté — et une table absente de cette base précise (parce que son propre dépôt n'avait
+  jamais eu l'occasion de tourner) resterait absente pour de bon. `baseline-version: "0"` place le
+  curseur *avant* `V1`, qui garde alors exceptionnellement le style `IF NOT EXISTS` de l'ancien
+  mécanisme : elle s'exécute pour de vrai sur toute base, neuve ou partielle, sans jamais échouer
+  sur ce qui existe déjà. `FlywayBaselineRetrofitTest` le prouve dans les deux sens.
+
+- **Un dépôt JDBC testé seul, contre son propre H2, ne passe plus par le contexte Spring qui
+  applique une migration.** Une DDL réécrite à la main dans le test diverge tôt ou tard de celle
+  que la production exécute réellement, en silence. `FlywayTestSchema.migrate(dataSource)` rejoue
+  la vraie migration avant chaque test qui construit son propre `DataSource`.
+
+- **Le bouton d'une notification n'est un raccourci que s'il déclenche vraiment quelque chose.**
+  `InboundApprovalController` existait pour approuver depuis Slack sans ouvrir de navigateur, mais
+  rien de ce que `SlackChannelAdapter` postait ne pouvait l'appeler : le seul bouton envoyé liait
+  vers la console — exactement la friction que la route existe pour éviter. Construite, jamais
+  branchée, une capacité reste une promesse non tenue à l'écran.
+
+- **La signature d'interactivité de Slack n'est ni le même secret ni le même calcul que l'entrée
+  générique.** Le secret vient de Slack, à la création de l'App ; celui de l'entrée générique est
+  choisi par l'exploitant. La base signée diffère aussi (`v0:<horodatage>:<corps>`, résultat
+  préfixé `v0=`, contre `<horodatage>.<corps>` en hexadécimal nu) : les confondre laisserait une
+  signature calculée pour l'une validée avec le secret de l'autre. Deux classes séparées
+  (`SlackRequestSignature`, `InboundSignature`), jamais une seule paramétrée par le format.
+
+- **Un filtre qui lit `getParameter()` avant un contrôleur peut vider `@RequestBody`.** Pour un
+  corps `application/x-www-form-urlencoded`, le conteneur consomme le flux dès qu'un `getParameter`
+  déclenche l'analyse des paramètres — un appel direct à la méthode du contrôleur ne l'aurait
+  jamais révélé, puisqu'il contourne toute la chaîne. `SlackInteractivityWiringTest` poste une vraie
+  requête HTTP à travers le contexte Spring complet pour le prouver, plutôt que de le supposer parce
+  que ça compile.
+
+- **Une Adaptive Card Teams ne livre nulle part sans un Bot Framework enregistré.** `Action.Submit`
+  suppose une identité Azure AD et un canal de messagerie inscrit, bien au-delà d'un webhook
+  entrant. Ce n'est pas un manque à combler discrètement plus tard : c'est une limite de la
+  plateforme, à dire dans le code et la doc plutôt qu'à contourner par un flux qui semblerait
+  fonctionner sans avoir jamais été vérifié contre un vrai tenant Teams.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

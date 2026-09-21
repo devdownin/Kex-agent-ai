@@ -29,7 +29,15 @@ class ChannelConfig {
         List<ChannelAdapter> adapters = new ArrayList<>();
         if (present(properties.slackWebhookUrl())) {
             validateWebhook(properties.slackWebhookUrl());
-            adapters.add(new SlackChannelAdapter(client, properties.slackWebhookUrl()));
+            if (present(properties.slackSigningSecret()) && !properties.inbound().enabled()) {
+                // Sans opérateurs déclarés, personne ne pourrait jamais devenir l'acteur d'une
+                // approbation cliquée dans Slack — même exigence que la route JSON générique,
+                // posée ici pour la même raison : au démarrage, pas au premier clic.
+                throw new IllegalArgumentException(
+                        "channels.slack-signing-secret exige channels.inbound.enabled");
+            }
+            adapters.add(new SlackChannelAdapter(client, properties.slackWebhookUrl(),
+                    present(properties.slackSigningSecret())));
         }
         if (present(properties.teamsWebhookUrl())) {
             validateWebhook(properties.teamsWebhookUrl());
@@ -62,6 +70,23 @@ class ChannelConfig {
             throw new IllegalArgumentException("channels.inbound.enabled exige au moins un opérateur déclaré");
         }
         return new InboundSignature(properties.inbound().secret(), properties.inbound().tolerance(), clock);
+    }
+
+    /**
+     * Même posture que {@link #inboundSignature} — le secret est vérifié au démarrage — mais
+     * conditionnée à sa propre propriété : {@code channels.inbound.enabled} seul active déjà la
+     * route JSON générique, sans exiger que Slack soit configuré en retour. Les deux partagent en
+     * revanche {@code inbound.operators} : c'est la même liste de qui a le droit de décider sans
+     * bearer, quel que soit le transport par lequel la demande arrive.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "kex.agent.channels", name = "slack-signing-secret")
+    SlackRequestSignature slackRequestSignature(ChannelProperties properties, Clock clock) {
+        if (properties.inbound().operators().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "channels.slack-signing-secret exige au moins un opérateur déclaré sous channels.inbound");
+        }
+        return new SlackRequestSignature(properties.slackSigningSecret(), properties.inbound().tolerance(), clock);
     }
 
     private static boolean present(String value) {

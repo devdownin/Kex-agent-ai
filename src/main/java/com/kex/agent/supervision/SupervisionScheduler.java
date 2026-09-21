@@ -47,12 +47,9 @@ class SupervisionScheduler {
         this.clock = clock;
         this.lockAtMostFor = lockAtMostFor;
         this.adaptive = adaptive;
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS kex_supervision_lock (
-                  name VARCHAR(64) PRIMARY KEY,
-                  locked_until TIMESTAMP NOT NULL,
-                  locked_by VARCHAR(64) NOT NULL
-                )""");
+        // Table posée par db/migration/V1__baseline.sql. La ligne du verrou, elle, reste seedée
+        // ici plutôt que dans la migration : ce n'est pas du schéma mais un état initial d'instance
+        // (expiré dès l'origine), et l'idempotence de ce INSERT ne dépend pas de Flyway.
         jdbcTemplate.update("""
                 INSERT INTO kex_supervision_lock (name, locked_until, locked_by)
                 SELECT ?, ?, '' WHERE NOT EXISTS (SELECT 1 FROM kex_supervision_lock WHERE name = ?)""",

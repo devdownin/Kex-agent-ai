@@ -25,7 +25,7 @@ public final class ChannelNotifier {
     }
 
     public Optional<String> send(String subject, String body) {
-        return deliver(new ChannelMessage(subject, body, null, null));
+        return deliver(new ChannelMessage(subject, body, null, null, null));
     }
 
     public Optional<String> approval(Decision decision) {
@@ -41,7 +41,7 @@ public final class ChannelNotifier {
         return deliver(new ChannelMessage("Validation requise — " + decision.processName(),
                 decision.action() + "\n" + decision.context() + "\nImpact : " + decision.estimatedImpact()
                         + "\nConnectez-vous avec votre identité opérateur pour approuver ou rejeter.",
-                link, decision.expiresAt()));
+                link, decision.expiresAt(), decision.id()));
     }
 
     private Optional<String> deliver(ChannelMessage message) {

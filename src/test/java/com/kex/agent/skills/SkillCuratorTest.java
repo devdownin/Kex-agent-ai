@@ -148,5 +148,12 @@ class SkillCuratorTest {
         public boolean delete(String owner, String id) {
             return entries.removeIf(entry -> entry.owner().equals(owner) && entry.id().equals(id));
         }
+
+        @Override
+        public java.util.List<LearningEntry> pending(String kind) {
+            return entries.stream()
+                    .filter(entry -> kind.equals(entry.kind()) && "PENDING".equals(entry.status()))
+                    .toList();
+        }
     }
 }

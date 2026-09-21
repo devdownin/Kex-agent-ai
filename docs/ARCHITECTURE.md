@@ -1108,6 +1108,45 @@ traçage actif — et `traceId` relie la même entrée à ce qu'une trace OpenTe
 requête tracée). Une valeur non mesurée reste `null`, jamais inventée — même règle que `Coverage`
 plus haut, appliquée à l'infrastructure de traçage plutôt qu'à un relevé Kafka.
 
+### Le schéma des tables propres à l'agent est versionné, pas posé à la construction
+
+Chaque dépôt JDBC posait son propre schéma à sa construction, en `CREATE TABLE IF NOT EXISTS` —
+une ligne à retenir plutôt qu'un outil de migration, tant qu'il n'y avait qu'une poignée de tables
+qui ne changeaient jamais de forme après leur création. Ce raisonnement ne tenait déjà plus : une
+colonne ajoutée après coup (`owner` sur `kex_agent_memory`) l'avait déjà contredit une fois, avec
+un second `ALTER TABLE ADD COLUMN IF NOT EXISTS` à la construction du même dépôt. Aucune montée de
+version n'était rejouable dans l'ordre, ni auditée : relire `application.yml` ne disait pas ce
+qu'une base donnée portait réellement.
+
+Flyway prend le relais, sous `shared-memory` et lui seul — même bascule que `JdbcTemplate` :
+`spring-boot-starter-flyway` reste inerte hors de ce profil, exclu par défaut dans
+`application.yml` pour la même raison que `DataSourceAutoConfiguration` juste au-dessus. Sa propre
+autoconfiguration ne se déclenche que sur la présence de `flyway-core` au classpath
+(`@ConditionalOnClass`, pas `@ConditionalOnBean(DataSource.class)`) : sans l'exclusion, elle
+tenterait de migrer une base absente dès qu'une installation démarre hors de `shared-memory`.
+
+`db/migration/V1__baseline.sql` capture le schéma tel qu'il existait déjà en production, sous
+l'ancien mécanisme — toutes les tables propres à l'agent, `kex_supervision_audit` à
+`kex_automation_audit`. Elle garde exceptionnellement le style `IF NOT EXISTS` de l'ancien
+mécanisme, pour une raison qui ne vaudra plus pour aucune migration suivante :
+`baseline-version: "0"` place le curseur de Flyway *avant* cette version, pour qu'elle s'exécute
+réellement plutôt que d'être sautée comme « déjà appliquée » sur une base qui tournait déjà. Sur
+une base neuve elle crée tout ; sur une base qui portait déjà une partie de ces tables — depuis une
+version antérieure à cette migration — elle ne crée que ce qui manque encore, sans échouer sur ce
+qui existe. `FlywayBaselineRetrofitTest` le vérifie dans les deux sens, contre une base H2 qui ne
+porte qu'une seule des dix tables. Une migration future n'a pas cette contrainte : Flyway garantit
+alors lui-même qu'elle ne s'exécute qu'une fois, et `IF NOT EXISTS` n'y a plus sa place.
+
+La mémoire de conversation n'est pas dans cette migration : son schéma reste celui que
+`spring.ai.chat.memory.repository.jdbc.initialize-schema` pose, propriété d'un composant Spring AI
+que cette migration ne doit pas dupliquer — deux mécanismes, deux propriétaires, sur des tables
+différentes.
+
+Un dépôt testé seul, contre son propre H2 en mémoire, ne passe plus par le contexte Spring qui
+applique cette migration : `FlywayTestSchema.migrate(dataSource)` la rejoue directement dans chaque
+test JDBC, plutôt qu'une DDL réécrite à la main qui divergerait en silence de celle que la
+production exécute réellement.
+
 ### Une demande de validation expire
 
 Approuvée trois heures après les faits, une action agirait sur une situation qui n'existe plus. Les
@@ -1497,6 +1536,65 @@ La compétence reste celle de son propriétaire : c'est son contexte qu'elle enr
 approuvée, et l'acteur garde trace de qui a tranché. Corollaire nécessaire : rejeter exige `ADMIN`
 comme approuver. Une revue qui porte sur n'importe quel propriétaire et ne demanderait qu'`OPERATOR`
 d'un côté laisserait vider la file de revue d'une autre équipe.
+
+### La revue reste transverse aux locataires, par choix assumé — et se découvre désormais
+
+L'axe locataire (voir plus haut) cloisonne mémoire, charte et bibliothèque de compétences par
+défaut. La revue d'une compétence y échappe volontairement : elle continue de porter sur n'importe
+quel propriétaire, pas seulement ceux du locataire de l'administrateur qui approuve.
+
+L'alternative — exiger que les deux coïncident — romprait exactement ce que la section précédente
+vient de corriger. Sans locataire déclaré, une clé nommée est son propre locataire : un `ADMIN`
+nommé `admin` et un `OPERATOR` nommé `ops-console` ne partagent jamais le même locataire par
+défaut, quelle que soit la déclaration `api-key-tenants`. Restreindre la revue au même locataire
+rendrait donc inapprouvable, par défaut, exactement ce que `ownerOf` a été introduit pour rendre
+approuvable — le même blocage, revenu par une autre porte.
+
+La revue reste donc un geste d'administration à portée de plateforme, au même titre que la gestion
+des serveurs MCP ou la base de connaissance unique — pas une donnée de locataire. Ce qui manquait
+réellement n'était pas une restriction, mais une façon de *trouver* ce qu'on a le droit de
+trancher : `GET /api/agent/skills/review-queue` (`ADMIN`) liste tout ce qui est `PENDING`, tous
+propriétaires confondus, du plus ancien au plus récent — là où il fallait auparavant lire un
+identifiant dans l'audit, entrée par entrée, sans jamais savoir combien il en restait.
+
+### Le rappel de messagerie apprend l'interactivité native de Slack
+
+`InboundApprovalController` (`POST /api/agent/channels/callback`) existe pour qu'un opérateur
+d'astreinte approuve depuis son téléphone sans ouvrir de navigateur. Mais jusqu'ici, rien de ce que
+`SlackChannelAdapter` postait ne pouvait déclencher cet appel : le seul bouton envoyé était
+« Examiner dans Kex », un lien vers la console — exactement la friction que la route existe pour
+éviter.
+
+`SlackInteractivityController` (`POST /api/agent/channels/slack/interactivity`) reçoit le clic
+d'un bouton Approuver/Refuser. Une route de plus, pas une extension de l'existante : le format du
+corps (formulaire, un seul champ `payload` portant du JSON encodé) et l'algorithme de signature
+sont ceux que Slack documente pour son mécanisme d'interactivité — base signée `v0:<horodatage>:
+<corps>`, résultat préfixé `v0=` — et diffèrent de ceux d'`InboundSignature`. Les confondre
+laisserait une signature calculée pour l'une validée avec le secret de l'autre ;
+`SlackRequestSignature` est une classe séparée pour cette raison précise.
+
+Les deux routes partagent en revanche `channels.inbound.operators` : c'est la même question, qui a
+le droit de décider sans bearer, quel que soit le transport par lequel la demande arrive. Un
+identifiant Slack absent de cette table est refusé, jamais rattaché à un acteur générique — même
+raison que pour l'entrée générique.
+
+Rien de ceci ne s'active en se contentant d'ajouter un webhook. `channels.slack-signing-secret` est
+une propriété distincte de `slack-webhook-url` : elle vient de Slack lui-même, à la création de
+l'App, une fois « Interactivity & Shortcuts » activée avec une URL de requête — un webhook entrant
+seul ne la porte pas. Sans elle, `SlackChannelAdapter` continue de n'envoyer que le lien vers la
+console, exactement comme avant que cette capacité existe.
+
+**Teams reste volontairement lié à la console, pas à un bouton.** L'action `Action.Submit` d'une
+Adaptive Card ne livre nulle part sans une inscription complète au Bot Framework — une identité
+Azure AD, un canal de messagerie enregistré — bien au-delà d'un webhook entrant. Ce n'est pas un
+manque laissé ouvert : c'est la limite réelle d'un webhook Teams, dite ici plutôt que contournée
+par un flux qui semblerait fonctionner sans jamais avoir été vérifié contre un vrai tenant.
+
+`SlackInteractivityWiringTest` vérifie un point que rien d'autre ne peut prouver : que le corps brut
+traverse intact la chaîne de filtres réelle — sécurité comprise — pour un
+`Content-Type: application/x-www-form-urlencoded`. Un filtre qui lirait `getParameter()` avant le
+contrôleur consommerait le flux et viderait `@RequestBody` ; aucun appel direct à la méthode du
+contrôleur ne l'aurait révélé.
 
 ## Ce que les tests couvrent
 

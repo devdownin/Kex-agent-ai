@@ -96,6 +96,18 @@ public final class SkillsService {
         return list(owner).stream().filter(entry -> entry.id().equals(id)).findFirst().orElseThrow();
     }
 
+    /**
+     * Tout ce qui attend une décision, tous propriétaires confondus, la plus ancienne d'abord —
+     * un ordre de file d'attente, pas celui de {@link #ranked}, qui met en avant l'approuvé le
+     * plus récent. Le complément de {@link #review} : approuver exige déjà {@code ADMIN} et porte
+     * sur n'importe quel propriétaire, mais rien avant ceci ne permettait de *trouver* ce qu'on
+     * a le droit de trancher sans en connaître l'identifiant à l'avance — il fallait le lire dans
+     * l'audit, entrée par entrée.
+     */
+    public List<LearningEntry> pendingReviews() {
+        return repository.pending("SKILL");
+    }
+
     private String ownerOrFail(String id, String message) {
         return repository.ownerOf(id).orElseThrow(() -> new IllegalStateException(message));
     }

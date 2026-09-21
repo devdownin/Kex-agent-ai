@@ -15,8 +15,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Actif sous {@code shared-memory}, comme {@code JdbcAuditRepository} et {@code JdbcMemoryRepository},
- * et pour la même raison : c'est le seul profil où un {@code JdbcTemplate} existe.
- * {@code CREATE TABLE IF NOT EXISTS} à la construction plutôt qu'un outil de migration.
+ * et pour la même raison : c'est le seul profil où un {@code JdbcTemplate} existe. Les trois
+ * tables sont posées par {@code db/migration/V1__baseline.sql}.
  *
  * <p>La décision voyage en JSON dans une colonne, avec son identifiant, son statut et sa date en
  * colonnes propres. Une {@link Decision} porte ses observations imbriquées : les éclater en
@@ -39,28 +39,6 @@ class JdbcSupervisionStateRepository implements SupervisionStateRepository {
         this.objectMapper = objectMapper;
         this.clock = clock;
         this.historySize = historySize;
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS kex_supervision_decision (
-                  id VARCHAR(64) PRIMARY KEY,
-                  decided_at TIMESTAMP NOT NULL,
-                  status VARCHAR(32) NOT NULL,
-                  payload TEXT NOT NULL,
-                  claimed_at TIMESTAMP
-                )""");
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS kex_supervision_maintenance (
-                  process_id VARCHAR(255) PRIMARY KEY,
-                  process_name VARCHAR(255),
-                  until_at TIMESTAMP NOT NULL,
-                  reason VARCHAR(2000),
-                  declared_by VARCHAR(255)
-                )""");
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS kex_supervision_flag (
-                  name VARCHAR(64) PRIMARY KEY,
-                  enabled BOOLEAN NOT NULL,
-                  updated_at TIMESTAMP NOT NULL
-                )""");
     }
 
     /* ── Pause ─────────────────────────────────────────────────────────── */

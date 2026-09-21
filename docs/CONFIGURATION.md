@@ -161,6 +161,7 @@ kex.agent.memory.skills:
 | Endpoint | Rôle |
 |---|---|
 | `GET /api/agent/skills/curation` | Ce qui agit, ce qui dort au-delà du plafond, les doublons de titre, ce qui n'a plus été revu |
+| `GET /api/agent/skills/review-queue` | `ADMIN`. Tout ce qui est `PENDING`, tous propriétaires confondus, le plus ancien d'abord — la revue (`approve`/`reject`) reste elle-même transverse, voir ARCHITECTURE.md |
 | `POST /api/agent/skills/{id}/retire` | `{"reason":"..."}` — `ADMIN`, motif obligatoire, tracé dans l'audit |
 
 Le curateur signale, il ne retire rien de lui-même : retirer une compétence change le comportement de
@@ -214,6 +215,35 @@ expéditeur non déclaré dans `operators` est refusé plutôt que rattaché à 
 cela, l'audit dirait « approuvé par slack », qui n'est pas une personne. La réponse ne distingue pas
 les motifs de refus — dire « signature invalide » plutôt que « horodatage hors fenêtre » renseignerait
 qui tâtonne ; le détail reste dans les journaux.
+
+### `kex.agent.channels.slack-signing-secret` — interactivité Slack
+
+Sans elle, `SlackChannelAdapter` n'envoie qu'un lien vers la console, comme avant que cette
+propriété existe. Avec elle, une approbation gagne deux boutons — Approuver, Refuser — qui postent
+directement à Kex depuis Slack :
+
+```yaml
+kex.agent.channels:
+  enabled: true
+  slack-webhook-url: "${SLACK_WEBHOOK_URL}"
+  slack-signing-secret: "${SLACK_SIGNING_SECRET}"   # émis par Slack, pas choisi par l'exploitant
+  inbound:
+    enabled: true                                    # requis : c'est operators qui résout l'acteur
+    secret: "${KEX_CHANNEL_INBOUND_SECRET}"
+    operators:
+      U0123456789: alice
+```
+
+Le secret vient de Slack lui-même, à la création de l'App, une fois « Interactivity & Shortcuts »
+activée avec une URL de requête pointant vers `POST /api/agent/channels/slack/interactivity` —
+un webhook entrant seul ne le porte pas. `operators` est la même table que pour l'entrée générique
+ci-dessus : un identifiant Slack qui en est absent est refusé, jamais rattaché à un acteur
+générique. La signature suit l'algorithme que Slack documente pour son propre mécanisme
+(`X-Slack-Signature`, `X-Slack-Request-Timestamp`), distinct de celui de l'entrée générique — les
+deux secrets ne s'échangent pas.
+
+Teams n'a pas d'équivalent : une Adaptive Card ne livre nulle part sans une inscription complète au
+Bot Framework, bien au-delà d'un webhook. Son message reste un lien vers la console.
 
 ### `kex.resilience.*`
 
@@ -304,7 +334,8 @@ Le profil annule la liste `spring.autoconfigure.exclude` d'`application.yml` : s
 JDBC sur le classpath fait échouer le démarrage quand aucune base n'est configurée.
 
 Le même bascule fait passer en base tout ce dont la divergence entre répliques produirait une
-action fausse, et rien d'autre. Tables créées par `CREATE TABLE IF NOT EXISTS` au démarrage :
+action fausse, et rien d'autre. Schéma posé par `db/migration/V1__baseline.sql`, sous Flyway —
+voir « Le schéma des tables propres à l'agent est versionné » dans ARCHITECTURE.md :
 
 | Table | Contenu | Pourquoi elle n'est pas restée en mémoire |
 |---|---|---|
@@ -312,7 +343,10 @@ action fausse, et rien d'autre. Tables créées par `CREATE TABLE IF NOT EXISTS`
 | `kex_supervision_decision` | Décisions, avec leur réservation d'exécution | Une décision qui n'existe que sur une réplique rend `404` à l'opérateur qui approuve depuis une autre |
 | `kex_supervision_flag` | La pause de l'agent | En pause sur une réplique, l'agent continuait d'agir depuis les autres |
 | `kex_supervision_maintenance` | Les fenêtres de maintenance | Déclarée sur une réplique, elle ne taisait les alertes que là |
+| `kex_supervision_lock` | Le verrou du cycle autonome | Sans lui, chaque réplique lancerait le sien — voir `SupervisionScheduler` |
 | `kex_rate_limit` | Les seaux à jetons | Trois répliques accordaient trois fois le seuil annoncé |
+| `kex_agent_memory`, `kex_agent_learning` | Mémoire long terme, compétences, charte | Voir « Mémoire partagée » ci-dessus |
+| `kex_automation`, `kex_automation_audit` | Automatisations planifiées | Un cycle qui part sans clic n'a de sens qu'avec un état partagé |
 
 Cycles, anomalies brutes et relevés de processus restent en mémoire du processus : leur divergence
 se voit et ne coûte qu'un rafraîchissement — voir « Ce qui peut diverger entre répliques, et ce qui

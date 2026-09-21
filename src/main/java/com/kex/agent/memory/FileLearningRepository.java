@@ -5,6 +5,7 @@ package com.kex.agent.memory;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -66,6 +67,14 @@ public final class FileLearningRepository implements LearningRepository {
     public synchronized Optional<String> ownerOf(String id) {
         return entries.stream().filter(entry -> entry.id().equals(id))
                 .map(LearningEntry::owner).findFirst();
+    }
+
+    @Override
+    public synchronized List<LearningEntry> pending(String kind) {
+        return entries.stream()
+                .filter(entry -> kind.equals(entry.kind()) && "PENDING".equals(entry.status()))
+                .sorted(Comparator.comparing(LearningEntry::createdAt))
+                .toList();
     }
 
     private void save(List<LearningEntry> next) {

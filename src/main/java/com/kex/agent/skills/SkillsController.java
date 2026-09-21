@@ -36,6 +36,20 @@ class SkillsController {
         return skills.list(tenant(principal));
     }
 
+    /**
+     * Ce qu'un administrateur a le droit de trancher, tous locataires confondus, sans en connaître
+     * les identifiants à l'avance. {@code review}/{@code reject} restent volontairement transverses
+     * — la boucle de refus attribue une compétence à l'opérateur qui a refusé, jamais à
+     * l'administrateur qui approuve, et exiger que les deux partagent un locataire rendrait la
+     * revue inapprouvable par défaut, exactement le blocage que la résolution par identifiant a
+     * déjà corrigé une fois. Sans cette liste, la seule façon de trouver ce qu'on peut trancher
+     * était de lire un identifiant dans l'audit, entrée par entrée.
+     */
+    @GetMapping("/review-queue")
+    List<LearningEntry> reviewQueue() {
+        return skills.pendingReviews();
+    }
+
     /** Ce que la bibliothèque fait au prompt : ce qui agit, ce qui dort, ce qui se répète. */
     @GetMapping("/curation")
     SkillCuration curation(Principal principal) {

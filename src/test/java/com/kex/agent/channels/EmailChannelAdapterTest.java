@@ -25,7 +25,7 @@ class EmailChannelAdapterTest {
         EmailChannelAdapter adapter = new EmailChannelAdapter(sender, properties);
         assertThat(adapter.name()).isEqualTo("email");
 
-        ChannelMessage message = new ChannelMessage("Alert", "Body details", URI.create("https://action.example"), Instant.parse("2026-09-20T14:00:00Z"));
+        ChannelMessage message = new ChannelMessage("Alert", "Body details", URI.create("https://action.example"), Instant.parse("2026-09-20T14:00:00Z"), null);
         adapter.send(message);
 
         var captor = forClass(SimpleMailMessage.class);

@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+import com.kex.agent.testsupport.FlywayTestSchema;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,7 @@ class JdbcAutomationRepositoryTest {
         dataSource.setURL("jdbc:h2:mem:test-automation-" + System.nanoTime() + ";DB_CLOSE_DELAY=-1");
         dataSource.setUser("sa");
         dataSource.setPassword("");
+        FlywayTestSchema.migrate(dataSource);
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         repository = new JdbcAutomationRepository(jdbc);
     }

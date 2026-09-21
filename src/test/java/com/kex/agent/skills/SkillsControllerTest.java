@@ -55,4 +55,14 @@ class SkillsControllerTest {
         assertThat(controller.reject("s-1", reviewReject, principal)).isEqualTo(entry);
         verify(supervision).auditAction("admin", "Compétence rejetée", "s-1 : Bad");
     }
+
+    /** Transverse, sans locataire à passer : voir la javadoc de {@link SkillsController#reviewQueue}. */
+    @Test
+    void review_queue_delegates_to_pending_reviews_across_owners() {
+        LearningEntry entry = new LearningEntry("s-2", "ops-console", "SKILL", "Check Lag", "Markdown",
+                "Evidence", "conv-1", Instant.now(), "PENDING", null, null, null);
+        given(service.pendingReviews()).willReturn(List.of(entry));
+
+        assertThat(controller.reviewQueue()).containsExactly(entry);
+    }
 }

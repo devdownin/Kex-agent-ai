@@ -68,4 +68,14 @@ class SkillsServiceTest {
         assertThatThrownBy(() -> service.review("s-99", true, "admin", "Reason"))
                 .isInstanceOf(IllegalStateException.class);
     }
+
+    /** Transverse : pas de propriétaire à passer, à la différence de {@code list}. */
+    @Test
+    void pending_reviews_lists_across_all_owners() {
+        LearningEntry fromOpsConsole = new LearningEntry("s-1", "ops-console", "SKILL", "Title", "Markdown",
+                "Evidence", "conv-1", clock.instant(), "PENDING", null, null, null);
+        given(repository.pending("SKILL")).willReturn(List.of(fromOpsConsole));
+
+        assertThat(service.pendingReviews()).containsExactly(fromOpsConsole);
+    }
 }

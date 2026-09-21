@@ -7,11 +7,24 @@ import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-/** Destinations configured by the operator, never supplied by model output. */
+/**
+ * Destinations configured by the operator, never supplied by model output.
+ *
+ * @param slackSigningSecret the App's own signing secret, issued by Slack when Interactivity &amp;
+ *                           Shortcuts is turned on — a different secret than {@code
+ *                           inbound.secret}, which this instance picks itself. Present, an
+ *                           approval message gains inline Approuver/Refuser buttons; absent, it
+ *                           stays a plain link to the console, exactly as before this property
+ *                           existed. Teams has no equivalent: a card's {@code Action.Submit}
+ *                           delivers nowhere without a full Bot Framework registration, well
+ *                           beyond an incoming webhook — its message stays link-only by design,
+ *                           not by an omission left open.
+ */
 @ConfigurationProperties("kex.agent.channels")
 public record ChannelProperties(@DefaultValue("false") boolean enabled,
                                 @DefaultValue("") String consoleUrl,
                                 @DefaultValue("") String slackWebhookUrl,
+                                @DefaultValue("") String slackSigningSecret,
                                 @DefaultValue("") String teamsWebhookUrl,
                                 @DefaultValue Email email,
                                 @DefaultValue Inbound inbound) {

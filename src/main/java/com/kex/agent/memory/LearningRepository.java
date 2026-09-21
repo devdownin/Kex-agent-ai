@@ -24,4 +24,13 @@ public interface LearningRepository {
      * échouer la revue, comme une entrée inconnue.
      */
     Optional<String> ownerOf(String id);
+
+    /**
+     * Toutes les entrées {@code PENDING} d'un genre, tous propriétaires confondus. Le complément
+     * de {@link #ownerOf} : {@code review} tranche une entrée quel que soit son propriétaire, mais
+     * un administrateur ne pouvait la trouver qu'en lisant son identifiant dans l'audit. Sans
+     * filtre de propriétaire pour la même raison que {@code review} — c'est un geste
+     * d'administration, transverse par construction.
+     */
+    List<LearningEntry> pending(String kind);
 }
