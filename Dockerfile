@@ -38,7 +38,14 @@ RUN rm -f /usr/bin/pebble
 # en monte un — celui-ci n'est que le filet.
 ENV KEX_AGENT_MEMORY_STORAGE_DIRECTORY=/var/lib/kex/memory \
     KEX_MCP_RUNTIME_STORAGE_PATH=/var/lib/kex/mcp-servers.enc
-RUN install -d -m 700 -o 10001 -g 10001 /var/lib/kex /var/lib/kex/memory
+# `chown` et pas `install -o` : `install` résout son propriétaire par `getpwnam`, et le refuse
+# quand il est numérique et absent de /etc/passwd — soit exactement la situation que le paragraphe
+# ci-dessus décrit. `chown` accepte un uid numérique sans entrée correspondante. Le coreutils de
+# certaines machines de développement l'accepte, celui de l'image de base non : l'erreur
+# n'apparaît donc qu'à la construction de l'image.
+RUN mkdir -p /var/lib/kex/memory \
+    && chmod 700 /var/lib/kex /var/lib/kex/memory \
+    && chown -R 10001:10001 /var/lib/kex
 VOLUME /var/lib/kex
 
 EXPOSE 8081
