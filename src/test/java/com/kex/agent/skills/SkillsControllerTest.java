@@ -38,8 +38,8 @@ class SkillsControllerTest {
 
         given(service.list("admin")).willReturn(List.of(entry));
         given(service.propose("admin", "Check Lag", "Markdown", "Evidence", "conv-1")).willReturn(entry);
-        given(service.review("admin", "s-1", true, "admin", "Good")).willReturn(approved);
-        given(service.review("admin", "s-1", false, "admin", "Bad")).willReturn(entry);
+        given(service.review("s-1", true, "admin", "Good")).willReturn(approved);
+        given(service.review("s-1", false, "admin", "Bad")).willReturn(entry);
 
         assertThat(controller.list(principal)).containsExactly(entry);
 

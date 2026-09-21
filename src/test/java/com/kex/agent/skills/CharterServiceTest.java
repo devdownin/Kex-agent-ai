@@ -117,6 +117,13 @@ class CharterServiceTest {
             return false;
         }
 
+
+        @Override
+        public java.util.Optional<String> ownerOf(String id) {
+            return entries.stream().filter(entry -> entry.id().equals(id))
+                    .map(LearningEntry::owner).findFirst();
+        }
+
         @Override
         public boolean delete(String owner, String id) {
             return entries.removeIf(entry -> entry.owner().equals(owner) && entry.id().equals(id));

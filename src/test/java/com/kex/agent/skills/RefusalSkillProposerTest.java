@@ -79,7 +79,7 @@ class RefusalSkillProposerTest {
                 List.of(decision("d1", null))));
 
         assertThat(capturedMarkdown()).contains("non précisé");
-        verify(skills, never()).retire(any(), any(), any(), any());
+        verify(skills, never()).retire(any(), any(), any());
     }
 
     private String capturedMarkdown() {
