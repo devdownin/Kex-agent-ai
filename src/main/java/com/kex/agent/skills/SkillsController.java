@@ -21,16 +21,33 @@ import org.springframework.web.server.ResponseStatusException;
 @ConditionalOnProperty(prefix = "kex.agent.memory", name = "enabled", havingValue = "true", matchIfMissing = true)
 class SkillsController {
     private final SkillsService skills;
+    private final SkillCurator curator;
     private final SupervisionService supervision;
 
-    SkillsController(SkillsService skills, SupervisionService supervision) {
+    SkillsController(SkillsService skills, SkillCurator curator, SupervisionService supervision) {
         this.skills = skills;
+        this.curator = curator;
         this.supervision = supervision;
     }
 
     @GetMapping
     List<LearningEntry> list(Principal principal) {
         return skills.list(actor(principal));
+    }
+
+    /** Ce que la bibliothèque fait au prompt : ce qui agit, ce qui dort, ce qui se répète. */
+    @GetMapping("/curation")
+    SkillCuration curation(Principal principal) {
+        return curator.curate(actor(principal));
+    }
+
+    /** Le curateur signale, un humain nommé retire — jamais l'inverse. */
+    @PostMapping("/{id}/retire")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void retire(@PathVariable String id, @Valid @RequestBody Retirement retirement, Principal principal) {
+        String actor = actor(principal);
+        skills.retire(actor, id, actor, retirement.reason());
+        supervision.auditAction(actor, "Compétence retirée", id + " : " + retirement.reason());
     }
 
     /** Imported or authored procedures always go through the same pending state. */
@@ -81,4 +98,6 @@ class SkillsController {
                     @NotBlank @Size(max = 4000) String evidence,
                     @Size(max = 255) String conversationId) { }
     record Review(@Size(max = 2000) String reason) { }
+    /** Motif obligatoire, contrairement à une revue : un retrait sans raison est irrelisable. */
+    record Retirement(@NotBlank @Size(max = 2000) String reason) { }
 }

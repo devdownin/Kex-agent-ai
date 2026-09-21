@@ -4,6 +4,7 @@ package com.kex.agent.skills;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,6 +40,38 @@ public final class SkillsService {
     public List<LearningEntry> approved(String owner) {
         return list(owner).stream().filter(entry -> entry.status().equals("APPROVED")
                 && entry.reviewedBy() != null && entry.reviewedAt() != null).toList();
+    }
+
+    /**
+     * Les compétences approuvées dans l'ordre où elles méritent d'agir : la plus récemment approuvée
+     * d'abord. Sans critère explicite, « les premières » suivait l'ordre de stockage du dépôt — une
+     * compétence approuvée hier pouvait ne jamais agir au profit d'une autre approuvée l'an dernier,
+     * et rien à l'écran ne le disait. Faute de télémétrie d'usage, la fraîcheur du verdict humain est
+     * le seul critère qui ne soit pas inventé.
+     */
+    public List<LearningEntry> ranked(String owner) {
+        return approved(owner).stream()
+                .sorted(Comparator.comparing(LearningEntry::reviewedAt).reversed()
+                        .thenComparing(LearningEntry::title))
+                .toList();
+    }
+
+    /**
+     * Retire une compétence approuvée de la bibliothèque. Jamais automatique : le curateur signale,
+     * un humain nommé retire — même exigence que l'approbation, et pour la même raison.
+     */
+    public void retire(String owner, String id, String actor, String reason) {
+        MemoryIdentity.require(owner);
+        MemoryIdentity.require(actor);
+        if (reason == null || reason.isBlank() || reason.length() > 2000) {
+            throw new IllegalArgumentException("Motif de retrait requis et limité à 2000 caractères");
+        }
+        if (approved(owner).stream().noneMatch(entry -> entry.id().equals(id))) {
+            throw new IllegalStateException("Compétence inconnue ou non approuvée");
+        }
+        if (!repository.delete(owner, id)) {
+            throw new IllegalStateException("Compétence inconnue ou non approuvée");
+        }
     }
 
     public LearningEntry review(String owner, String id, boolean approve, String actor, String reason) {

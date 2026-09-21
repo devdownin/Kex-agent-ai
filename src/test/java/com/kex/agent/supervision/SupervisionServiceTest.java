@@ -44,6 +44,8 @@ class SupervisionServiceTest {
     private final McpToolCatalog toolCatalog = mock(McpToolCatalog.class);
     private final WebhookNotifier notifier = mock(WebhookNotifier.class);
     private final TokenBudgetService tokenBudget = mock(TokenBudgetService.class);
+    private final java.util.List<Object> published = new java.util.ArrayList<>();
+    private final org.springframework.context.ApplicationEventPublisher events = published::add;
     private MutableClock clock;
 
     @BeforeEach
@@ -238,7 +240,7 @@ class SupervisionServiceTest {
         when(traceContext.traceId()).thenReturn("trace-42");
         SupervisionService service = new SupervisionService(agentService, toolCatalog,
                 properties(List.of(), Map.of(), Map.of()), clock, keyMissing, tracer,
-                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200), notifier, tokenBudget);
+                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200), notifier, tokenBudget, events);
 
         service.pause("opérateur");
 
@@ -249,7 +251,7 @@ class SupervisionServiceTest {
     void ne_correle_rien_hors_d_une_trace_en_cours() {
         SupervisionService service = new SupervisionService(agentService, toolCatalog,
                 properties(List.of(), Map.of(), Map.of()), clock, keyMissing, mock(Tracer.class),
-                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200), notifier, tokenBudget);
+                CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200), notifier, tokenBudget, events);
 
         service.pause("opérateur");
 
@@ -262,7 +264,7 @@ class SupervisionServiceTest {
         registry.circuitBreaker("mcp-tool");
         SupervisionService service = new SupervisionService(agentService, toolCatalog,
                 properties(List.of(), Map.of(), Map.of()), clock, keyMissing, mock(Tracer.class),
-                registry, new InMemoryAuditRepository(200), notifier, tokenBudget);
+                registry, new InMemoryAuditRepository(200), notifier, tokenBudget, events);
 
         assertThat(service.status().circuitBreakers())
                 .extracting(CircuitBreakerStatus::name)
@@ -740,6 +742,47 @@ class SupervisionServiceTest {
                 assertThat(entry.reason()).contains("plancher relevé automatiquement"));
     }
 
+    /**
+     * Le plancher ne retient que « moins souvent » ; le motif écrit, lui, dit ce que l'humain
+     * reprochait. Au-delà de trois refus concordants, il part vers qui sait en faire une règle.
+     */
+    @Test
+    void publie_des_refus_repetes_pour_en_tirer_une_competence() {
+        SupervisionService service = service(properties(List.of(ORDERS),
+                Map.of(Capability.RESTART_CONSUMER, Autonomy.SUPERVISED), Map.of()));
+
+        for (int i = 0; i < 3; i++) {
+            analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.90));
+            service.runCycle("test");
+            service.reject(service.pending().getFirst().id(), "jamais en heures ouvrées", "opérateur");
+        }
+
+        assertThat(published).filteredOn(RepeatedRefusals.class::isInstance)
+                .last(org.assertj.core.api.InstanceOfAssertFactories.type(RepeatedRefusals.class))
+                .satisfies(refusals -> {
+                    assertThat(refusals.actor()).isEqualTo("opérateur");
+                    assertThat(refusals.capability()).isEqualTo(Capability.RESTART_CONSUMER);
+                    assertThat(refusals.decisions()).hasSize(3)
+                            .allSatisfy(decision -> assertThat(decision.result())
+                                    .isEqualTo("jamais en heures ouvrées"));
+                });
+    }
+
+    /** Deux refus peuvent tenir à deux situations sans rapport : rien n'est publié avant trois. */
+    @Test
+    void ne_publie_rien_en_dessous_du_seuil_de_refus() {
+        SupervisionService service = service(properties(List.of(ORDERS),
+                Map.of(Capability.RESTART_CONSUMER, Autonomy.SUPERVISED), Map.of()));
+
+        for (int i = 0; i < 2; i++) {
+            analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.90));
+            service.runCycle("test");
+            service.reject(service.pending().getFirst().id(), "faux positif", "opérateur");
+        }
+
+        assertThat(published).noneMatch(RepeatedRefusals.class::isInstance);
+    }
+
     @Test
     void ne_releve_pas_le_plancher_avec_trop_peu_de_verdicts() {
         SupervisionService service = service(properties(List.of(ORDERS),
@@ -939,7 +982,7 @@ class SupervisionServiceTest {
         given(notifier.send(any(), any())).willReturn(Optional.empty());
         return new SupervisionService(agentService, toolCatalog, properties, clock, model,
                 mock(Tracer.class), CircuitBreakerRegistry.ofDefaults(),
-                new InMemoryAuditRepository(properties.historySize()), notifier, tokenBudget);
+                new InMemoryAuditRepository(properties.historySize()), notifier, tokenBudget, events);
     }
 
     private void analysisReturns(Map<String, Object> content) {
@@ -986,8 +1029,10 @@ class SupervisionServiceTest {
                                                     Map<Capability, Double> floors) {
         return new SupervisionProperties(true, processes, mode, 0.85, thresholds(),
                 autonomy, floors, actions, 200, Duration.ofMinutes(30), Duration.ofMinutes(15),
-                new SupervisionProperties.Schedule(false, Duration.ofMinutes(5), Duration.ofMinutes(10)),
+                new SupervisionProperties.Schedule(false, Duration.ofMinutes(5), Duration.ofMinutes(10),
+                        new SupervisionProperties.Adaptive(false, Duration.ofMinutes(5), Duration.ofMinutes(30))),
                 new SupervisionProperties.AutoAdjust(true, 5, 0.5, 0.05),
+                new SupervisionProperties.Learning(true, 3, Duration.ofDays(30)),
                 new SupervisionProperties.Correlation(true, 3), false);
     }
 
@@ -996,7 +1041,7 @@ class SupervisionServiceTest {
         return new SupervisionProperties(base.enabled(), base.processes(), base.mode(),
                 base.confidenceThreshold(), base.thresholds(), base.autonomy(), base.confidenceThresholds(),
                 base.actions(), base.historySize(), base.approvalTimeout(), base.staleAfter(),
-                base.schedule(), base.autoAdjust(), base.correlation(), true);
+                base.schedule(), base.autoAdjust(), base.learning(), base.correlation(), true);
     }
 
     private static Map<String, Object> anomalyRow(String processId, String title) {

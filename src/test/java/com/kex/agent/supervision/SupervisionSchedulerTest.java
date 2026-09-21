@@ -47,7 +47,75 @@ class SupervisionSchedulerTest {
     }
 
     private SupervisionScheduler scheduler(SupervisionService supervisionService) {
-        return new SupervisionScheduler(supervisionService, jdbcTemplate, clock, Duration.ofMinutes(10));
+        return new SupervisionScheduler(supervisionService, jdbcTemplate, clock, Duration.ofMinutes(10),
+                new SupervisionProperties.Adaptive(false, Duration.ofMinutes(5), Duration.ofMinutes(30)));
+    }
+
+    private SupervisionScheduler adaptiveScheduler() {
+        return new SupervisionScheduler(supervision, jdbcTemplate, clock, Duration.ofMinutes(10),
+                new SupervisionProperties.Adaptive(true, Duration.ofMinutes(5), Duration.ofMinutes(30)));
+    }
+
+    /**
+     * Le battement reste régulier ; c'est la décision d'analyser qui suit l'état. Sans cycle connu,
+     * l'état est {@code UNKNOWN} — précisément ce qui justifie d'aller regarder.
+     */
+    @Test
+    void sans_cycle_connu_la_cadence_adaptative_lance_quand_meme() {
+        given(supervision.cycles()).willReturn(java.util.List.of());
+
+        adaptiveScheduler().tick();
+
+        verify(supervision).runCycle("scheduler");
+    }
+
+    @Test
+    void au_repos_la_cadence_adaptative_espace_les_cycles() {
+        given(supervision.cycles()).willReturn(java.util.List.of(
+                cycle(Instant.parse("2026-09-17T09:50:00Z"), 0, null)));
+
+        adaptiveScheduler().tick();
+
+        verify(supervision, never()).runCycle(anyString());
+    }
+
+    @Test
+    void une_anomalie_au_dernier_cycle_resserre_la_cadence() {
+        given(supervision.cycles()).willReturn(java.util.List.of(
+                cycle(Instant.parse("2026-09-17T09:50:00Z"), 2, null)));
+
+        adaptiveScheduler().tick();
+
+        verify(supervision).runCycle("scheduler");
+    }
+
+    /** Un cycle en échec n'affirme rien sur le cluster : c'est la cadence resserrée qui s'applique. */
+    @Test
+    void un_cycle_en_echec_resserre_la_cadence_comme_une_anomalie() {
+        given(supervision.cycles()).willReturn(java.util.List.of(
+                cycle(Instant.parse("2026-09-17T09:50:00Z"), 0, "modèle injoignable")));
+
+        adaptiveScheduler().tick();
+
+        verify(supervision).runCycle("scheduler");
+    }
+
+    /** Un battement qui s'abstient ne prend pas le verrou : les autres répliques restent libres. */
+    @Test
+    void un_battement_qui_s_abstient_laisse_le_verrou_libre() {
+        given(supervision.cycles()).willReturn(java.util.List.of(
+                cycle(Instant.parse("2026-09-17T09:50:00Z"), 0, null)));
+
+        adaptiveScheduler().tick();
+
+        Timestamp lockedUntil = jdbcTemplate.queryForObject(LOCK_QUERY,
+                (rs, row) -> rs.getTimestamp("locked_until"));
+        assertThat(lockedUntil).isEqualTo(Timestamp.from(Instant.EPOCH));
+    }
+
+    private static CycleReport cycle(Instant finishedAt, int anomalies, String failure) {
+        return new CycleReport("c-1", finishedAt.minus(Duration.ofSeconds(30)), finishedAt, 1,
+                anomalies, 0, 0, java.util.List.of(), failure);
     }
 
     @Test

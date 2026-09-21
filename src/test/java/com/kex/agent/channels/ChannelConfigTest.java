@@ -19,6 +19,9 @@ import static org.mockito.Mockito.mock;
 
 class ChannelConfigTest {
 
+    private static final ChannelProperties.Inbound NO_INBOUND =
+            new ChannelProperties.Inbound(false, "", java.time.Duration.ofMinutes(5), java.util.Map.of());
+
     private final Clock clock = Clock.fixed(Instant.parse("2026-09-20T12:00:00Z"), ZoneId.of("UTC"));
 
     @Test
@@ -27,7 +30,7 @@ class ChannelConfigTest {
                 "https://console.example.com",
                 "https://hooks.slack.com/services/1",
                 "https://outlook.office.com/webhook/1",
-                new ChannelProperties.Email(true, "from@example.com", List.of("to@example.com")));
+                new ChannelProperties.Email(true, "from@example.com", List.of("to@example.com")), NO_INBOUND);
 
         RestClient.Builder builder = RestClient.builder();
         JavaMailSender mailSender = mock(JavaMailSender.class);
@@ -49,7 +52,7 @@ class ChannelConfigTest {
         ObjectProvider<JavaMailSender> mailProvider = mock(ObjectProvider.class);
 
         ChannelProperties invalidSlack = new ChannelProperties(true, "https://console.example.com", "http://insecure.slack.com", "",
-                new ChannelProperties.Email(false, "", List.of()));
+                new ChannelProperties.Email(false, "", List.of()), NO_INBOUND);
 
         assertThatThrownBy(() -> config.channelNotifier(invalidSlack, builder, mailProvider, clock))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -63,7 +66,7 @@ class ChannelConfigTest {
         ObjectProvider<JavaMailSender> mailProvider = mock(ObjectProvider.class);
 
         ChannelProperties empty = new ChannelProperties(true, "https://console.example.com", "", "",
-                new ChannelProperties.Email(false, "", List.of()));
+                new ChannelProperties.Email(false, "", List.of()), NO_INBOUND);
 
         assertThatThrownBy(() -> config.channelNotifier(empty, builder, mailProvider, clock))
                 .isInstanceOf(IllegalArgumentException.class);

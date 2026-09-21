@@ -203,6 +203,14 @@ kex:
       capacity: 200
       max-content-length: 500
       retention: 30d
+      skills:
+        # Ce que la bibliothèque de compétences approuvées pèse dans le prompt. Elle ne fait que
+        # grandir — chaque échange réussi en propose une — alors que seules les `injected` premières
+        # agissent : ce sont les plus récemment approuvées, et GET /api/agent/skills/curation dit
+        # lesquelles dorment au-delà. Le retrait reste un geste humain, jamais une purge planifiée.
+        injected: 5
+        characters-per-skill: 3000
+        stale-after: 90d
 
     supervision:
       # Le Control Center : observer, comprendre, décider, agir, vérifier. Allumé par défaut — il
@@ -258,6 +266,14 @@ kex:
         # cycle le garderait pris indéfiniment, et plus aucune autre instance ne pourrait relancer
         # l'analyse.
         lock-at-most-for: 10m
+        adaptive:
+          # Le battement ci-dessus reste régulier ; ceci décide seulement s'il y a lieu d'analyser.
+          # Une cadence unique doit choisir entre réagir vite à un incident et ménager le budget de
+          # jetons quand tout va bien : indexer le délai minimum sur ce que le dernier cycle a vu
+          # lève ce compromis. Un cycle en échec compte comme dégradé — il n'affirme rien.
+          enabled: false
+          degraded: 5m
+          healthy: 30m
       notify:
         # Débouché par défaut de la capacité NOTIFY quand aucun outil MCP ne lui est lié : c'est la
         # seule capacité dont le système cible est une personne, pas un système au schéma propre.
@@ -272,6 +288,14 @@ kex:
         min-samples: 5
         min-relevance: 0.5
         increment: 0.05
+      learning:
+        # Un plancher qui monte dit « moins souvent », jamais *ce que* l'humain reprochait : seul le
+        # motif de refus le dit. Au-delà de `min-refusals` refus concordants sur une même capacité,
+        # une compétence candidate reprend ces motifs — en attente d'approbation, comme toute
+        # compétence, et jamais active d'elle-même.
+        enabled: true
+        min-refusals: 3
+        window: 30d
 
     rate-limit:
       # Limite d'instance, pas par appelant : le bearer est unique et partagé. Elle protège le

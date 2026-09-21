@@ -66,7 +66,7 @@ class SupervisionConfig {
         SupervisionScheduler supervisionScheduler(SupervisionService supervision, JdbcTemplate jdbcTemplate,
                                                   Clock clock, SupervisionProperties properties) {
             return new SupervisionScheduler(supervision, jdbcTemplate, clock,
-                    properties.schedule().lockAtMostFor());
+                    properties.schedule().lockAtMostFor(), properties.schedule().adaptive());
         }
     }
 }

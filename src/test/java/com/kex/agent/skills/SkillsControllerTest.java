@@ -19,13 +19,14 @@ import static org.mockito.Mockito.verify;
 class SkillsControllerTest {
 
     private final SkillsService service = mock(SkillsService.class);
+    private final SkillCurator curator = mock(SkillCurator.class);
     private final SupervisionService supervision = mock(SupervisionService.class);
     private final Principal principal = () -> "admin";
     private SkillsController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new SkillsController(service, supervision);
+        controller = new SkillsController(service, curator, supervision);
     }
 
     @Test

@@ -18,7 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MemoryToolsTest {
 
     private final MemoryTools tools = new MemoryTools(new MemoryService(new InMemoryMemoryRepository(200),
-            new MemoryProperties(true, 200, 500, Duration.ofDays(30)),
+            new MemoryProperties(true, 200, 500, Duration.ofDays(30),
+                    new MemoryProperties.Skills(5, 3000, Duration.ofDays(90))),
             Clock.fixed(Instant.parse("2026-09-15T08:00:00Z"), ZoneOffset.UTC)));
 
     @Test

@@ -60,6 +60,12 @@ class SecurityConfig {
                         // chemins sont énumérés plutôt que laissés à un joker de racine, pour
                         // qu'une future route servie ici n'hérite pas de l'ouverture.
                         .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**").permitAll()
+                        // Le rappel de messagerie ne porte pas de bearer : Slack ou Teams n'en
+                        // émettent pas. Il n'est pas ouvert pour autant — la route n'existe que si
+                        // kex.agent.channels.inbound.enabled, exige une signature HMAC sur le corps
+                        // brut avec fenêtre d'horodatage, et n'agit que pour un expéditeur déclaré.
+                        // Énumérée au chemin exact, jamais par un joker sur /api/agent/channels.
+                        .requestMatchers(HttpMethod.POST, "/api/agent/channels/callback").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/agent/chat", "/api/agent/chat/structured",
                                 "/api/agent/chat/stream").hasAnyRole("CHAT", "OPERATOR", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/conversations/**")
@@ -72,8 +78,11 @@ class SecurityConfig {
                                 "/api/agent/supervision/notify/test").hasAnyRole("OPERATOR", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/supervision/processes/*/maintenance")
                                 .hasAnyRole("OPERATOR", "ADMIN")
+                        // Retirer une compétence approuvée change le prompt système de toutes les
+                        // conversations suivantes du même propriétaire — même pouvoir que l'approuver.
                         .requestMatchers(HttpMethod.POST, "/api/agent/mcp/servers/*/tools/*",
-                                "/api/agent/knowledge", "/api/agent/skills/*/approve").hasRole("ADMIN")
+                                "/api/agent/knowledge", "/api/agent/skills/*/approve",
+                                "/api/agent/skills/*/retire").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/agent/mcp/servers",
                                 "/api/agent/mcp/servers/test", "/api/agent/mcp/servers/*/enabled",
                                 "/api/agent/mcp/servers/*/refresh", "/api/agent/mcp/configuration",
@@ -82,7 +91,8 @@ class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/agent/mcp/servers/*").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/agent/mcp/servers/*/secret").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/mcp/servers/*").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/agent/supervision/policy").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/agent/supervision/policy",
+                                "/api/agent/charter").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/memory/*",
                                 "/api/agent/memory/summaries/*", "/api/agent/knowledge")
                                 .hasRole("ADMIN")

@@ -6,6 +6,7 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -34,16 +35,18 @@ class SupervisionScheduler {
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
     private final Duration lockAtMostFor;
+    private final SupervisionProperties.Adaptive adaptive;
 
     /** Une par instance de processus : distingue dans les journaux qui a tenu le verrou. */
     private final String owner = UUID.randomUUID().toString();
 
     SupervisionScheduler(SupervisionService supervision, JdbcTemplate jdbcTemplate, Clock clock,
-                        Duration lockAtMostFor) {
+                        Duration lockAtMostFor, SupervisionProperties.Adaptive adaptive) {
         this.supervision = supervision;
         this.jdbcTemplate = jdbcTemplate;
         this.clock = clock;
         this.lockAtMostFor = lockAtMostFor;
+        this.adaptive = adaptive;
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS kex_supervision_lock (
                   name VARCHAR(64) PRIMARY KEY,
@@ -58,6 +61,9 @@ class SupervisionScheduler {
 
     @Scheduled(fixedDelayString = "${kex.agent.supervision.schedule.interval:5m}")
     void tick() {
+        if (!due()) {
+            return;
+        }
         if (!acquire()) {
             return;
         }
@@ -72,6 +78,42 @@ class SupervisionScheduler {
         finally {
             release();
         }
+    }
+
+    /**
+     * Le battement est régulier ; c'est ici qu'on décide s'il y a lieu d'analyser. Une cadence
+     * unique doit choisir entre réagir vite à un incident et ne pas brûler le budget de jetons
+     * journalier quand rien ne bouge — indexer le délai minimum sur ce que le dernier cycle a vu
+     * lève ce compromis.
+     *
+     * <p>Le battement qui s'abstient ne prend pas le verrou : une réplique qui juge le prochain
+     * cycle non dû n'a pas à empêcher les autres de conclure autrement, et le verrou se prend de
+     * toute façon avant l'analyse.
+     *
+     * <p>Sans cycle connu — premier démarrage, ou historique vidé par un redémarrage — le cycle est
+     * dû : c'est l'état {@code UNKNOWN}, celui qui justifie justement d'aller regarder.
+     */
+    private boolean due() {
+        if (!adaptive.enabled()) {
+            return true;
+        }
+        List<CycleReport> cycles = supervision.cycles();
+        if (cycles.isEmpty()) {
+            return true;
+        }
+        CycleReport last = cycles.getFirst();
+        Instant reference = last.finishedAt() != null ? last.finishedAt() : last.startedAt();
+        // Un cycle en échec n'affirme rien sur l'état du cluster : la cadence resserrée est aussi
+        // celle qui redonne le plus vite une lecture fiable.
+        boolean degraded = last.failure() != null || last.anomaliesDetected() > 0;
+        Duration required = degraded ? adaptive.degraded() : adaptive.healthy();
+        Instant nextDue = reference.plus(required);
+        if (clock.instant().isBefore(nextDue)) {
+            log.debug("Cycle non dû avant {} (cadence {} : {})", nextDue,
+                    degraded ? "dégradée" : "au repos", required);
+            return false;
+        }
+        return true;
     }
 
     private boolean acquire() {

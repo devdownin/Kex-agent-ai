@@ -288,6 +288,11 @@ jobs:
       # Seulement sur un tag, pour la même raison : la page Docker Hub n'a rien à apprendre d'une
       # image `edge`. Le jeton exige un accès en écriture sur le dépôt — le même que `docker push`,
       # rien à ajouter pour ce miroir de description.
+      #
+      # `DOCKERHUB.md` plutôt que le `README.md` par défaut de l'action : la vitrine du dépôt
+      # s'adresse à qui lit le code, la page du registre à qui lance l'image sans l'avoir cloné —
+      # tags disponibles, variables d'environnement, sondes. Les captures et les liens relatifs du
+      # README, eux, ne mènent nulle part depuis Docker Hub.
       - name: Sync the Docker Hub description
         if: github.ref_type == 'tag'
         uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
@@ -295,6 +300,7 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ steps.destination.outputs.dockerhub_repository }}
+          readme-filepath: ./DOCKERHUB.md
           short-description: ${{ github.event.repository.description }}
           enable-url-completion: true
 
