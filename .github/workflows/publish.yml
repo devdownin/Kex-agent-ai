@@ -196,7 +196,7 @@ jobs:
       # d'atteindre un registre public. `cache-to` alimente le cache que la construction poussée
       # ci-dessous relit — la reconstruire n'y coûte quasiment rien, les couches sont déjà bâties.
       - name: Build (for scanning)
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v6
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v6
         with:
           context: .
           platforms: linux/amd64
@@ -224,7 +224,7 @@ jobs:
       # avec elle. `linux/amd64` seulement : une image arm64 supposerait QEMU et une compilation
       # Maven émulée, soit un ordre de grandeur de plus sur la durée — omission délibérée.
       - name: Build and push
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v6
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v6
         with:
           context: .
           platforms: linux/amd64
