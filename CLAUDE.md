@@ -257,4 +257,15 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   sur desktop. `overflow: auto` sur `main` ne s'active qu'une fois `.shell` en `height: 100dvh`, pas
   `min-height`.
 
+- **Un défilement automatique posé sans condition revient en bas sous l'utilisateur.** Le fil du
+  chat forçait `scrollTop = scrollHeight` à chaque jeton de flux reçu : remonter lire un message
+  pendant que la réponse continuait de s'écrire ramenait la vue en bas au jeton suivant. Il ne se
+  redéclenche désormais que si le fil était déjà proche du bas juste avant ce jeton précis — mesuré
+  avant d'ajouter le texte, `scrollHeight` ayant déjà grandi une fois le texte ajouté.
+
+- **Posé par script, un champ ne redimensionne pas tout seul.** `#prompt` grandit avec son contenu
+  via l'événement `input`, qui ne se déclenche jamais quand une valeur est posée par script
+  (`prefill()` depuis une alerte ou un processus) : le champ restait coincé sur une ligne. Le calcul
+  se factorise pour être appelé aux deux endroits.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

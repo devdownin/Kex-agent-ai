@@ -1300,6 +1300,35 @@ l'attrapait à la souris. `toast()`, dans `core.js`, ajoute un bouton `.toast-cl
 suspend sa minuterie tant que le pointeur reste dessus — le temps déjà écoulé est conservé, pas
 remis à zéro, pour ne pas prolonger indéfiniment un toast qu'on survole par inadvertance.
 
+### Le plus ancien toast cède la place, il ne s'empile pas indéfiniment
+
+Une rafale d'actions — approbation groupée sur plusieurs décisions, plusieurs échecs à la suite —
+empilait les toasts sans limite, au point de couvrir une bonne partie de l'écran. `toast()` retire
+maintenant le plus ancien avant d'en afficher un cinquième (`MAX_TOASTS` dans `core.js`), sans se
+soucier de sa minuterie propre : la retirer du DOM suffit, et sa minuterie déjà posée finira par
+tenter de la retirer une seconde fois sans effet — `Node.remove()` sur un nœud déjà détaché ne fait
+rien.
+
+### Le composer grandit avec son contenu, même posé par script
+
+`#prompt` grandit déjà à la saisie (`input` sur le champ). `prefill()`, dans `chat.js`, pose un
+brouillon par script depuis une alerte ou un processus (paramètre `draft` de l'URL) sans jamais
+déclencher cet événement : un brouillon de plusieurs lignes restait coincé dans une zone d'une seule
+ligne tant que l'opérateur n'avait pas lui-même tapé un caractère. `resizeComposer()` factorise le
+calcul et se déclenche aussi bien à la saisie qu'au préremplissage — et à la remise à zéro du champ
+après l'envoi, qui appelait la même paire de lignes séparément.
+
+### Le fil de conversation ne force le bas que si on y était déjà
+
+Le gestionnaire du jeton de flux (`event.name === 'token'`, dans `sendStreaming`) forçait
+`transcript.scrollTop = transcript.scrollHeight` à chaque jeton reçu, sans condition. Remonter lire
+un message précédent pendant que la réponse continuait de s'écrire ramenait donc la vue en bas au
+jeton suivant, rendant la lecture impossible en pratique — l'utilisateur perdait sa position à
+chaque caractère reçu du modèle. Le défilement automatique ne se redéclenche désormais que si le fil
+était déjà proche du bas (`nearBottom()`, un seuil de 56 px) **juste avant** ce jeton : la mesure se
+prend avant d'ajouter le texte, parce qu'une fois ajouté `scrollHeight` a déjà grandi et ne dit plus
+rien de la position antérieure.
+
 ## Ce que les tests couvrent
 
 | Test | Ce qu'il verrouille |
