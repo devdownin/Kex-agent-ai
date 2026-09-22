@@ -58,14 +58,17 @@ page.on('console', (message) => {
 });
 
 /**
- * Deux échecs de requête sont attendus et déjà traités par la console, donc pas des défauts :
- * le `401` avant la saisie du jeton, et le `404` d'une métrique qu'aucun appel n'a encore créée —
- * la vue Technique l'affiche « — », comme le veut la règle « une mesure absente n'est pas zéro ».
- * Le navigateur les journalise quand même : les filtrer ici garde le reste du garde-fou utile.
+ * Trois échecs de requête sont attendus et déjà traités par la console, donc pas des défauts :
+ * le `401` avant la saisie du jeton, le `404` d'une métrique qu'aucun appel n'a encore créée — la
+ * vue Technique l'affiche « — », comme le veut la règle « une mesure absente n'est pas zéro » —, et
+ * le `404` de la base de connaissance quand `kex.agent.knowledge.enabled` vaut false, comme dans ce
+ * job : `knowledge.js` l'affiche calmement comme désactivée, mais le navigateur journalise quand
+ * même l'échec réseau sous-jacent. Le filtrer ici garde le reste du garde-fou utile.
  */
 function expected(message) {
   return message.text().includes('401')
-    || (message.text().includes('404') && message.location().url.includes('/actuator/metrics/'));
+    || (message.text().includes('404') && message.location().url.includes('/actuator/metrics/'))
+    || (message.text().includes('404') && message.location().url.includes('/api/agent/knowledge'));
 }
 
 /** Le strict nécessaire pour que decisionRow() (supervision.js) rende une carte sélectionnable. */
@@ -982,7 +985,6 @@ await check('retirer avec un motif la fait disparaître de la bibliothèque', as
 });
 
 await check('aucune erreur de script sur le parcours', () => {
-  if (scriptErrors.length) console.log('DEBUG scriptErrors:', JSON.stringify(scriptErrors, null, 2));
   assert.deepEqual(scriptErrors, []);
 });
 
