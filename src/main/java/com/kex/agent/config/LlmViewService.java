@@ -32,11 +32,14 @@ public class LlmViewService implements ModelAvailability {
     private final Environment environment;
     private final AgentProperties agent;
     private final KnowledgeProperties knowledge;
+    private final LocalModelProperties local;
 
-    LlmViewService(Environment environment, AgentProperties agent, KnowledgeProperties knowledge) {
+    LlmViewService(Environment environment, AgentProperties agent, KnowledgeProperties knowledge,
+                   LocalModelProperties local) {
         this.environment = environment;
         this.agent = agent;
         this.knowledge = knowledge;
+        this.local = local;
     }
 
     public LlmView describe() {
@@ -120,8 +123,8 @@ public class LlmViewService implements ModelAvailability {
     }
 
     private String localProvider() {
-        String local = environment.getProperty("kex.models.local-provider", "");
-        return "ollama".equals(local) || "vllm".equals(local) ? local : null;
+        String provider = local.localProvider();
+        return "ollama".equals(provider) || "vllm".equals(provider) ? provider : null;
     }
 
     String provider() {

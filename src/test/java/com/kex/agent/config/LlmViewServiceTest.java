@@ -24,7 +24,7 @@ class LlmViewServiceTest {
         environment = new MockEnvironment();
         agentProperties = new AgentProperties("prompt", 40, 4000, true, "secret", Map.of(), Map.of(), Map.of(), Duration.ofSeconds(120));
         knowledgeProperties = new KnowledgeProperties(false, 4, 0.6, "");
-        service = new LlmViewService(environment, agentProperties, knowledgeProperties);
+        service = new LlmViewService(environment, agentProperties, knowledgeProperties, new LocalModelProperties(""));
     }
 
     @Test
@@ -59,6 +59,26 @@ class LlmViewServiceTest {
         assertThat(view.label()).isEqualTo("OpenRouter");
         assertThat(view.gateway()).isTrue();
         assertThat(view.apiKeyVariable()).isEqualTo("OPENROUTER_API_KEY");
+    }
+
+    /**
+     * {@code kex.models.local-provider} passe par {@link LocalModelProperties}, pas par une
+     * lecture brute de l'{@code Environment} : un nom mal orthographié échouerait ici à la
+     * liaison, plutôt qu'à silencieusement rendre « Passerelle compatible OpenAI ».
+     */
+    @Test
+    void nomme_le_runtime_local_derriere_le_fournisseur_openai() {
+        LlmViewService ollama = new LlmViewService(environment, agentProperties, knowledgeProperties,
+                new LocalModelProperties("ollama"));
+        environment.setProperty("spring.ai.model.chat", "openai");
+        environment.setProperty("spring.ai.openai.base-url", "http://localhost:11434/v1");
+        environment.setProperty("spring.ai.openai.api-key", "kex-local");
+
+        LlmView view = ollama.describe();
+
+        assertThat(view.label()).isEqualTo("Ollama (API locale)");
+        assertThat(view.gateway()).isFalse();
+        assertThat(view.apiKeyVariable()).isEqualTo("OLLAMA_API_KEY (facultative)");
     }
 
     @Test
