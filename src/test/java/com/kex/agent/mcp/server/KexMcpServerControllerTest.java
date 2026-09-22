@@ -153,6 +153,16 @@ class KexMcpServerControllerTest {
     }
 
     @Test
+    void returns_structured_content_for_successful_tools() throws Exception {
+        when(supervision.alerts()).thenReturn(List.of());
+        mvc.perform(rpc(call("kex_alerts", "{}")))
+                .andExpect(jsonPath("$.result.isError").value(false))
+                .andExpect(jsonPath("$.result.content[0].type").value("text"))
+                .andExpect(jsonPath("$.result.content[0].text").value("[]"))
+                .andExpect(jsonPath("$.result.structuredContent").isArray());
+    }
+
+    @Test
     void rejects_approval_tools_unknown_arguments_and_notification_invocations() throws Exception {
         mvc.perform(rpc(call("approve", "{}"))).andExpect(jsonPath("$.error.code").value(-32602));
         mvc.perform(rpc(call("kex_status", "{\"bypassPolicy\":true}")))
