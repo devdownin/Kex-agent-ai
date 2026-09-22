@@ -193,15 +193,16 @@ Backend complet et testé côté serveur, mais **aucun** point d'entrée dans la
 |---|---|---|
 | Automatisations planifiées | `/api/agent/automations` | Aucune référence dans `resources/static/` ; aucun exemple dans `application.yml` alors que `knowledge`/`supervision`/`memory` en ont |
 | ~~Compétences proposées par le modèle~~ — **corrigé** | `/api/agent/skills` | `skills.js` : onglet Gouvernance (charte, file de revue, curation) |
-| Base de connaissance (CRUD documents) | `/api/agent/knowledge` | Seul un indicateur d'état (`llm.js:207`) apparaît côté console, pas de gestion des documents |
+| ~~Base de connaissance (CRUD documents)~~ — **corrigé** | `/api/agent/knowledge` | `knowledge.js` : recherche par similarité (même seuils qu'avant un échange réel), ajout, retrait — VectorStore n'exposant aucune énumération, une recherche reste le seul moyen de voir ce qui existe |
 | Résumés durables | `/api/agent/memory/summaries` | Absents de `memory.js`, qui ne couvre que `MemoryService` |
 | ~~Catalogue MCP recommandé~~ — **corrigé** | `/api/agent/mcp/catalog` | Panneau « Catalogue recommandé » dans `tools.js`, à côté de la découverte qui couvrait déjà `/discover` |
 | Canaux de notification (Slack/Teams/e-mail) | — (configuration seule) | Pas d'écran listant les canaux actifs, contrairement à `/supervision/notify/test` qui a son bouton |
 
 **Suggestion** : prioriser par risque plutôt que tout construire — le catalogue MCP et les
-compétences approuvées avaient un impact direct sur ce que le modèle peut faire ou dire ; les deux
-sont désormais couverts. Résumés/automatisations restent d'abord un manque de confort opérationnel,
-suivis par les canaux de notification.
+compétences approuvées avaient un impact direct sur ce que le modèle peut faire ou dire ; la base
+de connaissance pèse sur ce qu'il *sait*, un cran en dessous. Les trois sont désormais couverts.
+Résumés/automatisations restent d'abord un manque de confort opérationnel, suivis par les canaux
+de notification.
 
 ## 4. Tests manquants sur des chemins déjà identifiés comme sensibles
 
