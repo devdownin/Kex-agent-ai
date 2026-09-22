@@ -19,6 +19,7 @@ let runtimeServers = new Map();
 let editingConnection = null;
 let rotatingConnection = null;
 let installTarget = null;
+let catalogInstallTarget = null;
 
 // Miroir du libellé français porté par McpTrustCriterion côté serveur (voir sa javadoc) : le JSON
 // ne rend que le nom de la constante, comme les autres énumérations d'état de cette console —
@@ -215,6 +216,63 @@ function renderStorageStatus(storage) {
   host.textContent = storage.encryptedPersistence
     ? `Persistance chiffrée active · ${storage.configuredServers} serveur(s) administré(s)`
     : 'Mode mémoire : définissez KEX_MCP_STORAGE_KEY pour conserver les serveurs et secrets après redémarrage.';
+}
+
+/**
+ * Deux points d'accès distants choisis par l'équipe, pas un relevé tiers : contrairement à
+ * discover() ci-dessous, cette liste est statique côté serveur (McpRecommendedCatalog.ENTRIES) et
+ * se charge donc avec le reste de la vue, sans bouton dédié ni appel réseau externe à chaque passage.
+ */
+export async function catalog() {
+  await render($('#mcp-catalog'), () => api('/api/agent/mcp/catalog'), renderCatalog);
+}
+
+function renderCatalog(entries) {
+  if (!entries.length) return empty('Aucune entrée dans le catalogue recommandé.');
+  const grid = el('div', 'cards');
+  entries.forEach((entry) => grid.append(catalogEntryCard(entry)));
+  return grid;
+}
+
+function catalogEntryCard(entry) {
+  const card = el('div', 'card');
+  const header = el('header');
+  header.append(el('h3', null, entry.name));
+  if (entry.requiresToken) header.append(el('span', 'badge', 'Jeton requis'));
+  card.append(header);
+  if (entry.description) card.append(el('p', null, entry.description));
+  card.append(el('p', 'muted', `${entry.url}${entry.endpoint}`));
+  card.append(el('p', 'hint', `${entry.allowedTools.length} outil(s) autorisé(s)`));
+  if (entry.documentation) {
+    const link = el('a', null, 'Documentation');
+    link.href = entry.documentation;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    card.append(link);
+  }
+  const actions = el('div', 'card-actions');
+  const install = el('button', 'ghost', 'Installer');
+  install.type = 'button';
+  install.setAttribute('aria-label', `Installer ${entry.name}`);
+  install.addEventListener('click', () => openInstallCatalogDialog(entry));
+  actions.append(install);
+  card.append(actions);
+  return card;
+}
+
+function openInstallCatalogDialog(entry) {
+  catalogInstallTarget = entry.id;
+  $('#install-catalog-label').textContent =
+    `${entry.name} — la connexion est créée désactivée, à activer ensuite dans « Serveurs MCP » `
+      + 'une fois vérifiée.';
+  $('#install-catalog-form').reset();
+  $('#install-catalog-connection').value = entry.id;
+  // Refusé côté serveur dans les deux sens : un jeton manquant sur une entrée qui l'exige, ou un
+  // jeton fourni sur une entrée publique qui n'en accepte aucun (McpRecommendedCatalog.install).
+  $('#install-catalog-token-field').hidden = !entry.requiresToken;
+  $('#install-catalog-token').required = entry.requiresToken;
+  $('#install-catalog').showModal();
+  $('#install-catalog-connection').focus();
 }
 
 /**
@@ -531,7 +589,7 @@ export async function view() {
     $('#mcp-discovery').append(empty('Aucune source interrogée pour l’instant.',
       'Interroger les sources contacte un service tiers : ce n’est jamais automatique.'));
   }
-  await Promise.all([servers(), kafka.topics(), memory.list(), health()]);
+  await Promise.all([servers(), catalog(), kafka.topics(), memory.list(), health()]);
 }
 
 /**
@@ -610,6 +668,25 @@ export function wire() {
         });
         rotate.close();
         toast(`Secret de « ${rotatingConnection} » remplacé après test.`);
+        await servers();
+      } catch (error) { report(error); }
+    });
+  });
+
+  const installCatalog = $('#install-catalog');
+  $('#cancel-install-catalog').addEventListener('click', () => installCatalog.close());
+  $('#install-catalog-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const submit = $('#submit-install-catalog');
+    busy(submit, async () => {
+      try {
+        const connection = $('#install-catalog-connection').value.trim();
+        const bearerToken = $('#install-catalog-token-field').hidden
+          ? undefined : ($('#install-catalog-token').value || undefined);
+        await api(`/api/agent/mcp/catalog/${encodeURIComponent(catalogInstallTarget)}/install`,
+          { method: 'POST', body: { connection, bearerToken } });
+        installCatalog.close();
+        toast(`Serveur MCP « ${connection} » installé depuis le catalogue, désactivé.`);
         await servers();
       } catch (error) { report(error); }
     });

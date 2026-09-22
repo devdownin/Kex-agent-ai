@@ -328,6 +328,51 @@ await check('la vue technique n’a qu’un bouton de rafraîchissement', async 
     /vue technique/);
 });
 
+await check('le catalogue recommandé liste les deux entrées et distingue celle qui exige un jeton', async () => {
+  // Statique côté serveur (McpRecommendedCatalog.ENTRIES) : aucune route à simuler, contrairement
+  // à la découverte qui appelle un service tiers.
+  await page.waitForSelector('#mcp-catalog .card');
+  const cards = await page.$$eval('#mcp-catalog .card', (nodes) => nodes.map((node) => ({
+    title: node.querySelector('h3').textContent,
+    requiresToken: Boolean(node.querySelector('.badge')),
+  })));
+  assert.deepEqual(cards, [
+    { title: 'GitHub (lecture seule)', requiresToken: true },
+    { title: 'Microsoft Learn', requiresToken: false },
+  ]);
+});
+
+await check('le formulaire d’installation du catalogue n’affiche le champ jeton que si l’entrée l’exige, et installe sans lui sinon', async () => {
+  await page.locator('#mcp-catalog .card', { hasText: 'GitHub (lecture seule)' })
+    .getByRole('button', { name: 'Installer' }).click();
+  await page.waitForSelector('dialog#install-catalog[open]');
+  assert.equal(await page.$eval('#install-catalog-token-field', (node) => node.hidden), false);
+  await page.click('#cancel-install-catalog');
+  // Défaut possible : un <dialog> fermé devient display:none, donc invisible — waitForSelector sur
+  // sa négation d'attribut ne se résoudrait jamais (voir CLAUDE.md). { state: 'hidden' } le fait.
+  await page.waitForSelector('dialog#install-catalog', { state: 'hidden' });
+
+  // register() teste toujours une vraie poignée de main, même pour une connexion créée désactivée
+  // (voir sa javadoc) : simulée ici pour ne jamais sortir vers learn.microsoft.com en CI.
+  let installed = null;
+  await page.route('**/api/agent/mcp/catalog/microsoft-learn/install', (route) => {
+    installed = route.request().postDataJSON();
+    return route.fulfill({
+      status: 201, contentType: 'application/json',
+      body: JSON.stringify({ connection: installed.connection, serverName: null, version: null,
+        protocolVersion: null, initialized: false, circuitBreakerState: null, tools: [] }),
+    });
+  });
+  await page.locator('#mcp-catalog .card', { hasText: 'Microsoft Learn' })
+    .getByRole('button', { name: 'Installer' }).click();
+  await page.waitForSelector('dialog#install-catalog[open]');
+  assert.equal(await page.$eval('#install-catalog-token-field', (node) => node.hidden), true);
+  await page.click('#submit-install-catalog');
+  await page.waitForSelector('dialog#install-catalog', { state: 'hidden' });
+  assert.equal(installed.connection, 'microsoft-learn');
+  await page.unroute('**/api/agent/mcp/catalog/microsoft-learn/install');
+});
+
 await check('la carte d’un serveur MCP unique occupe toute la largeur du panneau', async () => {
   // Défaut : `.servers-grid` posait `repeat(auto-fill, minmax(320px, 1fr))`. Avec un seul serveur
   // connecté, auto-fill réserve quand même les colonnes vides à leur largeur minimale plutôt que

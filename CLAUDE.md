@@ -385,4 +385,13 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   disparition d'un `<dialog>` se fait sur le sélecteur positif avec `{ state: 'hidden' }`, jamais
   sur sa négation.
 
+- **Un tiret non échappé dans une classe de caractères `pattern` casse sous le drapeau `v`.**
+  Chromium récent compile l'attribut `pattern` d'un `<input>` avec le drapeau `v` (`unicodeSets`),
+  plus strict que le mode historique : `[a-zA-Z0-9._-]`, valide partout ailleurs en JS, y jette
+  `Invalid character in character class` — un tiret en fin de classe n'y est plus implicitement
+  littéral, contrairement au mode sans drapeau. Resté invisible tant qu'aucun test ne soumettait
+  réellement le formulaire porteur du motif : la validation native ne compile le `pattern` qu'à la
+  soumission, jamais à l'affichage. `[a-zA-Z0-9._\-]` (tiret échappé) compile sous les deux modes,
+  sans changer ce que la classe matche.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
