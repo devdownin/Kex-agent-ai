@@ -190,7 +190,7 @@ public class KexMcpServerController {
                 case "kex_pending_decisions" -> service.pending();
                 default -> throw new IllegalStateException("Unreachable tool");
             };
-            return toolResult(id, mapper.writeValueAsString(value), false);
+            return toolResult(id, value, mapper);
         }
         catch (RuntimeException | JsonProcessingException ex) {
             // Provider errors can contain URLs or credentials. They belong in existing audited
@@ -332,6 +332,14 @@ public class KexMcpServerController {
 
     private static ResponseEntity<Object> toolResult(Object id, String text, boolean error) {
         return result(id, Map.of("content", List.of(Map.of("type", "text", "text", text)), "isError", error));
+    }
+
+    private static ResponseEntity<Object> toolResult(Object id, Object value, ObjectMapper mapper)
+            throws JsonProcessingException {
+        return result(id, Map.of(
+                "content", List.of(Map.of("type", "text", "text", mapper.writeValueAsString(value))),
+                "structuredContent", value,
+                "isError", false));
     }
 
     private static ResponseEntity<Object> result(Object id, Object value) {
