@@ -8,6 +8,9 @@ import java.util.Set;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kex.agent.supervision.SupervisionService;
+import com.kex.agent.supervision.Coverage;
+import com.kex.agent.supervision.ProcessSnapshot;
+import com.kex.agent.supervision.ProcessState;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -87,6 +90,23 @@ class KexMcpServerControllerTest {
                 .andExpect(jsonPath("$.result.contents[0].text").value("[]"));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"resources/read\","
                 + "\"params\":{\"uri\":\"kex://unknown\"}}"))
+                .andExpect(jsonPath("$.error.code").value(-32002));
+    }
+
+    @Test
+    void advertises_and_reads_dynamic_process_resources() throws Exception {
+        when(supervision.snapshots()).thenReturn(List.of(new ProcessSnapshot(
+                "orders", "Orders", ProcessState.OK, null, null, 0L, "Nominal", Coverage.notReported())));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":16,\"method\":\"resources/templates/list\"}"))
+                .andExpect(jsonPath("$.result.resourceTemplates.length()").value(1))
+                .andExpect(jsonPath("$.result.resourceTemplates[0].uriTemplate")
+                        .value("kex://supervision/processes/{processId}"));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":17,\"method\":\"resources/read\","
+                + "\"params\":{\"uri\":\"kex://supervision/processes/orders\"}}"))
+                .andExpect(jsonPath("$.result.contents[0].text",
+                        org.hamcrest.Matchers.containsString("\\\"processId\\\":\\\"orders\\\"")));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":18,\"method\":\"resources/read\","
+                + "\"params\":{\"uri\":\"kex://supervision/processes/missing\"}}"))
                 .andExpect(jsonPath("$.error.code").value(-32002));
     }
 
