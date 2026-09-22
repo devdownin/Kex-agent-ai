@@ -9,6 +9,7 @@ import {
   schemaErrors, setParams, stateTag, toast,
 } from './core.js';
 import * as kafka from './kafka.js';
+import * as knowledge from './knowledge.js';
 import * as memory from './memory.js';
 
 // Cache du dernier relevé : la recherche filtre dessus plutôt que de refaire un appel réseau par
@@ -589,6 +590,7 @@ export async function view() {
     $('#mcp-discovery').append(empty('Aucune source interrogée pour l’instant.',
       'Interroger les sources contacte un service tiers : ce n’est jamais automatique.'));
   }
+  knowledge.panel();
   await Promise.all([servers(), catalog(), kafka.topics(), memory.list(), health()]);
 }
 

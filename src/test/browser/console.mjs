@@ -447,6 +447,68 @@ await check('le diagnostic MCP distingue ajout, suppression et changement de sch
   await page.unroute(diagnosticsUrl);
 });
 
+await check('la base de connaissance affiche un état désactivé sans le confondre avec une panne', async () => {
+  // kex.agent.knowledge.enabled vaut false par défaut et la CI ne le change pas : la route répond
+  // réellement 404 ici, sans simulation — le cas exact que le piège documenté (une route éteinte
+  // n'est pas une panne) couvre.
+  await page.waitForSelector('#knowledge-panel input[type=search]');
+  await page.fill('#knowledge-panel input[type=search]', 'rétention');
+  await page.click('#knowledge-panel button[type=submit]');
+  await page.waitForFunction(() =>
+    document.querySelector('#knowledge-panel').textContent.includes('désactivée'));
+});
+
+await check('la recherche affiche les passages renvoyés, et retirer un document le retire de l’écran', async () => {
+  // Aucune liste exhaustive côté serveur : simulée pour exercer le rendu des résultats sans
+  // dépendre d'un modèle d'embeddings réel, hors de portée de la CI.
+  const matches = [{ id: 'doc-1', text: 'La rétention des topics demo est de 7 jours.',
+    metadata: { source: 'runbook' }, score: 0.83 }];
+  let deletedIds = null;
+  await page.route('**/api/agent/knowledge**', (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(matches) });
+    }
+    if (request.method() === 'DELETE') {
+      deletedIds = request.postDataJSON();
+      return route.fulfill({ status: 204 });
+    }
+    return route.fallback();
+  });
+
+  await page.click('#knowledge-panel button[type=submit]');
+  await page.waitForSelector('#knowledge-panel .card');
+  assert.match(await page.$eval('#knowledge-panel .card', (node) => node.textContent),
+    /rétention[\s\S]*source : runbook/);
+
+  await page.click('#knowledge-panel .card button:has-text("Retirer")');
+  await page.waitForSelector('dialog#confirm[open]');
+  await page.click('#confirm-accept');
+  await page.waitForSelector('#knowledge-panel .card', { state: 'detached' });
+  assert.deepEqual(deletedIds, ['doc-1']);
+
+  await page.unroute('**/api/agent/knowledge**');
+});
+
+await check('ajouter un document envoie le texte et les métadonnées, puis referme le panneau', async () => {
+  let posted = null;
+  await page.route('**/api/agent/knowledge**', (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    posted = route.request().postDataJSON();
+    return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(['doc-2']) });
+  });
+
+  await page.click('#knowledge-panel button:has-text("Ajouter un document")');
+  await page.waitForSelector('.knowledge-add');
+  await page.locator('.knowledge-add textarea').nth(0).fill('Le déploiement Flink se fait le mardi.');
+  await page.locator('.knowledge-add textarea').nth(1).fill('{"source":"runbook"}');
+  await page.click('.knowledge-add button:has-text("Ajouter")');
+  await page.waitForSelector('.knowledge-add', { state: 'detached' });
+  assert.deepEqual(posted, [{ text: 'Le déploiement Flink se fait le mardi.', metadata: { source: 'runbook' } }]);
+
+  await page.unroute('**/api/agent/knowledge**');
+});
+
 await check('un tableau déjà rendu ne clignote pas au sondage de fond', async () => {
   // Défaut repéré sur la grille des serveurs MCP de la vue Technique, mais dans render() lui-même
   // (core.js), partagé par Processus, Décisions, Alertes, Audit et les topics Kafka : chaque
