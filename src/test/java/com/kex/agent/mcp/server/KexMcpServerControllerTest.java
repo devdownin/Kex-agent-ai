@@ -101,7 +101,7 @@ class KexMcpServerControllerTest {
         when(supervision.snapshots()).thenReturn(List.of(new ProcessSnapshot(
                 "orders", "Orders", ProcessState.OK, null, null, 0L, "Nominal", Coverage.notReported())));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":16,\"method\":\"resources/templates/list\"}"))
-                .andExpect(jsonPath("$.result.resourceTemplates.length()").value(1))
+                .andExpect(jsonPath("$.result.resourceTemplates.length()").value(2))
                 .andExpect(jsonPath("$.result.resourceTemplates[0].uriTemplate")
                         .value("kex://supervision/processes/{processId}"));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":17,\"method\":\"resources/read\","
@@ -119,7 +119,7 @@ class KexMcpServerControllerTest {
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":19,\"method\":\"resources/read\","
                 + "\"params\":{\"uri\":\"kex://kafka/topics/orders/lag\"}}"))
                 .andExpect(jsonPath("$.result.contents[0].text",
-                        org.hamcrest.Matchers.containsString("\\\"topic\\\":\\\"orders\\\"")))
+                        org.hamcrest.Matchers.containsString("\"topic\":\"orders\"")))
                 .andExpect(jsonPath("$.result.contents[0].text",
                         org.hamcrest.Matchers.containsString("broker unavailable")));
     }
