@@ -230,6 +230,31 @@ sequenceDiagram
 `tools/list` est rejoué à chaque requête : un serveur qui publie un nouvel outil est pris en compte
 sans redémarrer l'agent.
 
+## Exposer Kex comme serveur MCP
+
+Kex peut aussi être consommé par un autre client MCP. Cette surface est **opt-in et en lecture seule**
+dans sa première phase : elle expose `kex_status`, `kex_overview`, `kex_alerts`,
+`kex_incidents` et `kex_pending_decisions`. Elle n'expose ni lancement de cycle, ni pause, ni
+approbation/rejet de décision.
+
+Activez-la explicitement :
+
+```bash
+export KEX_MCP_SERVER_ENABLED=true
+export KEX_AGENT_API_KEY="$(openssl rand -hex 32)"
+```
+
+Le point d'accès Streamable HTTP est `/api/agent/mcp-server` et réutilise l'authentification
+Bearer de Kex. Un appelant doit avoir le rôle `OPERATOR` ou `ADMIN`. Les requêtes de navigateur
+avec un en-tête `Origin` sont refusées sauf si l'origine est explicitement ajoutée à
+`kex.mcp.server.allowed-origins`; les clients serveur-à-serveur sans `Origin` ne sont pas
+concernés.
+
+Cette séparation est intentionnelle : le protocole MCP devient un adaptateur entrant vers les
+services Kex existants, pas un second moteur de gouvernance. Les opérations mutantes seront ajoutées
+séparément lorsqu'elles pourront conserver les mêmes garanties d'autorisation, d'approbation et
+d'audit que l'API opérateur.
+
 ## Écrire son propre serveur MCP
 
 Le plus simple, en Java, est Spring AI côté serveur — c'est ce que fait Kafka SQL Explorer :
