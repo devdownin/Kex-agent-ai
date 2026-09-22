@@ -11,6 +11,8 @@ import com.kex.agent.supervision.SupervisionService;
 import com.kex.agent.supervision.Coverage;
 import com.kex.agent.supervision.ProcessSnapshot;
 import com.kex.agent.supervision.ProcessState;
+import com.kex.agent.kafka.KafkaViewService;
+import com.kex.agent.kafka.KafkaTopicLag;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,15 +38,16 @@ class KexMcpServerControllerTest {
 
     private static final String PATH = "/api/agent/mcp-server";
     private final SupervisionService supervision = mock(SupervisionService.class);
+    private final KafkaViewService kafka = mock(KafkaViewService.class);
     private MockMvc mvc;
     private SimpleMeterRegistry meters;
 
     @BeforeEach
     void setUp() {
-        var beans = new StaticListableBeanFactory(Map.of("supervision", supervision));
+        var beans = new StaticListableBeanFactory(Map.of("supervision", supervision, "kafka", kafka));
         meters = new SimpleMeterRegistry();
         mvc = MockMvcBuilders.standaloneSetup(new KexMcpServerController(new ObjectMapper(),
-                beans.getBeanProvider(SupervisionService.class),
+                beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class),
                 new KexMcpServerProperties(true, Set.of("https://console.example")), meters)).build();
     }
 
@@ -108,6 +111,17 @@ class KexMcpServerControllerTest {
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":18,\"method\":\"resources/read\","
                 + "\"params\":{\"uri\":\"kex://supervision/processes/missing\"}}"))
                 .andExpect(jsonPath("$.error.code").value(-32002));
+    }
+
+    @Test
+    void reads_kafka_topic_lag_as_dynamic_resource() throws Exception {
+        when(kafka.lag("orders")).thenReturn(KafkaTopicLag.unavailable("orders", "broker unavailable"));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":19,\"method\":\"resources/read\","
+                + "\"params\":{\"uri\":\"kex://kafka/topics/orders/lag\"}}"))
+                .andExpect(jsonPath("$.result.contents[0].text",
+                        org.hamcrest.Matchers.containsString("\\\"topic\\\":\\\"orders\\\"")))
+                .andExpect(jsonPath("$.result.contents[0].text",
+                        org.hamcrest.Matchers.containsString("broker unavailable")));
     }
 
     @Test
