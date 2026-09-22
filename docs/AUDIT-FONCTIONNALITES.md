@@ -250,14 +250,18 @@ un manque de confort opérationnel plutôt qu'un risque. Les six sont désormais
 
 ## 5. Conventions mineures
 
-- `WebhookNotifier.channels(...)` (`WebhookNotifier.java:43-46`) utilise l'injection par
-  *setter* (`@Autowired(required = false)`) plutôt que par constructeur — seule dérogation
-  observée dans les paquets audités, justifiée par le caractère optionnel du bean mais à documenter
-  si elle doit rester une exception à la règle du projet.
-- `kex.models.local-provider` (`application-ollama.yml:16`, `application-vllm.yml:16`) est lu
-  directement via `Environment.getProperty(...)` dans `LlmViewService.java:123`, hors du mécanisme
-  `@ConfigurationProperties` qu'utilisent les dix-sept autres classes de configuration du projet —
-  un renommage de cette clé ne serait pas détecté par le binding Spring, seulement à l'exécution.
+- ~~`WebhookNotifier.channels(...)` utilise l'injection par *setter*...~~ — **corrigé** :
+  constructeur `@Autowired` prenant `ObjectProvider<ChannelNotifier>`, exactement le motif déjà
+  suivi par `AgentService` pour son propre bean optionnel (`LongTermMemoryService`) — plus
+  d'exception à documenter, le champ `channels` redevient `final`. Un constructeur de
+  compatibilité à deux arguments reste pour les tests ciblés (`WebhookNotifierTest`, inchangé).
+- ~~`kex.models.local-provider` est lu directement via `Environment.getProperty(...)`...~~ —
+  **corrigé** : `LocalModelProperties` (`@ConfigurationProperties("kex.models")`, un seul champ)
+  porte désormais ce nom, injecté dans `LlmViewService` comme les dix-sept autres classes de
+  configuration. Séparé de `LlmRoutingProperties`, qui partage le même préfixe mais gouverne une
+  fonctionnalité distincte (le routage multi-modèles) — les deux se lient indépendamment sans
+  entrer en conflit. `LlmViewServiceTest.nomme_le_runtime_local_derriere_le_fournisseur_openai`
+  couvre le rendu (libellé, variable de clé facultative) qu'aucun test n'exerçait jusqu'ici.
 
 ## Priorisation suggérée
 
