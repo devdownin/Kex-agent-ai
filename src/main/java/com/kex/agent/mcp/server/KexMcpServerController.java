@@ -97,7 +97,12 @@ public class KexMcpServerController {
         }
         Object id = request.has("id") ? mapper.convertValue(request.get("id"), Object.class) : null;
         String method = request.path("method").asText("");
-        String version = headers.getFirst("MCP-Protocol-Version");
+        List<String> versions = headers.get("MCP-Protocol-Version");
+        if (versions != null && versions.size() != 1) {
+            return ResponseEntity.badRequest().body(envelope(id, "error",
+                    Map.of("code", -32600, "message", "Exactly one MCP protocol version is required")));
+        }
+        String version = versions == null ? null : versions.get(0);
         if (version != null && !PROTOCOLS.contains(version)) {
             return ResponseEntity.badRequest().body(envelope(id, "error",
                     Map.of("code", -32600, "message", "Unsupported MCP protocol version")));
@@ -163,6 +168,7 @@ public class KexMcpServerController {
         if (TOOLS.stream().noneMatch(tool -> tool.get("name").equals(name))) {
             return error(id, -32602, "Unknown tool");
         }
+        if (!params.path("name").isTextual()) return error(id, -32602, "A textual tool name is required");
         if (params.has("arguments") && (!params.get("arguments").isObject() || !params.get("arguments").isEmpty())) {
             return error(id, -32602, "This tool accepts an empty arguments object");
         }
@@ -188,6 +194,7 @@ public class KexMcpServerController {
 
 
     private ResponseEntity<Object> getPrompt(Object id, JsonNode params) {
+        if (!params.path("name").isTextual()) return error(id, -32602, "A textual prompt name is required");
         String name = params.path("name").asText("");
         if (!"kex_supervision_triage".equals(name)) return error(id, -32602, "Unknown prompt");
         if (params.has("arguments") && (!params.get("arguments").isObject() || !params.get("arguments").isEmpty())) {
@@ -218,6 +225,7 @@ public class KexMcpServerController {
     }
 
     private ResponseEntity<Object> readResource(Object id, JsonNode params) {
+        if (!params.path("uri").isTextual()) return error(id, -32602, "A textual resource URI is required");
         String uri = params.path("uri").asText("");
         if (uri.isBlank()) return error(id, -32602, "A resource URI is required");
         SupervisionService service = supervision.getIfAvailable();
