@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.mcp;
 
+import java.io.IOException;
+import java.net.ServerSocket;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -355,6 +357,30 @@ class McpToolCatalogTest {
         assertThatThrownBy(() -> catalog(true).test(registration))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("URL MCP");
+    }
+
+    /**
+     * Contrepoint du refus ci-dessus : {@code rejectLinkLocalHost} ne teste que
+     * {@code isLinkLocalAddress()}, donc tout hôte non lien-local — loopback compris — passe la
+     * validation. Un port fermé, obtenu en liant puis refermant immédiatement un {@link
+     * ServerSocket} sur 127.0.0.1, garantit un refus de connexion quasi instantané côté TCP :
+     * {@code test()} rend un résultat en échec, jamais une {@link IllegalArgumentException} levée
+     * avant même la tentative — la seule chose que cette validation doit décider.
+     */
+    @Test
+    void autorise_un_hote_loopback() throws IOException {
+        int closedPort;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            closedPort = socket.getLocalPort();
+        }
+        McpServerRegistration registration = new McpServerRegistration("loopback", "HTTP",
+                "http://127.0.0.1:" + closedPort, "/mcp", null, Map.of(),
+                null, List.of(), Map.of(), true, Set.of(), Map.of());
+
+        McpConnectionTestResult result = catalog(true).test(registration);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).doesNotContain("URL MCP");
     }
 
     @Test

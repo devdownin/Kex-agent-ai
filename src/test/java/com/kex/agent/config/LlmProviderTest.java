@@ -120,6 +120,36 @@ class LlmProviderTest {
                 });
     }
 
+    /**
+     * `kex.models.enabled` ajoute un troisième candidat {@code ChatModel} — {@link
+     * RoutingChatModel}, seul marqué {@code @Primary} — sans jamais poser {@code
+     * spring.ai.model.chat} : les deux autoconfigurations de starter s'activent donc quand même,
+     * exactement le cas qui échoue en son absence ({@code
+     * sans_la_propriete_les_deux_modeles_s_activent_et_le_contexte_echoue}). Le routage doit rester
+     * celui injecté partout ailleurs, pas un des deux modèles de starter au hasard.
+     */
+    @Test
+    void le_routage_multi_modeles_reste_prioritaire_sans_la_propriete_chat() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(KexAgentApplication.class)
+                .withPropertyValues("spring.ai.mcp.client.enabled=false",
+                        "spring.ai.anthropic.api-key=cle-anthropic",
+                        "spring.ai.openai.api-key=cle-openrouter",
+                        "spring.ai.model.embedding=none",
+                        "kex.agent.api-key=secret",
+                        "kex.models.enabled=true",
+                        "kex.models.endpoints.local.provider=OLLAMA",
+                        "kex.models.endpoints.local.model=llama3",
+                        "kex.models.routes.chat[0]=local")
+                .run(ctx -> {
+                    assertThat(ctx).hasNotFailed();
+                    // Les trois beans existent bel et bien : la résolution vient du @Primary, pas
+                    // de l'absence des deux autres candidats.
+                    assertThat(ctx.getBeansOfType(ChatModel.class)).hasSize(3);
+                    assertThat(ctx.getBean(ChatModel.class)).isInstanceOf(RoutingChatModel.class);
+                });
+    }
+
     @Test
     void une_cle_absente_n_empeche_pas_le_demarrage() {
         // L'agent doit démarrer pour que /actuator/health, la console et l'introspection MCP
