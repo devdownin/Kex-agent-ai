@@ -131,6 +131,7 @@ jobs:
           KEX_AGENT_API_KEY: ci-secret
         run: |
           node src/test/browser/actions-menu.mjs
+          node src/test/browser/ui-controls.mjs
           node src/test/browser/console.mjs
 
       - name: Agent logs on failure
