@@ -133,6 +133,9 @@ public class KexMcpServerController {
                     ? error(id, -32602, "This server does not use pagination cursors")
                     : result(id, Map.of("tools", TOOLS));
             case "tools/call" -> call(id, params);
+            case "resources/templates/list" -> params.has("cursor")
+                    ? error(id, -32602, "This server does not use pagination cursors")
+                    : result(id, Map.of("resourceTemplates", resourceTemplates()));
             case "resources/list" -> params.has("cursor")
                     ? error(id, -32602, "This server does not use pagination cursors")
                     : result(id, Map.of("resources", resources()));
@@ -211,6 +214,14 @@ public class KexMcpServerController {
                         "content", Map.of("type", "text", "text", text)))));
     }
 
+    private static List<Map<String, Object>> resourceTemplates() {
+        return List.of(Map.of(
+                "uriTemplate", "kex://supervision/processes/{processId}",
+                "name", "Kex process snapshot",
+                "description", "Read the current supervision snapshot for one configured process.",
+                "mimeType", MediaType.APPLICATION_JSON_VALUE));
+    }
+
     private List<Map<String, Object>> resources() {
         return List.of(
                 resource("kex://supervision/status", "Kex supervision status"),
@@ -228,6 +239,25 @@ public class KexMcpServerController {
         if (!params.path("uri").isTextual()) return error(id, -32602, "A textual resource URI is required");
         String uri = params.path("uri").asText("");
         if (uri.isBlank()) return error(id, -32602, "A resource URI is required");
+        String processPrefix = "kex://supervision/processes/";
+        if (uri.startsWith(processPrefix)) {
+            String processId = uri.substring(processPrefix.length());
+            if (processId.isBlank() || processId.contains("/")) return error(id, -32002, "Resource not found");
+            SupervisionService service = supervision.getIfAvailable();
+            if (service == null) return error(id, -32603, "Supervision is disabled");
+            Object snapshot = service.snapshots().stream()
+                    .filter(candidate -> candidate.processId().equals(processId))
+                    .findFirst().orElse(null);
+            if (snapshot == null) return error(id, -32002, "Resource not found");
+            try {
+                return result(id, Map.of("contents", List.of(Map.of(
+                        "uri", uri, "mimeType", MediaType.APPLICATION_JSON_VALUE,
+                        "text", mapper.writeValueAsString(snapshot)))));
+            }
+            catch (JsonProcessingException ex) {
+                return error(id, -32603, "Kex could not read the resource. Inspect the operator console.");
+            }
+        }
         SupervisionService service = supervision.getIfAvailable();
         if (service == null) return error(id, -32603, "Supervision is disabled");
         try {
@@ -265,7 +295,7 @@ public class KexMcpServerController {
     }
 
     private static String metricMethod(String method) {
-        return Set.of("initialize", "ping", "tools/list", "tools/call", "resources/list", "resources/read",
+        return Set.of("initialize", "ping", "tools/list", "tools/call", "resources/list", "resources/templates/list", "resources/read",
                 "prompts/list", "prompts/get").contains(method) ? method : "unknown";
     }
 
