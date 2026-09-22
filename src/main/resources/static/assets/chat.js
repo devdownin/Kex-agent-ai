@@ -293,8 +293,7 @@ async function* serverSentEvents(response) {
       const data = [];
       for (const line of block.split('\n')) {
         if (line.startsWith('event:')) name = line.slice(6).trim();
-        // Une seule espace après le deux-points est un délimiteur, les suivantes sont du contenu.
-        else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+        else if (line.startsWith('data:')) data.push(line.slice(5));
       }
       if (data.length) yield { name, data: data.join('\n') };
     }
