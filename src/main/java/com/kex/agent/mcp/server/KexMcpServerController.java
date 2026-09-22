@@ -82,11 +82,13 @@ public class KexMcpServerController {
     ResponseEntity<Object> receive(@RequestBody String body, @RequestHeader HttpHeaders headers,
                                     Authentication authentication) {
         ResponseEntity<Object> rejected = authorize(headers, authentication);
-        if (rejected != null) return rejected;
+        if (rejected != null) return recordTransport("authorization", rejected);
         if (!accepts(headers, MediaType.APPLICATION_JSON) || !accepts(headers, MediaType.TEXT_EVENT_STREAM)) {
-            return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build();
+            return recordTransport("accept", ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build());
         }
-        if (body.length() > MAX_REQUEST_LENGTH) return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).build();
+        if (body.length() > MAX_REQUEST_LENGTH) {
+            return recordTransport("payload", ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).build());
+        }
 
         JsonNode request;
         try {
@@ -313,6 +315,11 @@ public class KexMcpServerController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         return null;
+    }
+
+    private ResponseEntity<Object> recordTransport(String reason, ResponseEntity<Object> response) {
+        meters.counter("kex.mcp.server.transport.rejected", "reason", reason).increment();
+        return response;
     }
 
     private static String metricOutcome(ResponseEntity<Object> response) {

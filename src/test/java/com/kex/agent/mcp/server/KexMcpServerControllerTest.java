@@ -101,13 +101,13 @@ class KexMcpServerControllerTest {
         when(supervision.snapshots()).thenReturn(List.of(new ProcessSnapshot(
                 "orders", "Orders", ProcessState.OK, null, null, 0L, "Nominal", Coverage.notReported())));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":16,\"method\":\"resources/templates/list\"}"))
-                .andExpect(jsonPath("$.result.resourceTemplates.length()").value(1))
+                .andExpect(jsonPath("$.result.resourceTemplates.length()").value(2))
                 .andExpect(jsonPath("$.result.resourceTemplates[0].uriTemplate")
                         .value("kex://supervision/processes/{processId}"));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":17,\"method\":\"resources/read\","
                 + "\"params\":{\"uri\":\"kex://supervision/processes/orders\"}}"))
                 .andExpect(jsonPath("$.result.contents[0].text",
-                        org.hamcrest.Matchers.containsString("\\\"processId\\\":\\\"orders\\\"")));
+                        org.hamcrest.Matchers.containsString("\"processId\":\"orders\"")));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":18,\"method\":\"resources/read\","
                 + "\"params\":{\"uri\":\"kex://supervision/processes/missing\"}}"))
                 .andExpect(jsonPath("$.error.code").value(-32002));
@@ -119,7 +119,7 @@ class KexMcpServerControllerTest {
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":19,\"method\":\"resources/read\","
                 + "\"params\":{\"uri\":\"kex://kafka/topics/orders/lag\"}}"))
                 .andExpect(jsonPath("$.result.contents[0].text",
-                        org.hamcrest.Matchers.containsString("\\\"topic\\\":\\\"orders\\\"")))
+                        org.hamcrest.Matchers.containsString("\"topic\":\"orders\"")))
                 .andExpect(jsonPath("$.result.contents[0].text",
                         org.hamcrest.Matchers.containsString("broker unavailable")));
     }
@@ -231,6 +231,10 @@ class KexMcpServerControllerTest {
         mvc.perform(rpc(body).header("Origin", "null")).andExpect(status().isForbidden());
         mvc.perform(rpc(body).header("MCP-Protocol-Version", "1900-01-01")).andExpect(status().isBadRequest());
         mvc.perform(rpc(body).accept(MediaType.APPLICATION_JSON)).andExpect(status().isNotAcceptable());
+        org.assertj.core.api.Assertions.assertThat(meters.find("kex.mcp.server.transport.rejected")
+                .tag("reason", "authorization").counter()).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(meters.find("kex.mcp.server.transport.rejected")
+                .tag("reason", "accept").counter()).isNotNull();
         mvc.perform(get(PATH).principal(auth("ROLE_OPERATOR"))).andExpect(status().isMethodNotAllowed());
         mvc.perform(get(PATH).principal(auth("ROLE_OPERATOR")).header("Origin", "https://evil.example"))
                 .andExpect(status().isForbidden());
