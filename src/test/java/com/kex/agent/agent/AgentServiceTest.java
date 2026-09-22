@@ -303,6 +303,30 @@ class AgentServiceTest {
         verify(longTermMemory, never()).recordSuccessfulTask(any(), any(), any(), any(), any());
     }
 
+    /** Même branchement que le flux, sur le chemin bloquant historique — ask/askStructured. */
+    @Test
+    void alimente_la_memoire_long_terme_apres_un_appel_bloquant_reussi() {
+        blockingCall();
+        given(callSpec.chatResponse()).willReturn(response("pong"));
+
+        serviceWithLongTermMemory(Duration.ofSeconds(10)).ask("conv-1", "ping");
+
+        verify(longTermMemory).recordSuccessfulTask(eq("kex-internal"), eq("conv-1"), eq("ping"), eq("pong"), any());
+    }
+
+    @Test
+    void alimente_la_memoire_long_terme_apres_une_sortie_structuree_reussie() {
+        blockingCall();
+        given(callSpec.responseEntity(any(StructuredOutputConverter.class))).willReturn(
+                new ResponseEntity<>(response("{}", "end_turn", new DefaultUsage(10, 20)), Map.of("total", 8)));
+
+        serviceWithLongTermMemory(Duration.ofSeconds(10))
+                .askStructured("conv-1", "combien ?", Map.of("type", "object"));
+
+        verify(longTermMemory).recordSuccessfulTask(
+                eq("kex-internal"), eq("conv-1"), eq("combien ?"), eq("{}"), any());
+    }
+
     @Test
     void borne_l_attente_d_un_appel_bloquant() throws InterruptedException {
         blockingCall();

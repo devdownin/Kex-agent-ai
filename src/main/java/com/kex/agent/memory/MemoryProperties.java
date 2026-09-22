@@ -12,11 +12,12 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * Mémoire long-terme, distincte de la fenêtre de conversation ({@code max-history-messages}) : ce
- * que le modèle choisit explicitement de retenir au-delà d'un échange, jamais une capture
- * automatique. La panne la plus citée sur ce sujet est l'absence de garde d'écriture — tout devient
- * permanent, la relecture finit par ne renvoyer que du bruit. Le modèle décide quoi écrire ; ces
- * plafonds décident combien en rester.
+ * Plafonds partagés par deux systèmes distincts, tous deux distincts de la fenêtre de conversation
+ * ({@code max-history-messages}) : {@link MemoryService} (faits que le modèle choisit explicitement
+ * de retenir — {@code remember_fact}/{@code recall_facts}) et {@link LongTermMemoryService} (résumés
+ * et compétences écrits automatiquement après chaque échange réussi, sans choix du modèle). Voir
+ * {@code docs/ARCHITECTURE.md} (« Un second système partage le nom… ») pour ce que {@code capacity}
+ * et {@code retention} couvrent exactement dans l'un et dans l'autre.
  */
 @ConfigurationProperties("kex.agent.memory")
 @Validated
