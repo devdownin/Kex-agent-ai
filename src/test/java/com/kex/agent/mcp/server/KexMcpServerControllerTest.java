@@ -17,6 +17,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
+import org.springframework.boot.info.BuildProperties;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -44,11 +45,16 @@ class KexMcpServerControllerTest {
 
     @BeforeEach
     void setUp() {
-        var beans = new StaticListableBeanFactory(Map.of("supervision", supervision, "kafka", kafka));
+        var beans = new StaticListableBeanFactory(Map.of(
+                "supervision", supervision, "kafka", kafka,
+                "buildProperties", new BuildProperties(new java.util.Properties() {{
+                    setProperty("version", "0.6.1-test");
+                }})));
         meters = new SimpleMeterRegistry();
         mvc = MockMvcBuilders.standaloneSetup(new KexMcpServerController(new ObjectMapper(),
                 beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class),
-                new KexMcpServerProperties(true, Set.of("https://console.example")), meters)).build();
+                new KexMcpServerProperties(true, Set.of("https://console.example")),
+                beans.getBeanProvider(BuildProperties.class), meters)).build();
     }
 
     @Test
@@ -61,6 +67,7 @@ class KexMcpServerControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value("hello"))
                 .andExpect(jsonPath("$.result.protocolVersion").value("2025-06-18"))
+                .andExpect(jsonPath("$.result.serverInfo.version").value("0.6.1-test"))
                 .andExpect(jsonPath("$.result.capabilities.tools.listChanged").value(false))
                 .andExpect(jsonPath("$.result.capabilities.resources.listChanged").value(false))
                 .andExpect(jsonPath("$.result.capabilities.prompts.listChanged").value(false));
