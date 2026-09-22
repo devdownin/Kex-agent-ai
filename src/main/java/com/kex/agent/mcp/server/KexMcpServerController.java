@@ -151,7 +151,7 @@ public class KexMcpServerController {
             default -> error(id, -32601, "Method not found");
         };
         sample.stop(meters.timer("kex.mcp.server.request", "method", metricMethod(method),
-                "outcome", response.getStatusCode().is2xxSuccessful() ? "success" : "rejected"));
+                "outcome", metricOutcome(response)));
         return response;
     }
 
@@ -313,6 +313,15 @@ public class KexMcpServerController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         return null;
+    }
+
+    private static String metricOutcome(ResponseEntity<Object> response) {
+        if (!response.getStatusCode().is2xxSuccessful()) return "transport_rejected";
+        Object body = response.getBody();
+        if (body instanceof Map<?, ?> envelope && envelope.containsKey("error")) return "rpc_error";
+        if (body instanceof Map<?, ?> envelope && envelope.get("result") instanceof Map<?, ?> result
+                && Boolean.TRUE.equals(result.get("isError"))) return "rpc_error";
+        return "success";
     }
 
     private static String metricMethod(String method) {
