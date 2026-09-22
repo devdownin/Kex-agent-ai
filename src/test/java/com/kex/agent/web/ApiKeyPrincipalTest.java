@@ -141,6 +141,18 @@ class ApiKeyPrincipalTest {
         assertThat(status("/api/agent/automations", "Bearer jeton-chat")).isEqualTo(403);
     }
 
+    /**
+     * Contrairement aux automatisations, ChannelStatusController existe toujours ({@link
+     * com.kex.agent.channels.ChannelProperties} vient d'un {@code @ConfigurationPropertiesScan}
+     * global) : le 200 ci-dessous prouve un vrai succès, pas une absence de contrôleur masquée
+     * par un 403 qui arriverait de toute façon.
+     */
+    @Test
+    void une_clef_de_chat_ne_peut_pas_lire_les_canaux_de_notification() throws Exception {
+        assertThat(status("/api/agent/channels/status", "Bearer jeton-chat")).isEqualTo(403);
+        assertThat(status("/api/agent/channels/status", "Bearer jeton-ops")).isEqualTo(200);
+    }
+
     private void post(String path, String authorization) throws IOException, InterruptedException {
         postStatus(path, authorization);
     }

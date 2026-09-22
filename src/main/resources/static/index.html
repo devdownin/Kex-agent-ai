@@ -283,6 +283,14 @@
           </section>
 
           <section class="panel" data-agent-section="notifications" hidden>
+            <div class="panel-head"><h2>Canaux de notification</h2></div>
+            <p class="hint">Slack, Teams et e-mail relaient une demande de validation vers une
+              personne — trois destinations indépendantes, chacune activée par sa propre
+              configuration. Lecture seule : rien ne s'active depuis la console.</p>
+            <div id="channels-status"></div>
+          </section>
+
+          <section class="panel" data-agent-section="notifications" hidden>
             <div class="panel-head"><h2>Notifications</h2></div>
             <p class="hint">Vérifie <code>kex.agent.supervision.notify.webhook-url</code> sans
               attendre qu'une anomalie réelle le découvre en échec — la seule capacité dont le

@@ -1097,6 +1097,45 @@ await check('créer une automatisation envoie le cron et le prompt, puis referme
   await page.unroute('**/api/agent/automations');
 });
 
+await check('les canaux de notification affichent un état inactif par défaut', async () => {
+  // Aucun channels.* n'est configuré en CI : contrairement aux résumés/automatisations, la route
+  // ne répond jamais 404 (ChannelProperties existe toujours), donc « tout inactif » est ici un
+  // vrai relevé du serveur, pas une simulation.
+  await page.click('[data-agent-tab="notifications"]');
+  await page.waitForSelector('[data-agent-section="notifications"]:not([hidden]) #channels-status dl');
+  const text = await page.$eval('#channels-status', (node) => node.textContent);
+  assert.match(text, /Slack[\s\S]*Inactif/);
+  assert.match(text, /Teams[\s\S]*Inactif/);
+  assert.match(text, /E-mail[\s\S]*Inactif/);
+  assert.match(text, /Approbation entrante[\s\S]*Inactive/);
+  assert.match(text, /URL de console[\s\S]*Absente/);
+});
+
+await check('un canal actif se distingue d’un canal inactif', async () => {
+  await page.route('**/api/agent/channels/status', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({
+      slack: true, slackInteractiveButtons: true, teams: true, email: true, emailRecipients: 2,
+      inboundApproval: true, consoleUrlConfigured: true,
+    }),
+  }));
+
+  // Un aller-retour de vue plutôt qu'un rechargement complet : la même adresse ne redéclenche pas
+  // route(), donc pas channels.status() — voir CLAUDE.md.
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/agent`, { waitUntil: 'domcontentloaded' });
+  await page.click('[data-agent-tab="notifications"]');
+  await page.waitForFunction(() =>
+    document.querySelector('#channels-status').textContent.includes('boutons intégrés'));
+  const text = await page.$eval('#channels-status', (node) => node.textContent);
+  assert.match(text, /Slack[\s\S]*Actif, boutons intégrés/);
+  assert.match(text, /Teams[\s\S]*Actif, lien vers la console/);
+  assert.match(text, /E-mail[\s\S]*Actif, 2 destinataires/);
+  assert.match(text, /Approbation entrante[\s\S]*Active/);
+  assert.match(text, /URL de console[\s\S]*Configurée/);
+
+  await page.unroute('**/api/agent/channels/status');
+});
+
 await check('aucune erreur de script sur le parcours', () => {
   assert.deepEqual(scriptErrors, []);
 });
