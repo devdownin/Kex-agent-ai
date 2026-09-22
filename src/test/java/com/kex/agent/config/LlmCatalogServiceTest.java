@@ -52,7 +52,8 @@ class LlmCatalogServiceTest {
 
     private LlmCatalogService catalog() {
         return new LlmCatalogService(environment,
-                new LlmViewService(environment, agent(), new KnowledgeProperties(false, 4, 0.6, "")),
+                new LlmViewService(environment, agent(), new KnowledgeProperties(false, 4, 0.6, ""),
+                        new LocalModelProperties("")),
                 RestClient.builder());
     }
 

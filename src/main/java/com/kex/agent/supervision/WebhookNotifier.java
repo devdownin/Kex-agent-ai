@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import com.kex.agent.channels.ChannelNotifier;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -33,15 +34,21 @@ class WebhookNotifier {
 
     private final RestClient restClient;
     private final NotifyProperties properties;
-    private ChannelNotifier channels;
+    private final ChannelNotifier channels;
 
-    WebhookNotifier(RestClient.Builder builder, NotifyProperties properties) {
-        this.restClient = builder.requestFactory(requestFactory()).build();
-        this.properties = properties;
+    @Autowired
+    WebhookNotifier(RestClient.Builder builder, NotifyProperties properties, ObjectProvider<ChannelNotifier> channels) {
+        this(builder, properties, channels.getIfAvailable());
     }
 
-    @Autowired(required = false)
-    void channels(ChannelNotifier channels) {
+    /** Constructeur de compatibilité pour les tests ciblés : {@code channels} absent, comme sans {@code kex.agent.channels.enabled}. */
+    WebhookNotifier(RestClient.Builder builder, NotifyProperties properties) {
+        this(builder, properties, (ChannelNotifier) null);
+    }
+
+    private WebhookNotifier(RestClient.Builder builder, NotifyProperties properties, ChannelNotifier channels) {
+        this.restClient = builder.requestFactory(requestFactory()).build();
+        this.properties = properties;
         this.channels = channels;
     }
 
