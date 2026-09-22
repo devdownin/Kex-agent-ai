@@ -11,6 +11,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kex.agent.supervision.SupervisionService;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpHeaders;
@@ -55,12 +57,14 @@ public class KexMcpServerController {
     private final ObjectMapper mapper;
     private final ObjectProvider<SupervisionService> supervision;
     private final KexMcpServerProperties properties;
+    private final MeterRegistry meters;
 
     public KexMcpServerController(ObjectMapper mapper, ObjectProvider<SupervisionService> supervision,
-                                  KexMcpServerProperties properties) {
+                                  KexMcpServerProperties properties, MeterRegistry meters) {
         this.mapper = mapper;
         this.supervision = supervision;
         this.properties = properties;
+        this.meters = meters;
     }
 
     @GetMapping
@@ -116,7 +120,8 @@ public class KexMcpServerController {
                     : ResponseEntity.badRequest().build();
         }
         JsonNode params = request.path("params");
-        return switch (method) {
+        Timer.Sample sample = Timer.start(meters);
+        ResponseEntity<Object> response = switch (method) {
             case "initialize" -> initialize(id, params);
             case "ping" -> result(id, Map.of());
             case "tools/list" -> params.has("cursor")
@@ -133,6 +138,9 @@ public class KexMcpServerController {
             case "prompts/get" -> getPrompt(id, params);
             default -> error(id, -32601, "Method not found");
         };
+        sample.stop(meters.timer("kex.mcp.server.request", "method", metricMethod(method),
+                "outcome", response.getStatusCode().is2xxSuccessful() ? "success" : "rejected"));
+        return response;
     }
 
     private ResponseEntity<Object> initialize(Object id, JsonNode params) {
@@ -246,6 +254,11 @@ public class KexMcpServerController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         return null;
+    }
+
+    private static String metricMethod(String method) {
+        return Set.of("initialize", "ping", "tools/list", "tools/call", "resources/list", "resources/read",
+                "prompts/list", "prompts/get").contains(method) ? method : "unknown";
     }
 
     private static boolean accepts(HttpHeaders headers, MediaType type) {
