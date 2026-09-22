@@ -104,7 +104,7 @@ différents, et un fichier `KEXMCP1` est refusé explicitement.
 
 ## 2. Cohérence fonctionnelle
 
-### 2.1 Deux systèmes de « mémoire long-terme » sous un seul nom
+### 2.1 Deux systèmes de « mémoire long-terme » sous un seul nom — **documenté**
 
 Le nom « mémoire long-terme » est déjà pris dans le code et la documentation par
 `MemoryService`/`remember_fact`/`recall_facts` (`MemoryProperties.java:14`,
@@ -125,6 +125,16 @@ opposées sous un seul interrupteur et un seul jeu de seuils.
 **Suggestion** : documenter les deux séparément dans `ARCHITECTURE.md`, et évaluer si une
 propriété `kex.agent.learning.*` dédiée (capacité, rétention, activation) ne devrait pas se
 distinguer de `kex.agent.memory.*`.
+
+**Traité** : `docs/ARCHITECTURE.md` porte désormais une section dédiée (« Un second système partage
+le nom "mémoire long-terme"… ») qui nomme les deux systèmes, contraste leur garde d'écriture
+opposée, et détaille précisément ce que `capacity`/`retention`/`enabled` couvrent dans chacun — y
+compris la nuance que `capacity` évince chaque `kind` (`FACT`/`SUMMARY`/`SKILL`) indépendamment,
+jamais en concurrence entre les trois. Le Javadoc de `MemoryProperties` (qui ne mentionnait que
+`MemoryService`) renvoie maintenant vers cette section. Propriétés dédiées évaluées et écartées
+pour l'instant : les trois plafonds répondent à la même question et rien n'a encore demandé à ce
+qu'un fait survive plus longtemps qu'un résumé — la décision et son critère de réouverture sont
+dans `ARCHITECTURE.md`.
 
 ### 2.2 Le chemin par défaut de la console n'alimentait jamais le second système de mémoire — **corrigé**
 
@@ -205,21 +215,38 @@ un manque de confort opérationnel plutôt qu'un risque. Les six sont désormais
 
 ## 4. Tests manquants sur des chemins déjà identifiés comme sensibles
 
-- Aucun test n'exerce `validatedBaseUrl` contre une URL privée/loopback/métadonnées (§1.1).
+- ~~Aucun test n'exerce `validatedBaseUrl` contre une URL privée/loopback/métadonnées~~ (§1.1) —
+  **corrigé** : `McpToolCatalogTest.autorise_un_hote_loopback` prouve le contrepoint du refus
+  lien-local déjà testé — un hôte loopback (donc non lien-local, comme tout hôte privé RFC 1918)
+  passe `validatedBaseUrl` sans lever d'exception, sur un port fermé pour un échec de connexion
+  quasi instantané plutôt qu'une dépendance réseau réelle.
 - ~~Aucun test de sécurité au niveau de la chaîne de filtres...~~ — **corrigé** :
   `ApiKeyPrincipalTest` couvre désormais `/api/agent/skills/**` (approuver, rejeter, lister la
   file de revue), `/api/agent/memory/summaries/**` (supprimer), `/api/agent/automations/**` (le
   joker `OPERATOR`/`ADMIN`, prouvé sans même que le contrôleur existe dans ce contexte de test) et
   `/api/agent/mcp/catalog/**` (installer, depuis le catalogue comme depuis la découverte).
-- Aucun test de contexte Spring avec `kex.models.enabled=true` **et** un starter de modèle
-  classique (Anthropic/OpenAI) actifs simultanément, pour vérifier que le `@Primary` de
-  `LlmRoutingConfig` évite bien un conflit de bean `ChatModel`.
-- `JdbcAutomationRepositoryTest` : un seul scénario nominal ; rien sur l'isolation par
-  propriétaire, la contention sur `claim()`, ni un `claim_id` périmé lors de `finish()`.
-- `ChannelNotifierTest` ne teste que la construction des payloads (`:91-99`) — jamais l'envoi HTTP
-  réel de `SlackChannelAdapter`/`TeamsChannelAdapter`, ni le traitement d'une réponse non-2xx.
-- `AgentServiceTest` ne teste ni le branchement de `LongTermMemoryService` sur `ask`/`askStructured`
-  ni son absence sur `stream()` (§2.2).
+- ~~Aucun test de contexte Spring avec `kex.models.enabled=true` **et** un starter de modèle
+  classique (Anthropic/OpenAI) actifs simultanément~~ — **corrigé** :
+  `LlmProviderTest.le_routage_multi_modeles_reste_prioritaire_sans_la_propriete_chat` active les
+  trois `ChatModel` (Anthropic, OpenAI, `RoutingChatModel`) sans jamais poser
+  `spring.ai.model.chat` — le cas qui échoue en son absence — et prouve que `@Primary` sur
+  `RoutingChatModel` résout l'injection vers lui, pas vers l'un des deux autres au hasard.
+- ~~`JdbcAutomationRepositoryTest` : un seul scénario nominal...~~ — **corrigé** : trois nouveaux
+  tests — l'isolation par propriétaire (`get`/`update`/`delete`/`audit` refusent ce qui appartient
+  à un autre owner), la contention sur `claim()` (deux répliques lisant la même occurrence `due()`,
+  une seule CAS réussit grâce au `revision` optimiste), et un `claim_id` périmé sur `finish()`
+  (bail expiré, seconde réplique réclame avec un nouveau jeton, l'ancienne qui termine en retard
+  ne modifie ni l'état ni l'audit).
+- ~~`ChannelNotifierTest` ne teste que la construction des payloads...~~ — **corrigé** : quatre
+  nouveaux tests avec `MockRestServiceServer` — `SlackChannelAdapter`/`TeamsChannelAdapter`
+  postent réellement sur leur webhook, une réponse non-2xx remonte en
+  `RestClientResponseException`, et `ChannelNotifier` la traduit en « Échec de livraison » nommé
+  avec un adaptateur réel, pas seulement un mock.
+- ~~`AgentServiceTest` ne teste ni le branchement de `LongTermMemoryService` sur
+  `ask`/`askStructured` ni son absence sur `stream()`~~ (§2.2) — **corrigé** : le flux avait déjà
+  ses deux tests (§2.2) ; `ask`/`askStructured` en gagnent chacun un, sur le même modèle —
+  `recordSuccessfulTask` appelé avec le propriétaire, l'identifiant de conversation, le message et
+  la réponse attendus après un échange bloqué réussi.
 
 ## 5. Conventions mineures
 

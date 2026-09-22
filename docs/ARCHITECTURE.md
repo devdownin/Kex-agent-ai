@@ -383,6 +383,58 @@ dépendance sur les deux services ne referme rien.
 en une propriété à changer. Même règle que la vue Kafka, qui nomme ce qui manque plutôt que d'échouer
 en silence.
 
+### Un second système partage le nom « mémoire long-terme » avec le premier, sans partager sa garde d'écriture
+
+Le nom est pris deux fois. `MemoryService`/`remember_fact`/`recall_facts`, décrits ci-dessus, ne sont
+pas le seul système à vivre sous cette étiquette : `LongTermMemoryService`
+(`com.kex.agent.memory.LongTermMemoryService`) en est un second, avec la philosophie inverse sur le
+point qui compte le plus — qui décide d'écrire.
+
+`recordSuccessfulTask` s'appelle après **chaque** échange bloquant ou en flux terminé normalement
+(`AgentService.ask`, `askStructured`, et `stream` sur `SignalType.ON_COMPLETE` seulement — voir plus
+haut le branchement du flux) : sans choix du modèle, sans outil à invoquer, sans garde d'écriture
+d'aucune sorte. Deux effets à chaque appel :
+
+- un résumé (« Demande : … / Résultat : … », kind `SUMMARY`) rejoint `LearningRepository` et revient
+  dans `LongTermMemoryService.context(owner)`, injecté au prompt système des conversations futures du
+  même propriétaire ;
+- si l'échange a utilisé au moins un outil, une procédure déduite des outils appelés (kind `SKILL`)
+  est proposée à la revue — sauf si une procédure textuellement identique est déjà en attente ou
+  approuvée, pour ne pas remplir la file de doublons à chaque répétition de la même tâche.
+
+C'est l'exact contraire de la garde documentée plus haut pour `remember_fact` : là, le modèle choisit
+*quoi* écrire et refuse explicitement le detail propre à l'échange ; ici, tout échange réussi écrit,
+sans que le modèle n'ait voix au chapitre sur le *si*. Les deux systèmes cohabitent parce qu'ils
+répondent à des questions différentes — « qu'est-ce que le modèle a jugé utile de retenir » contre
+« qu'est-ce qui s'est passé, pour qui a besoin de le savoir sans relire l'audit » — mais le même nom
+et le même paquet (`com.kex.agent.memory`) ne le disent pas.
+
+#### Ce qui est partagé, et pourquoi ça n'a pas été séparé
+
+Les deux systèmes lisent `kex.agent.memory.enabled` et le même `MemoryProperties` — dont le
+commentaire Javadoc, écrit avant que `LongTermMemoryService` existe, ne parle que du premier. Trois
+plafonds sont concrètement partagés :
+
+- `capacity` borne à la fois les faits de `MemoryService`, les résumés de `LongTermMemoryService` et
+  les compétences proposées de `SkillsService` — mais chaque kind (`FACT` dans son propre dépôt,
+  `SUMMARY` et `SKILL` dans `LearningRepository`) s'évince indépendamment des deux autres (voir
+  `FileLearningRepository.add` : « summaries cannot evict skills »). Un `capacity` unique ne fait donc
+  pas concurrence entre les trois, il leur impose simplement le même nombre.
+- `retention` borne la relecture des faits (`MemoryService.active`) et des résumés
+  (`LongTermMemoryService.summaries`) — pas celle des compétences, dont la péremption suit
+  `skills.stale-after`, une propriété déjà distincte.
+- `enabled` éteint les deux à la fois : désactiver l'un sans l'autre n'a pas de cas d'usage identifié
+  — un opérateur qui coupe la mémoire du modèle coupe aussi ce qu'il en resterait sans lui.
+
+Évalué pour cet audit : séparer `capacity`/`retention` en propriétés dédiées (par exemple
+`kex.agent.learning.*`) ajouterait deux réglages à documenter et à tenir cohérents pour un bénéfice
+concret marginal — les trois plafonds répondent à la même question (« combien d'entrées durables
+concerner ce propriétaire ») et personne n'a encore demandé à ce qu'un fait survive plus longtemps
+qu'un résumé. Décision : rester sur `MemoryProperties` partagé, mais corriger ce que ce document ne
+disait pas — que le nom, le commentaire de la classe et l'interrupteur couvrent deux systèmes, pas
+un seul. Un besoin réel de plafonds distincts (typiquement : vouloir conserver les résumés plus
+longtemps que les faits bruts) redeviendra le signal à surveiller pour rouvrir cette décision.
+
 ### La fenêtre de conversation borne un nombre de messages, jamais leur taille
 
 `MessageWindowChatMemory` compte des messages. Quarante tours courts et quarante traces d'exception
