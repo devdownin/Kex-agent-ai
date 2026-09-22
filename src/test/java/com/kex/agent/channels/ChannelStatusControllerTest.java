@@ -36,7 +36,7 @@ class ChannelStatusControllerTest {
     @Test
     void rend_teams_email_et_l_approbation_entrante_independamment() {
         ChannelsStatus status = new ChannelStatusController(properties("", "", "https://outlook.example.com/webhook",
-                "", true, List.of("astreinte@example.com", "backup@example.com"), false, false)).status();
+                "", true, List.of("astreinte@example.com", "backup@example.com"), true, false)).status();
 
         assertThat(status.teams()).isTrue();
         assertThat(status.email()).isTrue();
