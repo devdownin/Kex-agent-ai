@@ -695,7 +695,7 @@
         <option value="postgres">PostgreSQL (stdio)</option>
       </select>
       <label for="mcp-connection">Nom de connexion</label>
-      <input id="mcp-connection" required maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}" placeholder="runbook">
+      <input id="mcp-connection" required maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]{0,63}" placeholder="runbook">
     </fieldset>
     <fieldset>
       <legend>2 · Transport et authentification</legend>
@@ -753,7 +753,7 @@
     <h2>Installer depuis le catalogue recommandé</h2>
     <p class="hint" id="install-catalog-label"></p>
     <label for="install-catalog-connection">Nom de connexion</label>
-    <input id="install-catalog-connection" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}" maxlength="64" required>
+    <input id="install-catalog-connection" pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]{0,63}" maxlength="64" required>
     <div id="install-catalog-token-field" hidden>
       <label for="install-catalog-token">Bearer</label>
       <input id="install-catalog-token" type="password" maxlength="4096" autocomplete="new-password">
@@ -768,7 +768,7 @@
     <h2>Installer depuis la découverte</h2>
     <p class="hint" id="install-discovered-label"></p>
     <label for="install-discovered-connection">Nom de connexion</label>
-    <input id="install-discovered-connection" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}" maxlength="64" required>
+    <input id="install-discovered-connection" pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]{0,63}" maxlength="64" required>
     <label for="install-discovered-token">Bearer (si ce candidat en exige un)</label>
     <input id="install-discovered-token" type="password" maxlength="4096" autocomplete="new-password">
     <div class="row-end"><button type="button" class="ghost" id="cancel-install-discovered">Annuler</button>
