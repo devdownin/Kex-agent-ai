@@ -522,6 +522,15 @@
       </section>
       <section class="panel">
         <div class="panel-head">
+          <h1>Catalogue recommandé</h1>
+        </div>
+        <p class="hint">Deux points d'accès distants sélectionnés par l'équipe, sans commande locale
+          ni destination modifiable. Statique côté serveur : chargé avec le reste de la vue, sans
+          appel à un service tiers.</p>
+        <div id="mcp-catalog" data-skeleton="list"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head">
           <h1>Découverte de serveurs MCP</h1>
           <div class="panel-actions">
             <button type="button" class="ghost" id="discover-mcp"
@@ -736,6 +745,21 @@
     <input id="rotate-mcp-token" type="password" maxlength="4096" autocomplete="new-password" required>
     <div class="row-end"><button type="button" class="ghost" id="cancel-rotate-mcp">Annuler</button>
       <button type="submit" class="primary" id="submit-rotate-mcp">Tester et remplacer</button></div>
+  </form>
+</dialog>
+
+<dialog id="install-catalog">
+  <form class="stack" id="install-catalog-form">
+    <h2>Installer depuis le catalogue recommandé</h2>
+    <p class="hint" id="install-catalog-label"></p>
+    <label for="install-catalog-connection">Nom de connexion</label>
+    <input id="install-catalog-connection" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}" maxlength="64" required>
+    <div id="install-catalog-token-field" hidden>
+      <label for="install-catalog-token">Bearer</label>
+      <input id="install-catalog-token" type="password" maxlength="4096" autocomplete="new-password">
+    </div>
+    <div class="row-end"><button type="button" class="ghost" id="cancel-install-catalog">Annuler</button>
+      <button type="submit" class="primary" id="submit-install-catalog">Installer</button></div>
   </form>
 </dialog>
 

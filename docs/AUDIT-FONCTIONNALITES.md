@@ -71,17 +71,19 @@ approuvée par commande, sans repli sur l'hôte). Aucun changement de comporteme
 activer l'isolation par défaut exigerait Docker disponible sur tout déploiement, y compris ceux
 qui ne déclarent aucune commande STDIO.
 
-### 1.5 Contrôle du rôle `ADMIN` du catalogue MCP porté par le contrôleur, pas par la chaîne de filtres
+### 1.5 Contrôle du rôle `ADMIN` du catalogue MCP porté par le contrôleur, pas par la chaîne de filtres — **corrigé**
 
 `McpCatalogController` vérifie lui-même le rôle `ADMIN` pour `POST /{id}/install`
-(`McpCatalogController.java:40`), correct fonctionnellement, mais c'est la seule route mutante de
+(`McpCatalogController.java:40`), correct fonctionnellement, mais c'était la seule route mutante de
 `mcp/` sans ligne dédiée dans `SecurityConfig.java` (les autres — `/mcp/servers`,
-`/mcp/servers/*/secret`, etc. — l'ont toutes explicitement). Aucun test d'intégration ne vérifie
-que la chaîne de filtres Spring Security elle-même refuse cette route à un non-`ADMIN` — seul le
-contrôleur est testé.
+`/mcp/servers/*/secret`, etc. — l'ont toutes explicitement).
 
-**Suggestion** : ajouter la ligne dans `SecurityConfig.java` par cohérence avec le reste de
-`mcp/`, même si le comportement actuel est déjà correct.
+**Correctif** : `SecurityConfig.java` porte désormais `/api/agent/mcp/catalog/*/install` au même
+titre que `/api/agent/mcp/catalog/discover/*/*/install` (ajoutés ensemble lors de la découverte de
+catalogue). Le second manquait toutefois encore de preuve au niveau de la chaîne de filtres plutôt
+que du seul contrôleur : `ApiKeyPrincipalTest.seul_un_admin_peut_installer_depuis_le_catalogue_mcp_recommande`
+le vérifie désormais sur le vrai contexte Spring Security, sur le même modèle que son équivalent
+pour la découverte.
 
 ### 1.6 Dérivation de clé sans sel pour le stockage chiffré des serveurs MCP — **corrigé**
 
@@ -185,20 +187,21 @@ marge. Testé par `AutomationTimeoutConsistencyCheckTest`.
 ## 3. Fonctionnalités livrées sans façade opérateur
 
 Backend complet et testé côté serveur, mais **aucun** point d'entrée dans la console
-(`src/main/resources/static/assets/*.js`) :
+(`src/main/resources/static/assets/*.js`) au moment de cet audit :
 
 | Fonctionnalité | Route | Constat |
 |---|---|---|
 | Automatisations planifiées | `/api/agent/automations` | Aucune référence dans `resources/static/` ; aucun exemple dans `application.yml` alors que `knowledge`/`supervision`/`memory` en ont |
-| Compétences proposées par le modèle | `/api/agent/skills` | Aucun `skills.js` ; pas d'écran d'approbation/rejet |
+| ~~Compétences proposées par le modèle~~ — **corrigé** | `/api/agent/skills` | `skills.js` : onglet Gouvernance (charte, file de revue, curation) |
 | Base de connaissance (CRUD documents) | `/api/agent/knowledge` | Seul un indicateur d'état (`llm.js:207`) apparaît côté console, pas de gestion des documents |
 | Résumés durables | `/api/agent/memory/summaries` | Absents de `memory.js`, qui ne couvre que `MemoryService` |
-| Catalogue MCP recommandé | `/api/agent/mcp/catalog` | Fonctionnel et testé (`McpCatalogControllerTest`), zéro appel dans `tools.js` |
+| ~~Catalogue MCP recommandé~~ — **corrigé** | `/api/agent/mcp/catalog` | Panneau « Catalogue recommandé » dans `tools.js`, à côté de la découverte qui couvrait déjà `/discover` |
 | Canaux de notification (Slack/Teams/e-mail) | — (configuration seule) | Pas d'écran listant les canaux actifs, contrairement à `/supervision/notify/test` qui a son bouton |
 
 **Suggestion** : prioriser par risque plutôt que tout construire — le catalogue MCP et les
-compétences approuvées ont un impact direct sur ce que le modèle peut faire ou dire ; les
-résumés/automatisations sont d'abord un manque de confort opérationnel.
+compétences approuvées avaient un impact direct sur ce que le modèle peut faire ou dire ; les deux
+sont désormais couverts. Résumés/automatisations restent d'abord un manque de confort opérationnel,
+suivis par les canaux de notification.
 
 ## 4. Tests manquants sur des chemins déjà identifiés comme sensibles
 

@@ -74,6 +74,21 @@ class ApiKeyPrincipalTest {
                 .isEqualTo(400);
     }
 
+    /**
+     * Même geste que la découverte, mais au niveau de la chaîne de filtres cette fois : le
+     * contrôleur vérifie déjà ADMIN lui-même (McpCatalogController.install), la ligne dédiée dans
+     * SecurityConfig n'a jusqu'ici jamais été prouvée par un test tournant sur le vrai contexte
+     * Spring Security plutôt que sur le seul contrôleur.
+     */
+    @Test
+    void seul_un_admin_peut_installer_depuis_le_catalogue_mcp_recommande() throws Exception {
+        assertThat(postStatus("/api/agent/mcp/catalog/microsoft-learn/install", "Bearer jeton-ops"))
+                .isEqualTo(403);
+        // Le 400 vient du corps absent : il prouve que la sécurité a bien laissé passer l'admin.
+        assertThat(postStatus("/api/agent/mcp/catalog/microsoft-learn/install", "Bearer jeton-admin"))
+                .isEqualTo(400);
+    }
+
     @Test
     void seul_un_admin_peut_approuver_une_competence() throws Exception {
         // Une compétence approuvée s'injecte durablement dans le prompt système de chaque
