@@ -8,6 +8,7 @@ import java.util.Set;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kex.agent.supervision.SupervisionService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
@@ -33,13 +34,15 @@ class KexMcpServerControllerTest {
     private static final String PATH = "/api/agent/mcp-server";
     private final SupervisionService supervision = mock(SupervisionService.class);
     private MockMvc mvc;
+    private SimpleMeterRegistry meters;
 
     @BeforeEach
     void setUp() {
         var beans = new StaticListableBeanFactory(Map.of("supervision", supervision));
+        meters = new SimpleMeterRegistry();
         mvc = MockMvcBuilders.standaloneSetup(new KexMcpServerController(new ObjectMapper(),
                 beans.getBeanProvider(SupervisionService.class),
-                new KexMcpServerProperties(true, Set.of("https://console.example")))).build();
+                new KexMcpServerProperties(true, Set.of("https://console.example")), meters)).build();
     }
 
     @Test
@@ -143,6 +146,19 @@ class KexMcpServerControllerTest {
                 .andExpect(jsonPath("$.result.isError").value(true))
                 .andExpect(jsonPath("$.result.content[0].text")
                         .value("Kex could not complete the operation. Inspect the operator console."));
+    }
+
+    @Test
+    void records_bounded_metrics_for_inbound_rpc_requests() throws Exception {
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"ping\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"vendor/private-method\"}"))
+                .andExpect(jsonPath("$.error.code").value(-32601));
+
+        org.assertj.core.api.Assertions.assertThat(meters.find("kex.mcp.server.request")
+                .tag("method", "ping").tag("outcome", "success").timer()).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(meters.find("kex.mcp.server.request")
+                .tag("method", "unknown").tag("outcome", "success").timer()).isNotNull();
     }
 
     @Test
