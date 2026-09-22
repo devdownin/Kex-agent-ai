@@ -79,7 +79,7 @@ const AGENT_STATES = {
   OPERATIONAL: { tag: 'OK', label: 'OPÉRATIONNEL', mark: '●' },
   // Distinct d'OPÉRATIONNEL et distinct de DÉGRADÉ : rien n'a été mesuré, ce qui n'affirme ni
   // que tout va bien, ni que quelque chose va mal.
-  UNKNOWN: { tag: 'UNKNOWN', label: 'ÉTAT INCONNU', mark: '?' },
+  UNKNOWN: { tag: 'UNKNOWN', label: 'EN ATTENTE D’ANALYSE', mark: '?' },
   DEGRADED: { tag: 'WARNING', label: 'DÉGRADÉ', mark: '▲' },
   ERROR: { tag: 'ERROR', label: 'EN ERREUR', mark: '✕' },
   PAUSED: { tag: 'PAUSED', label: 'EN PAUSE', mark: '⏸' },
@@ -88,7 +88,7 @@ const AGENT_STATES = {
 
 /** Un seul dictionnaire d'états : l'en-tête et la fiche Agent ne peuvent pas diverger. */
 export const agentState = (state) =>
-  AGENT_STATES[state] || { tag: 'UNKNOWN', label: 'ÉTAT INCONNU', mark: '●' };
+  AGENT_STATES[state] || { tag: 'UNKNOWN', label: 'EN ATTENTE D’ANALYSE', mark: '?' };
 
 // Cache du dernier overview : plusieurs vues en dépendent, et deux requêtes concurrentes
 // afficheraient des compteurs qui se contredisent d'un panneau à l'autre.
