@@ -131,6 +131,23 @@ class KexMcpServerControllerTest {
     }
 
     @Test
+    void rejects_ambiguous_protocol_headers_and_non_textual_identifiers() throws Exception {
+        mvc.perform(rpc(call("kex_status", "{}"))
+                .header("MCP-Protocol-Version", "2025-06-18", "2025-03-26"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"tools/call\","
+                + "\"params\":{\"name\":7}}"))
+                .andExpect(jsonPath("$.error.code").value(-32602));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":14,\"method\":\"resources/read\","
+                + "\"params\":{\"uri\":7}}"))
+                .andExpect(jsonPath("$.error.code").value(-32602));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":15,\"method\":\"prompts/get\","
+                + "\"params\":{\"name\":7}}"))
+                .andExpect(jsonPath("$.error.code").value(-32602));
+        verifyNoInteractions(supervision);
+    }
+
+    @Test
     void protocol_errors_do_not_leak_internal_errors() throws Exception {
         mvc.perform(rpc("{"))
                 .andExpect(jsonPath("$.error.code").value(-32700)).andExpect(jsonPath("$.id").isEmpty());
