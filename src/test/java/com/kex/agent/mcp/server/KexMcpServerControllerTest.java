@@ -53,7 +53,8 @@ class KexMcpServerControllerTest {
                 .andExpect(jsonPath("$.id").value("hello"))
                 .andExpect(jsonPath("$.result.protocolVersion").value("2025-06-18"))
                 .andExpect(jsonPath("$.result.capabilities.tools.listChanged").value(false))
-                .andExpect(jsonPath("$.result.capabilities.resources.listChanged").value(false));
+                .andExpect(jsonPath("$.result.capabilities.resources.listChanged").value(false))
+                .andExpect(jsonPath("$.result.capabilities.prompts.listChanged").value(false));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"))
                 .andExpect(status().isAccepted()).andExpect(content().string(""));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"))
@@ -84,6 +85,23 @@ class KexMcpServerControllerTest {
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"resources/read\","
                 + "\"params\":{\"uri\":\"kex://unknown\"}}"))
                 .andExpect(jsonPath("$.error.code").value(-32002));
+    }
+
+    @Test
+    void lists_and_renders_read_only_supervision_triage_prompt() throws Exception {
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"prompts/list\"}"))
+                .andExpect(jsonPath("$.result.prompts.length()").value(1))
+                .andExpect(jsonPath("$.result.prompts[0].name").value("kex_supervision_triage"));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"prompts/get\","
+                + "\"params\":{\"name\":\"kex_supervision_triage\"}}"))
+                .andExpect(jsonPath("$.result.messages[0].role").value("user"))
+                .andExpect(jsonPath("$.result.messages[0].content.type").value("text"))
+                .andExpect(jsonPath("$.result.messages[0].content.text").value(
+                        org.hamcrest.Matchers.containsString("without changing it")));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"prompts/get\","
+                + "\"params\":{\"name\":\"unknown\"}}"))
+                .andExpect(jsonPath("$.error.code").value(-32602));
+        verifyNoInteractions(supervision);
     }
 
     @Test
