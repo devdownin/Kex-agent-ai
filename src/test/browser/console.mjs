@@ -982,6 +982,7 @@ await check('retirer avec un motif la fait disparaître de la bibliothèque', as
 });
 
 await check('aucune erreur de script sur le parcours', () => {
+  if (scriptErrors.length) console.log('DEBUG scriptErrors:', JSON.stringify(scriptErrors, null, 2));
   assert.deepEqual(scriptErrors, []);
 });
 
