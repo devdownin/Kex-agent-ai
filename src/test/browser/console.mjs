@@ -128,6 +128,7 @@ await check('un agent qui n’a rien analysé n’est pas OPÉRATIONNEL', async 
   // Défaut : l'état ne regardait que les cycles, donc une instance qui n'avait jamais rien mesuré
   // affichait un vert au-dessus d'un bandeau disant « Aucune analyse exécutée ».
   assert.equal(await page.$eval('#agent-status', (node) => node.dataset.state), 'UNKNOWN');
+  assert.equal(await page.$eval('#agent-status-label', (node) => node.innerText), 'EN ATTENTE D’ANALYSE');
   assert.match(await page.$eval('#freshness', (node) => node.innerText), /Aucune analyse/);
 });
 
