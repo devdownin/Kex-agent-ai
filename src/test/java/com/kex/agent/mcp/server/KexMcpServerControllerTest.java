@@ -107,7 +107,7 @@ class KexMcpServerControllerTest {
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":17,\"method\":\"resources/read\","
                 + "\"params\":{\"uri\":\"kex://supervision/processes/orders\"}}"))
                 .andExpect(jsonPath("$.result.contents[0].text",
-                        org.hamcrest.Matchers.containsString("\\\"processId\\\":\\\"orders\\\"")));
+                        org.hamcrest.Matchers.containsString("\"processId\":\"orders\"")));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":18,\"method\":\"resources/read\","
                 + "\"params\":{\"uri\":\"kex://supervision/processes/missing\"}}"))
                 .andExpect(jsonPath("$.error.code").value(-32002));
