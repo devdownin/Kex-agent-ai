@@ -119,7 +119,11 @@ public class KexMcpServerController {
             case "tools/list" -> params.has("cursor")
                     ? error(id, -32602, "This server does not use pagination cursors")
                     : result(id, Map.of("tools", TOOLS));
-            case "tools/call" -> call(id, params, authentication.getName());
+            case "tools/call" -> call(id, params);
+            case "resources/list" -> params.has("cursor")
+                    ? error(id, -32602, "This server does not use pagination cursors")
+                    : result(id, Map.of("resources", resources()));
+            case "resources/read" -> readResource(id, params);
             default -> error(id, -32601, "Method not found");
         };
     }
@@ -133,12 +137,12 @@ public class KexMcpServerController {
         String requested = params.path("protocolVersion").asText();
         return result(id, Map.of("protocolVersion", PROTOCOLS.contains(requested) ? requested : PROTOCOL,
                 "serverInfo", Map.of("name", "kex-agent-ai", "version", "1.0.0"),
-                "capabilities", Map.of("tools", Map.of("listChanged", false)),
+                "capabilities", Map.of("tools", Map.of("listChanged", false), "resources", Map.of("listChanged", false)),
                 "instructions", "Read-only Kex supervision endpoint. Human approvals and all state changes "
                         + "stay in Kex's authenticated operator API and console."));
     }
 
-    private ResponseEntity<Object> call(Object id, JsonNode params, String actor) {
+    private ResponseEntity<Object> call(Object id, JsonNode params) {
         String name = params.path("name").asText("");
         if (TOOLS.stream().noneMatch(tool -> tool.get("name").equals(name))) {
             return error(id, -32602, "Unknown tool");
@@ -163,6 +167,44 @@ public class KexMcpServerController {
             // Provider errors can contain URLs or credentials. They belong in existing audited
             // services, not in a response passed to another model.
             return toolResult(id, "Kex could not complete the operation. Inspect the operator console.", true);
+        }
+    }
+
+
+    private List<Map<String, Object>> resources() {
+        return List.of(
+                resource("kex://supervision/status", "Kex supervision status"),
+                resource("kex://supervision/overview", "Kex supervision overview"),
+                resource("kex://supervision/alerts", "Kex active alerts"),
+                resource("kex://supervision/incidents", "Kex correlated incidents"),
+                resource("kex://supervision/decisions/pending", "Kex pending decisions"));
+    }
+
+    private static Map<String, Object> resource(String uri, String name) {
+        return Map.of("uri", uri, "name", name, "mimeType", MediaType.APPLICATION_JSON_VALUE);
+    }
+
+    private ResponseEntity<Object> readResource(Object id, JsonNode params) {
+        String uri = params.path("uri").asText("");
+        if (uri.isBlank()) return error(id, -32602, "A resource URI is required");
+        SupervisionService service = supervision.getIfAvailable();
+        if (service == null) return error(id, -32603, "Supervision is disabled");
+        try {
+            Object value = switch (uri) {
+                case "kex://supervision/status" -> service.status();
+                case "kex://supervision/overview" -> service.overview();
+                case "kex://supervision/alerts" -> service.alerts();
+                case "kex://supervision/incidents" -> service.incidents();
+                case "kex://supervision/decisions/pending" -> service.pending();
+                default -> null;
+            };
+            if (value == null) return error(id, -32002, "Resource not found");
+            return result(id, Map.of("contents", List.of(Map.of(
+                    "uri", uri, "mimeType", MediaType.APPLICATION_JSON_VALUE,
+                    "text", mapper.writeValueAsString(value)))));
+        }
+        catch (RuntimeException | JsonProcessingException ex) {
+            return error(id, -32603, "Kex could not read the resource. Inspect the operator console.");
         }
     }
 
