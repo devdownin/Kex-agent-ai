@@ -20,7 +20,6 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -57,32 +56,34 @@ class KexMcpServerControllerTest {
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"))
                 .andExpect(status().isAccepted()).andExpect(content().string(""));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"))
-                .andExpect(jsonPath("$.result.tools.length()").value(4))
+                .andExpect(jsonPath("$.result.tools.length()").value(5))
                 .andExpect(jsonPath("$.result.tools[0].name").value("kex_status"))
+                .andExpect(jsonPath("$.result.tools[1].name").value("kex_overview"))
+                .andExpect(jsonPath("$.result.tools[2].name").value("kex_alerts"))
+                .andExpect(jsonPath("$.result.tools[3].name").value("kex_incidents"))
+                .andExpect(jsonPath("$.result.tools[4].name").value("kex_pending_decisions"))
                 .andExpect(jsonPath("$.result.tools[0].annotations.readOnlyHint").value(true))
-                .andExpect(jsonPath("$.result.tools[2].annotations.readOnlyHint").value(false));
+                .andExpect(jsonPath("$.result.tools[4].annotations.destructiveHint").value(false));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}"))
                 .andExpect(jsonPath("$.result").isMap());
         verifyNoInteractions(supervision);
     }
 
     @Test
-    void reads_and_runs_only_through_governed_service_with_real_actor() throws Exception {
+    void exposes_only_read_only_supervision_tools() throws Exception {
         when(supervision.pending()).thenReturn(List.of());
         mvc.perform(rpc(call("kex_pending_decisions", "{}")))
                 .andExpect(jsonPath("$.result.isError").value(false))
                 .andExpect(jsonPath("$.result.content[0].type").value("text"))
                 .andExpect(jsonPath("$.result.content[0].text").value("[]"));
-        mvc.perform(rpc(call("kex_run_cycle", "{}"))).andExpect(jsonPath("$.result.isError").value(false));
-        verify(supervision).runCycle("peer-agent");
-        mvc.perform(rpc(call("kex_pause", "{}"))).andExpect(jsonPath("$.result.isError").value(false));
-        verify(supervision).pause("peer-agent");
+        mvc.perform(rpc(call("kex_run_cycle", "{}"))).andExpect(jsonPath("$.error.code").value(-32602));
+        mvc.perform(rpc(call("kex_pause", "{}"))).andExpect(jsonPath("$.error.code").value(-32602));
     }
 
     @Test
     void rejects_approval_tools_unknown_arguments_and_notification_invocations() throws Exception {
         mvc.perform(rpc(call("approve", "{}"))).andExpect(jsonPath("$.error.code").value(-32602));
-        mvc.perform(rpc(call("kex_run_cycle", "{\"bypassPolicy\":true}")))
+        mvc.perform(rpc(call("kex_status", "{\"bypassPolicy\":true}")))
                 .andExpect(jsonPath("$.error.code").value(-32602));
         mvc.perform(rpc(call("kex_status", "[]"))).andExpect(jsonPath("$.error.code").value(-32602));
         mvc.perform(rpc("""
@@ -111,7 +112,7 @@ class KexMcpServerControllerTest {
 
     @Test
     void authenticates_every_request_and_checks_roles_origins_and_transport_headers() throws Exception {
-        String body = call("kex_run_cycle", "{}");
+        String body = call("kex_status", "{}");
         mvc.perform(unauthenticatedRpc(body)).andExpect(status().isUnauthorized());
         mvc.perform(rpc(body).principal(auth("ROLE_CHAT"))).andExpect(status().isForbidden());
         mvc.perform(rpc(body).header("Origin", "https://evil.example")).andExpect(status().isForbidden());
