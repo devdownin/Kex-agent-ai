@@ -45,11 +45,11 @@ class KexMcpServerControllerTest {
 
     @BeforeEach
     void setUp() {
+        var build = new java.util.Properties();
+        build.setProperty("version", "0.6.1-test");
         var beans = new StaticListableBeanFactory(Map.of(
                 "supervision", supervision, "kafka", kafka,
-                "buildProperties", new BuildProperties(new java.util.Properties() {{
-                    setProperty("version", "0.6.1-test");
-                }})));
+                "buildProperties", new BuildProperties(build)));
         meters = new SimpleMeterRegistry();
         mvc = MockMvcBuilders.standaloneSetup(new KexMcpServerController(new ObjectMapper(),
                 beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class),
