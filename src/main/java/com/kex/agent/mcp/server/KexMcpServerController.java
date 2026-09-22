@@ -11,6 +11,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kex.agent.supervision.SupervisionService;
+import com.kex.agent.kafka.KafkaViewService;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.beans.factory.ObjectProvider;
@@ -56,13 +57,16 @@ public class KexMcpServerController {
 
     private final ObjectMapper mapper;
     private final ObjectProvider<SupervisionService> supervision;
+    private final ObjectProvider<KafkaViewService> kafka;
     private final KexMcpServerProperties properties;
     private final MeterRegistry meters;
 
     public KexMcpServerController(ObjectMapper mapper, ObjectProvider<SupervisionService> supervision,
+                                  ObjectProvider<KafkaViewService> kafka,
                                   KexMcpServerProperties properties, MeterRegistry meters) {
         this.mapper = mapper;
         this.supervision = supervision;
+        this.kafka = kafka;
         this.properties = properties;
         this.meters = meters;
     }
@@ -214,12 +218,27 @@ public class KexMcpServerController {
                         "content", Map.of("type", "text", "text", text)))));
     }
 
+    private ResponseEntity<Object> jsonResource(Object id, String uri, Object value) {
+        try {
+            return result(id, Map.of("contents", List.of(Map.of(
+                    "uri", uri, "mimeType", MediaType.APPLICATION_JSON_VALUE,
+                    "text", mapper.writeValueAsString(value)))));
+        }
+        catch (JsonProcessingException ex) {
+            return error(id, -32603, "Kex could not read the resource. Inspect the operator console.");
+        }
+    }
+
     private static List<Map<String, Object>> resourceTemplates() {
-        return List.of(Map.of(
-                "uriTemplate", "kex://supervision/processes/{processId}",
-                "name", "Kex process snapshot",
-                "description", "Read the current supervision snapshot for one configured process.",
-                "mimeType", MediaType.APPLICATION_JSON_VALUE));
+        return List.of(
+                Map.of("uriTemplate", "kex://supervision/processes/{processId}",
+                        "name", "Kex process snapshot",
+                        "description", "Read the current supervision snapshot for one configured process.",
+                        "mimeType", MediaType.APPLICATION_JSON_VALUE),
+                Map.of("uriTemplate", "kex://kafka/topics/{topic}/lag",
+                        "name", "Kafka topic lag",
+                        "description", "Read the consumer-group lag view for one Kafka topic.",
+                        "mimeType", MediaType.APPLICATION_JSON_VALUE));
     }
 
     private List<Map<String, Object>> resources() {
@@ -239,6 +258,15 @@ public class KexMcpServerController {
         if (!params.path("uri").isTextual()) return error(id, -32602, "A textual resource URI is required");
         String uri = params.path("uri").asText("");
         if (uri.isBlank()) return error(id, -32602, "A resource URI is required");
+        String kafkaPrefix = "kex://kafka/topics/";
+        String kafkaSuffix = "/lag";
+        if (uri.startsWith(kafkaPrefix) && uri.endsWith(kafkaSuffix)) {
+            String topic = uri.substring(kafkaPrefix.length(), uri.length() - kafkaSuffix.length());
+            if (topic.isBlank() || topic.contains("/")) return error(id, -32002, "Resource not found");
+            KafkaViewService service = kafka.getIfAvailable();
+            if (service == null) return error(id, -32603, "Kafka view is disabled");
+            return jsonResource(id, uri, service.lag(topic));
+        }
         String processPrefix = "kex://supervision/processes/";
         if (uri.startsWith(processPrefix)) {
             String processId = uri.substring(processPrefix.length());
@@ -249,14 +277,7 @@ public class KexMcpServerController {
                     .filter(candidate -> candidate.processId().equals(processId))
                     .findFirst().orElse(null);
             if (snapshot == null) return error(id, -32002, "Resource not found");
-            try {
-                return result(id, Map.of("contents", List.of(Map.of(
-                        "uri", uri, "mimeType", MediaType.APPLICATION_JSON_VALUE,
-                        "text", mapper.writeValueAsString(snapshot)))));
-            }
-            catch (JsonProcessingException ex) {
-                return error(id, -32603, "Kex could not read the resource. Inspect the operator console.");
-            }
+            return jsonResource(id, uri, snapshot);
         }
         SupervisionService service = supervision.getIfAvailable();
         if (service == null) return error(id, -32603, "Supervision is disabled");
