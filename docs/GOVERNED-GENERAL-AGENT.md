@@ -18,7 +18,7 @@ Les profils `application-ollama.yml` et `application-vllm.yml` utilisent leurs e
 
 ## Extensibilité et isolation
 
-Kex peut exposer un serveur MCP HTTP opt-in (`/api/agent/mcp-server`) pour le statut et les opérations de supervision déjà gouvernées. Le catalogue installe des connexions connues, désactivées par défaut. Les serveurs stdio peuvent être isolés par tâche dans Docker, sans montage du socket, avec réseau désactivé, utilisateur non privilégié, système de fichiers en lecture seule et limites de ressources. Il n'existe aucun repli silencieux vers l'hôte.
+Kex peut exposer un serveur MCP HTTP opt-in (`/api/agent/mcp-server`). Sa première surface est volontairement en lecture seule : statut, vue d'ensemble, alertes, incidents corrélés et décisions en attente. Les cycles, pauses, approbations et autres mutations restent dans l'API et la console opérateur jusqu'à ce que leur modèle d'autorisation et d'audit MCP soit défini. Le catalogue installe des connexions connues, désactivées par défaut. Les serveurs stdio peuvent être isolés par tâche dans Docker, sans montage du socket, avec réseau désactivé, utilisateur non privilégié, système de fichiers en lecture seule et limites de ressources. Il n'existe aucun repli silencieux vers l'hôte.
 
 `bin/kex migrate --source <openclaw> --output <directory>` fonctionne en simulation par défaut et importe uniquement les compétences Markdown comme propositions soumises à revue ; les secrets et exécutions arbitraires sont ignorés.
 
