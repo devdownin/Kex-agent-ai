@@ -196,13 +196,12 @@ Backend complet et testé côté serveur, mais **aucun** point d'entrée dans la
 | ~~Base de connaissance (CRUD documents)~~ — **corrigé** | `/api/agent/knowledge` | `knowledge.js` : recherche par similarité (même seuils qu'avant un échange réel), ajout, retrait — VectorStore n'exposant aucune énumération, une recherche reste le seul moyen de voir ce qui existe |
 | ~~Résumés durables~~ — **corrigé** | `/api/agent/memory/summaries` | `summaries.js` : panneau dans la vue Technique, à côté de la mémoire courte — lecture et suppression seulement, même geste que `memory.js` |
 | ~~Catalogue MCP recommandé~~ — **corrigé** | `/api/agent/mcp/catalog` | Panneau « Catalogue recommandé » dans `tools.js`, à côté de la découverte qui couvrait déjà `/discover` |
-| Canaux de notification (Slack/Teams/e-mail) | — (configuration seule) | Pas d'écran listant les canaux actifs, contrairement à `/supervision/notify/test` qui a son bouton |
+| ~~Canaux de notification (Slack/Teams/e-mail)~~ — **corrigé** | `/api/agent/channels/status` (nouvelle route, lecture seule) | `channels.js` : panneau « Canaux de notification » dans l'onglet Notifications, à côté du test de webhook déjà là. `ChannelProperties` n'avait aucune route de lecture — contrairement aux quatre lignes précédentes, ce constat exigeait un ajout côté serveur, pas seulement côté console : `ChannelStatusController` (nouveau) rend ce qui est actif, jamais une URL de webhook ni un secret, et reste disponible même quand `channels.enabled` est faux (`ChannelProperties` vient d'un `@ConfigurationPropertiesScan` global, pas d'un bean conditionné) |
 
 **Suggestion** : prioriser par risque plutôt que tout construire — le catalogue MCP et les
 compétences approuvées avaient un impact direct sur ce que le modèle peut faire ou dire ; la base
-de connaissance pèse sur ce qu'il *sait*, un cran en dessous ; résumés et automatisations restent
-un manque de confort opérationnel plutôt qu'un risque. Les cinq sont désormais couverts. Les
-canaux de notification restent seuls sur la liste.
+de connaissance pèse sur ce qu'il *sait*, un cran en dessous ; résumés et automatisations restaient
+un manque de confort opérationnel plutôt qu'un risque. Les six sont désormais couvertes.
 
 ## 4. Tests manquants sur des chemins déjà identifiés comme sensibles
 
