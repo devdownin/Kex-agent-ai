@@ -227,6 +227,7 @@
         <button type="button" data-agent-tab="performance" aria-pressed="false">Performances</button>
         <button type="button" data-agent-tab="notifications" aria-pressed="false">Notifications</button>
         <button type="button" data-agent-tab="governance" aria-pressed="false">Gouvernance</button>
+        <button type="button" data-agent-tab="automations" aria-pressed="false">Automatisations</button>
       </nav>
       <div class="split">
         <section class="panel" data-agent-section="general">
@@ -330,6 +331,21 @@
               longtemps, ce qui double un autre titre. Un rapport, jamais une action — le curateur
               signale, un humain nommé retire.</p>
             <div id="skills-curation" data-skeleton="kpis"></div>
+          </section>
+
+          <section class="panel" data-agent-section="automations" hidden>
+            <div class="panel-head">
+              <h2>Automatisations planifiées</h2>
+              <button type="button" class="primary" id="create-automation">Créer</button>
+            </div>
+            <p class="hint">Une tâche relance le même prompt, seule, à l'heure dite — un cron à six
+              champs avec la seconde fixe (au plus une fois par minute) et un fuseau explicite.
+              L'ordonnancement reste sur ce même locataire, jamais partagé.</p>
+            <div id="automations-list"></div>
+            <div class="row-end">
+              <button type="button" class="ghost" id="automations-audit-toggle">Historique</button>
+            </div>
+            <div id="automations-audit" hidden></div>
           </section>
         </div>
       </div>
@@ -559,6 +575,14 @@
       </section>
 
       <section class="panel">
+        <div class="panel-head"><h1>Résumés durables</h1></div>
+        <p class="hint">Ce que la mémoire long-terme retient d'un échange terminé normalement —
+          demande et résultat. Lecture et suppression seulement, au même titre que les souvenirs
+          ponctuels ci-dessus.</p>
+        <div id="summaries-list"></div>
+      </section>
+
+      <section class="panel">
         <div class="panel-head"><h1>Base de connaissance</h1></div>
         <p class="hint">Aucune liste exhaustive n'existe côté serveur : le magasin vectoriel n'expose
           qu'ajouter, retirer et chercher par similarité — jamais énumérer. Rechercher ici applique
@@ -781,6 +805,23 @@
     <input id="install-discovered-token" type="password" maxlength="4096" autocomplete="new-password">
     <div class="row-end"><button type="button" class="ghost" id="cancel-install-discovered">Annuler</button>
       <button type="submit" class="primary" id="submit-install-discovered">Installer</button></div>
+  </form>
+</dialog>
+
+<dialog id="automation-form-dialog">
+  <form class="stack" id="automation-form">
+    <h2 id="automation-form-title">Créer une automatisation</h2>
+    <label for="automation-name">Nom</label>
+    <input id="automation-name" maxlength="160" required>
+    <label for="automation-prompt">Prompt</label>
+    <textarea id="automation-prompt" rows="6" maxlength="8000" required></textarea>
+    <label for="automation-cron">Cron (six champs, seconde fixe)</label>
+    <input id="automation-cron" placeholder="0 0 8 * * MON-FRI" maxlength="120" required>
+    <label for="automation-zone">Fuseau horaire</label>
+    <input id="automation-zone" placeholder="Europe/Paris" maxlength="80" required>
+    <label class="choice"><input type="checkbox" id="automation-enabled" checked> <span>Activée</span></label>
+    <div class="row-end"><button type="button" class="ghost" id="cancel-automation-form">Annuler</button>
+      <button type="submit" class="primary" id="submit-automation-form">Enregistrer</button></div>
   </form>
 </dialog>
 

@@ -129,6 +129,18 @@ class ApiKeyPrincipalTest {
         assertThat(deleteStatus("/api/agent/memory/summaries/inconnu", "Bearer jeton-admin")).isEqualTo(404);
     }
 
+    /**
+     * Preuve au niveau de la chaîne de filtres, pas du contrôleur : ce contexte n'active ni le
+     * profil {@code shared-memory} ni {@code kex.agent.automation.enabled}, donc aucun bean
+     * AutomationController n'existe ici. Le 403 vient donc bien du joker
+     * {@code /api/agent/**}.hasAnyRole(OPERATOR, ADMIN) de SecurityConfig, avant même que
+     * l'absence de contrôleur ne puisse se traduire en 404.
+     */
+    @Test
+    void une_clef_de_chat_ne_peut_pas_piloter_les_automatisations() throws Exception {
+        assertThat(status("/api/agent/automations", "Bearer jeton-chat")).isEqualTo(403);
+    }
+
     private void post(String path, String authorization) throws IOException, InterruptedException {
         postStatus(path, authorization);
     }

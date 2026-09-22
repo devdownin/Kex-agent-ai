@@ -11,6 +11,7 @@ import {
 import * as kafka from './kafka.js';
 import * as knowledge from './knowledge.js';
 import * as memory from './memory.js';
+import * as summaries from './summaries.js';
 
 // Cache du dernier relevé : la recherche filtre dessus plutôt que de refaire un appel réseau par
 // caractère saisi — l'endpoint n'a pas de paramètre de recherche et n'a pas à en gagner un pour ça.
@@ -591,7 +592,7 @@ export async function view() {
       'Interroger les sources contacte un service tiers : ce n’est jamais automatique.'));
   }
   knowledge.panel();
-  await Promise.all([servers(), catalog(), kafka.topics(), memory.list(), health()]);
+  await Promise.all([servers(), catalog(), kafka.topics(), memory.list(), summaries.list(), health()]);
 }
 
 /**

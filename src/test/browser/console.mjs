@@ -68,7 +68,8 @@ page.on('console', (message) => {
 function expected(message) {
   return message.text().includes('401')
     || (message.text().includes('404') && message.location().url.includes('/actuator/metrics/'))
-    || (message.text().includes('404') && message.location().url.includes('/api/agent/knowledge'));
+    || (message.text().includes('404') && message.location().url.includes('/api/agent/knowledge'))
+    || (message.text().includes('404') && message.location().url.includes('/api/agent/automations'));
 }
 
 /** Le strict nécessaire pour que decisionRow() (supervision.js) rende une carte sélectionnable. */
@@ -510,6 +511,38 @@ await check('ajouter un document envoie le texte et les métadonnées, puis refe
   assert.deepEqual(posted, [{ text: 'Le déploiement Flink se fait le mardi.', metadata: { source: 'runbook' } }]);
 
   await page.unroute('**/api/agent/knowledge**');
+});
+
+await check('les résumés durables s’affichent et se retirent depuis leur carte', async () => {
+  const summary = {
+    id: 'summary-1', owner: 'kex-agent-api', kind: 'SUMMARY', title: 'Purger les topics de test',
+    markdown: 'Demande : Purger les topics de test\nRésultat : trois topics purgés.',
+    evidence: 'Échange terminé normalement', conversationId: 'conv-1',
+    createdAt: '2026-09-22T08:00:00Z', status: 'READY', reviewedBy: null, reviewedAt: null, reviewReason: null,
+  };
+  let removed = false;
+  await page.route('**/api/agent/memory/summaries**', (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(removed ? [] : [summary]) });
+    }
+    if (request.method() === 'DELETE') {
+      removed = true;
+      return route.fulfill({ status: 204 });
+    }
+    return route.fallback();
+  });
+
+  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#summaries-list .card');
+  assert.match(await page.$eval('#summaries-list', (node) => node.textContent), /Purger les topics de test/);
+
+  await page.click('#summaries-list .card button:has-text("Oublier")');
+  await page.waitForSelector('dialog#confirm[open]');
+  await page.click('#confirm-accept');
+  await page.waitForSelector('#summaries-list .card', { state: 'detached' });
+
+  await page.unroute('**/api/agent/memory/summaries**');
 });
 
 await check('un tableau déjà rendu ne clignote pas au sondage de fond', async () => {
@@ -982,6 +1015,86 @@ await check('retirer avec un motif la fait disparaître de la bibliothèque', as
   await refreshed;
   const text = await page.$eval('#skills-curation', (node) => node.textContent);
   assert.doesNotMatch(text, /Vérifier le lag avant un redémarrage/);
+});
+
+await check('l’onglet Automatisations affiche un état désactivé sans le confondre avec une panne', async () => {
+  // kex.agent.automation.enabled et le profil shared-memory ne sont pas actifs en CI : la route
+  // répond réellement 404 ici, sans simulation — même piège documenté que pour la mémoire durable
+  // et la base de connaissance.
+  await page.goto(`${BASE}/#/agent`, { waitUntil: 'networkidle' });
+  await page.click('[data-agent-tab="automations"]');
+  await page.waitForSelector('[data-agent-section="automations"]:not([hidden])');
+  await page.waitForFunction(() =>
+    document.querySelector('#automations-list').textContent.includes('désactivées'));
+});
+
+await check('l’automatisation planifiée se supprime depuis la liste', async () => {
+  const row = {
+    id: 'auto-1', owner: 'kex-agent-api', name: 'Purge des topics de test',
+    prompt: 'Lister les topics de test et signaler ceux à purger.',
+    cron: '0 0 8 * * MON-FRI', zone: 'Europe/Paris', enabled: true,
+    nextRun: '2026-09-23T08:00:00Z', lastRun: null, status: 'IDLE', result: '',
+    createdAt: '2026-09-22T08:00:00Z', updatedAt: '2026-09-22T08:00:00Z',
+  };
+  let deletedId = null;
+  let removed = false;
+  await page.route('**/api/agent/automations**', (route) => {
+    const request = route.request();
+    if (request.method() === 'GET' && request.url().endsWith('/api/agent/automations')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(removed ? [] : [row]) });
+    }
+    if (request.method() === 'DELETE') {
+      deletedId = request.url().split('/').pop();
+      removed = true;
+      return route.fulfill({ status: 204 });
+    }
+    return route.fallback();
+  });
+
+  // Un aller-retour de vue plutôt qu'un rechargement complet : la même adresse ne redéclenche
+  // pas route() (voir CLAUDE.md), donc pas automations.panel() — le détour par une autre vue
+  // fait relire la liste sous la simulation qui vient d'être posée.
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/agent`, { waitUntil: 'domcontentloaded' });
+  await page.click('[data-agent-tab="automations"]');
+  await page.waitForSelector('#automations-list table.grid');
+  assert.match(await page.$eval('#automations-list', (node) => node.textContent), /Purge des topics de test/);
+
+  await page.click('#automations-list button:has-text("Supprimer")');
+  await page.waitForSelector('dialog#confirm[open]');
+  await page.click('#confirm-accept');
+  await page.waitForSelector('#automations-list tbody tr', { state: 'detached' });
+  assert.equal(deletedId, 'auto-1');
+
+  await page.unroute('**/api/agent/automations**');
+});
+
+await check('créer une automatisation envoie le cron et le prompt, puis referme le panneau', async () => {
+  let posted = null;
+  await page.route('**/api/agent/automations', (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    posted = route.request().postDataJSON();
+    return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({
+      id: 'auto-2', owner: 'kex-agent-api', ...posted, nextRun: '2026-09-23T08:00:00Z', lastRun: null,
+      status: 'IDLE', result: '', createdAt: '2026-09-22T08:00:00Z', updatedAt: '2026-09-22T08:00:00Z',
+    }) });
+  });
+
+  await page.click('#create-automation');
+  await page.waitForSelector('#automation-form-dialog[open]');
+  await page.fill('#automation-name', 'Rapport hebdomadaire des topics inactifs');
+  await page.fill('#automation-prompt', 'Lister les topics sans production depuis 7 jours.');
+  await page.fill('#automation-cron', '0 0 8 * * MON');
+  await page.fill('#automation-zone', 'Europe/Paris');
+  await page.click('#submit-automation-form');
+  await page.waitForSelector('#automation-form-dialog', { state: 'hidden' });
+  assert.deepEqual(posted, {
+    name: 'Rapport hebdomadaire des topics inactifs',
+    prompt: 'Lister les topics sans production depuis 7 jours.',
+    cron: '0 0 8 * * MON', zone: 'Europe/Paris', enabled: true,
+  });
+
+  await page.unroute('**/api/agent/automations');
 });
 
 await check('aucune erreur de script sur le parcours', () => {

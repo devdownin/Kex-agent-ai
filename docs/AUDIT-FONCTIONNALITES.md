@@ -191,25 +191,27 @@ Backend complet et testé côté serveur, mais **aucun** point d'entrée dans la
 
 | Fonctionnalité | Route | Constat |
 |---|---|---|
-| Automatisations planifiées | `/api/agent/automations` | Aucune référence dans `resources/static/` ; aucun exemple dans `application.yml` alors que `knowledge`/`supervision`/`memory` en ont |
+| ~~Automatisations planifiées~~ — **corrigé** | `/api/agent/automations` | `automations.js` : onglet Automatisations (liste, création/modification, suppression, audit) — état désactivé distingué d'une panne, comme `memory`/`knowledge` |
 | ~~Compétences proposées par le modèle~~ — **corrigé** | `/api/agent/skills` | `skills.js` : onglet Gouvernance (charte, file de revue, curation) |
 | ~~Base de connaissance (CRUD documents)~~ — **corrigé** | `/api/agent/knowledge` | `knowledge.js` : recherche par similarité (même seuils qu'avant un échange réel), ajout, retrait — VectorStore n'exposant aucune énumération, une recherche reste le seul moyen de voir ce qui existe |
-| Résumés durables | `/api/agent/memory/summaries` | Absents de `memory.js`, qui ne couvre que `MemoryService` |
+| ~~Résumés durables~~ — **corrigé** | `/api/agent/memory/summaries` | `summaries.js` : panneau dans la vue Technique, à côté de la mémoire courte — lecture et suppression seulement, même geste que `memory.js` |
 | ~~Catalogue MCP recommandé~~ — **corrigé** | `/api/agent/mcp/catalog` | Panneau « Catalogue recommandé » dans `tools.js`, à côté de la découverte qui couvrait déjà `/discover` |
 | Canaux de notification (Slack/Teams/e-mail) | — (configuration seule) | Pas d'écran listant les canaux actifs, contrairement à `/supervision/notify/test` qui a son bouton |
 
 **Suggestion** : prioriser par risque plutôt que tout construire — le catalogue MCP et les
 compétences approuvées avaient un impact direct sur ce que le modèle peut faire ou dire ; la base
-de connaissance pèse sur ce qu'il *sait*, un cran en dessous. Les trois sont désormais couverts.
-Résumés/automatisations restent d'abord un manque de confort opérationnel, suivis par les canaux
-de notification.
+de connaissance pèse sur ce qu'il *sait*, un cran en dessous ; résumés et automatisations restent
+un manque de confort opérationnel plutôt qu'un risque. Les cinq sont désormais couverts. Les
+canaux de notification restent seuls sur la liste.
 
 ## 4. Tests manquants sur des chemins déjà identifiés comme sensibles
 
 - Aucun test n'exerce `validatedBaseUrl` contre une URL privée/loopback/métadonnées (§1.1).
-- Aucun test de sécurité au niveau de la chaîne de filtres (`MockMvc` + rôle) pour
-  `/api/agent/skills/**`, `/api/agent/memory/summaries/**`, `/api/agent/automations/**`,
-  `/api/agent/mcp/catalog/**`.
+- ~~Aucun test de sécurité au niveau de la chaîne de filtres...~~ — **corrigé** :
+  `ApiKeyPrincipalTest` couvre désormais `/api/agent/skills/**` (approuver, rejeter, lister la
+  file de revue), `/api/agent/memory/summaries/**` (supprimer), `/api/agent/automations/**` (le
+  joker `OPERATOR`/`ADMIN`, prouvé sans même que le contrôleur existe dans ce contexte de test) et
+  `/api/agent/mcp/catalog/**` (installer, depuis le catalogue comme depuis la découverte).
 - Aucun test de contexte Spring avec `kex.models.enabled=true` **et** un starter de modèle
   classique (Anthropic/OpenAI) actifs simultanément, pour vérifier que le `@Primary` de
   `LlmRoutingConfig` évite bien un conflit de bean `ChatModel`.
