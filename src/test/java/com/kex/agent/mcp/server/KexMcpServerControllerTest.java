@@ -8,6 +8,12 @@ import java.util.Set;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kex.agent.supervision.SupervisionService;
+import com.kex.agent.supervision.Coverage;
+import com.kex.agent.supervision.ProcessSnapshot;
+import com.kex.agent.supervision.ProcessState;
+import com.kex.agent.kafka.KafkaViewService;
+import com.kex.agent.kafka.KafkaTopicLag;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
@@ -32,14 +38,17 @@ class KexMcpServerControllerTest {
 
     private static final String PATH = "/api/agent/mcp-server";
     private final SupervisionService supervision = mock(SupervisionService.class);
+    private final KafkaViewService kafka = mock(KafkaViewService.class);
     private MockMvc mvc;
+    private SimpleMeterRegistry meters;
 
     @BeforeEach
     void setUp() {
-        var beans = new StaticListableBeanFactory(Map.of("supervision", supervision));
+        var beans = new StaticListableBeanFactory(Map.of("supervision", supervision, "kafka", kafka));
+        meters = new SimpleMeterRegistry();
         mvc = MockMvcBuilders.standaloneSetup(new KexMcpServerController(new ObjectMapper(),
-                beans.getBeanProvider(SupervisionService.class),
-                new KexMcpServerProperties(true, Set.of("https://console.example")))).build();
+                beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class),
+                new KexMcpServerProperties(true, Set.of("https://console.example")), meters)).build();
     }
 
     @Test
@@ -53,7 +62,8 @@ class KexMcpServerControllerTest {
                 .andExpect(jsonPath("$.id").value("hello"))
                 .andExpect(jsonPath("$.result.protocolVersion").value("2025-06-18"))
                 .andExpect(jsonPath("$.result.capabilities.tools.listChanged").value(false))
-                .andExpect(jsonPath("$.result.capabilities.resources.listChanged").value(false));
+                .andExpect(jsonPath("$.result.capabilities.resources.listChanged").value(false))
+                .andExpect(jsonPath("$.result.capabilities.prompts.listChanged").value(false));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"))
                 .andExpect(status().isAccepted()).andExpect(content().string(""));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"))
@@ -87,6 +97,51 @@ class KexMcpServerControllerTest {
     }
 
     @Test
+    void advertises_and_reads_dynamic_process_resources() throws Exception {
+        when(supervision.snapshots()).thenReturn(List.of(new ProcessSnapshot(
+                "orders", "Orders", ProcessState.OK, null, null, 0L, "Nominal", Coverage.notReported())));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":16,\"method\":\"resources/templates/list\"}"))
+                .andExpect(jsonPath("$.result.resourceTemplates.length()").value(1))
+                .andExpect(jsonPath("$.result.resourceTemplates[0].uriTemplate")
+                        .value("kex://supervision/processes/{processId}"));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":17,\"method\":\"resources/read\","
+                + "\"params\":{\"uri\":\"kex://supervision/processes/orders\"}}"))
+                .andExpect(jsonPath("$.result.contents[0].text",
+                        org.hamcrest.Matchers.containsString("\\\"processId\\\":\\\"orders\\\"")));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":18,\"method\":\"resources/read\","
+                + "\"params\":{\"uri\":\"kex://supervision/processes/missing\"}}"))
+                .andExpect(jsonPath("$.error.code").value(-32002));
+    }
+
+    @Test
+    void reads_kafka_topic_lag_as_dynamic_resource() throws Exception {
+        when(kafka.lag("orders")).thenReturn(KafkaTopicLag.unavailable("orders", "broker unavailable"));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":19,\"method\":\"resources/read\","
+                + "\"params\":{\"uri\":\"kex://kafka/topics/orders/lag\"}}"))
+                .andExpect(jsonPath("$.result.contents[0].text",
+                        org.hamcrest.Matchers.containsString("\\\"topic\\\":\\\"orders\\\"")))
+                .andExpect(jsonPath("$.result.contents[0].text",
+                        org.hamcrest.Matchers.containsString("broker unavailable")));
+    }
+
+    @Test
+    void lists_and_renders_read_only_supervision_triage_prompt() throws Exception {
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"prompts/list\"}"))
+                .andExpect(jsonPath("$.result.prompts.length()").value(1))
+                .andExpect(jsonPath("$.result.prompts[0].name").value("kex_supervision_triage"));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"prompts/get\","
+                + "\"params\":{\"name\":\"kex_supervision_triage\"}}"))
+                .andExpect(jsonPath("$.result.messages[0].role").value("user"))
+                .andExpect(jsonPath("$.result.messages[0].content.type").value("text"))
+                .andExpect(jsonPath("$.result.messages[0].content.text").value(
+                        org.hamcrest.Matchers.containsString("without changing it")));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"prompts/get\","
+                + "\"params\":{\"name\":\"unknown\"}}"))
+                .andExpect(jsonPath("$.error.code").value(-32602));
+        verifyNoInteractions(supervision);
+    }
+
+    @Test
     void exposes_only_read_only_supervision_tools() throws Exception {
         when(supervision.pending()).thenReturn(List.of());
         mvc.perform(rpc(call("kex_pending_decisions", "{}")))
@@ -98,6 +153,16 @@ class KexMcpServerControllerTest {
     }
 
     @Test
+    void returns_structured_content_for_successful_tools() throws Exception {
+        when(supervision.alerts()).thenReturn(List.of());
+        mvc.perform(rpc(call("kex_alerts", "{}")))
+                .andExpect(jsonPath("$.result.isError").value(false))
+                .andExpect(jsonPath("$.result.content[0].type").value("text"))
+                .andExpect(jsonPath("$.result.content[0].text").value("[]"))
+                .andExpect(jsonPath("$.result.structuredContent").isArray());
+    }
+
+    @Test
     void rejects_approval_tools_unknown_arguments_and_notification_invocations() throws Exception {
         mvc.perform(rpc(call("approve", "{}"))).andExpect(jsonPath("$.error.code").value(-32602));
         mvc.perform(rpc(call("kex_status", "{\"bypassPolicy\":true}")))
@@ -106,6 +171,23 @@ class KexMcpServerControllerTest {
         mvc.perform(rpc("""
                 {"jsonrpc":"2.0","method":"tools/call","params":{"name":"kex_run_cycle"}}
                 """)).andExpect(status().isBadRequest());
+        verifyNoInteractions(supervision);
+    }
+
+    @Test
+    void rejects_ambiguous_protocol_headers_and_non_textual_identifiers() throws Exception {
+        mvc.perform(rpc(call("kex_status", "{}"))
+                .header("MCP-Protocol-Version", "2025-06-18", "2025-03-26"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"tools/call\","
+                + "\"params\":{\"name\":7}}"))
+                .andExpect(jsonPath("$.error.code").value(-32602));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":14,\"method\":\"resources/read\","
+                + "\"params\":{\"uri\":7}}"))
+                .andExpect(jsonPath("$.error.code").value(-32602));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":15,\"method\":\"prompts/get\","
+                + "\"params\":{\"name\":7}}"))
+                .andExpect(jsonPath("$.error.code").value(-32602));
         verifyNoInteractions(supervision);
     }
 
@@ -125,6 +207,19 @@ class KexMcpServerControllerTest {
                 .andExpect(jsonPath("$.result.isError").value(true))
                 .andExpect(jsonPath("$.result.content[0].text")
                         .value("Kex could not complete the operation. Inspect the operator console."));
+    }
+
+    @Test
+    void records_bounded_metrics_for_inbound_rpc_requests() throws Exception {
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"ping\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"vendor/private-method\"}"))
+                .andExpect(jsonPath("$.error.code").value(-32601));
+
+        org.assertj.core.api.Assertions.assertThat(meters.find("kex.mcp.server.request")
+                .tag("method", "ping").tag("outcome", "success").timer()).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(meters.find("kex.mcp.server.request")
+                .tag("method", "unknown").tag("outcome", "rpc_error").timer()).isNotNull();
     }
 
     @Test

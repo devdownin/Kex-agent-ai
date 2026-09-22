@@ -15,8 +15,8 @@ const browser = await chromium.launch();
 
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
-  await page.setContent(html.replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi, '')
-    .replace(/<link\\b[^>]*>/gi, ''));
+  await page.setContent(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<link\b[^>]*>/gi, ''));
   await page.addStyleTag({ content: css });
 
   const controls = await page.locator('button, a[href], input, select, textarea, summary').all();
