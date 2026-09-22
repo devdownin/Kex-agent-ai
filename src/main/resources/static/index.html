@@ -104,6 +104,9 @@
           <button type="button" class="menu-action" id="toggle-pause">Pause agent</button>
           <button type="button" class="menu-action" id="open-credentials">
             <span id="credential-label">Jeton absent</span>
+            <!-- Rempli par whoami() une fois le jeton reconnu : l'acteur et le locataire dont
+                 dépendent mémoire, compétences et charte — invisibles jusqu'ici sans lire l'audit. -->
+            <span class="muted" id="whoami-label" hidden></span>
           </button>
           <button type="button" class="menu-action" id="density-toggle" aria-pressed="false">
             <span id="density-label">Affichage confortable</span>
@@ -223,6 +226,7 @@
         <button type="button" data-agent-tab="capabilities" aria-pressed="false">Autonomie</button>
         <button type="button" data-agent-tab="performance" aria-pressed="false">Performances</button>
         <button type="button" data-agent-tab="notifications" aria-pressed="false">Notifications</button>
+        <button type="button" data-agent-tab="governance" aria-pressed="false">Gouvernance</button>
       </nav>
       <div class="split">
         <section class="panel" data-agent-section="general">
@@ -286,6 +290,46 @@
               <button type="button" class="ghost" id="test-webhook">Tester le webhook</button>
             </div>
             <div id="webhook-test-result"></div>
+          </section>
+
+          <section class="panel" data-agent-section="governance" hidden>
+            <div class="panel-head"><h2>Charte</h2></div>
+            <p class="hint">Ce que l'exploitant veut que l'agent rappelle à chaque échange, en plus
+              du prompt système. Donnée de référence : elle restreint ce que l'agent propose, elle
+              n'élargit jamais une autonomie, une permission ou une approbation. Un seul auteur
+              possible, <code>ADMIN</code> — jamais approuvée par revue, ce serait se faire
+              approuver par soi-même.</p>
+            <div id="charter-current"></div>
+            <form id="charter-form" class="stack">
+              <label for="charter-markdown">Texte en vigueur</label>
+              <textarea id="charter-markdown" rows="8" maxlength="8000"></textarea>
+              <label for="charter-reason">Motif du changement (conservé dans l'audit)</label>
+              <input type="text" id="charter-reason" placeholder="Pourquoi la charte change" required>
+              <div class="row-end">
+                <button type="button" class="ghost" id="charter-history-toggle">Historique</button>
+                <button type="submit" class="primary">Enregistrer la charte</button>
+              </div>
+            </form>
+            <div id="charter-history" hidden></div>
+          </section>
+
+          <section class="panel" data-agent-section="governance" hidden>
+            <div class="panel-head"><h2>File de revue</h2></div>
+            <p class="hint">Compétences en attente, tous propriétaires confondus, la plus ancienne
+              d'abord. Approuver ou rejeter reste un geste transverse — voir
+              <a href="swagger-ui.html" target="_blank" rel="noopener">l'API</a> — précisément
+              parce qu'une compétence tirée d'un refus appartient à l'opérateur qui a refusé,
+              jamais à l'administrateur qui tranche.</p>
+            <div id="skills-review-queue" data-skeleton="list"></div>
+          </section>
+
+          <section class="panel" data-agent-section="governance" hidden>
+            <div class="panel-head"><h2>Bibliothèque de compétences</h2></div>
+            <p class="hint">Ce que la bibliothèque approuvée pèse réellement dans le prompt : ce qui
+              agit, ce qui dort au-delà du plafond d'injection, ce qui n'a pas été revu depuis
+              longtemps, ce qui double un autre titre. Un rapport, jamais une action — le curateur
+              signale, un humain nommé retire.</p>
+            <div id="skills-curation" data-skeleton="kpis"></div>
           </section>
         </div>
       </div>
@@ -585,7 +629,9 @@
     <h2 id="confirm-title">Confirmer</h2>
     <div id="confirm-body"></div>
     <div class="row-end">
-      <button type="submit" class="ghost" value="cancel">Annuler</button>
+      <!-- formnovalidate : un motif obligatoire ne doit bloquer que la confirmation, jamais
+           l'abandon — sans lui, un champ required empêcherait aussi de fermer sans rien écrire. -->
+      <button type="submit" class="ghost" value="cancel" formnovalidate>Annuler</button>
       <button type="submit" class="primary" value="confirm" id="confirm-accept">Confirmer</button>
     </div>
   </form>

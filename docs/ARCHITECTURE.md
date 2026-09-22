@@ -1596,6 +1596,57 @@ traverse intact la chaîne de filtres réelle — sécurité comprise — pour u
 contrôleur consommerait le flux et viderait `@RequestBody` ; aucun appel direct à la méthode du
 contrôleur ne l'aurait révélé.
 
+### La console apprend qui elle regarde, et ce que l'agent sait au-delà de son prompt
+
+Trois fonctionnalités livrées début — la revue transverse, la curation, la charte — n'avaient
+d'écran nulle part : approuver une compétence, la retirer ou lire ce que la charte dit ne se
+faisait qu'à l'API. L'onglet « Gouvernance » de la vue Agent les réunit, plutôt que de les
+disperser en trois entrées de navigation pour une question unique — que peut dire l'agent de plus
+que son prompt système, et qui l'a autorisé.
+
+**`GET /api/agent/whoami` n'existait pas non plus.** Un opérateur pouvait déclarer un locataire par
+clé sans jamais voir, depuis la console, à quel locataire *sa propre* clé appartenait — la seule
+façon de le savoir était de lire `application.yml` ou de suivre une charte jusqu'à son auteur dans
+l'audit. La route rend l'acteur, le locataire et les rôles du principal courant ; ouverte à `CHAT`
+comme aux autres rôles, parce que lire sa propre identité n'est pas un privilège de plus que
+converser. L'étiquette qu'elle alimente vit dans le menu du jeton, à côté de « Jeton actif » — pas
+un nouvel écran, le même endroit où le jeton se gère déjà.
+
+**Un piège que le premier jet a raté.** `onCredentialChange` ne se déclenche que sur un appel à
+`credentials.set(...)` ; le jeton relu depuis `sessionStorage` au chargement de la page n'y passe
+jamais. Sans un appel direct à `whoami()` dans le bloc de démarrage, l'étiquette serait restée
+vide indéfiniment pour quiconque revient sur un onglet déjà ouvert — exactement le genre de défaut
+que seul un rechargement réel, pas un premier essai après connexion, révèle.
+
+**La revue reste ce qu'elle a toujours été : transverse.** La file (`#skills-review-queue`)
+n'affiche aucun filtre par locataire — voir « La revue reste transverse aux locataires » plus haut
+pour pourquoi ce n'est pas un oubli. Approuver ou rejeter y reste un geste d'administration, sans
+motif de saisie : `confirmAction` couvre le chemin nominal avec un motif fixe
+(« Approuvée/Rejetée depuis la console »), comme les décisions de supervision le faisaient déjà.
+
+**Retirer, en revanche, exige un motif — et `confirmAction` ne savait pas en demander un.**
+`SkillsService.retire` refuse un motif vide côté serveur ; aucun dialogue de la console n'avait de
+champ de saisie libre avant celui-ci. `confirmAction({ reasonLabel, reasonRequired })` ajoute un
+`<textarea>` au dialogue partagé plutôt que d'en créer un second : la promesse rend `{ confirmed,
+reason }` seulement quand `reasonLabel` est fourni, un booléen sinon — un opt-in qui ne change rien
+pour la douzaine d'appelants existants qui ne passent jamais ce paramètre.
+
+**Le piège qui serait passé inaperçu sans le test navigateur.** `#confirm-accept` et le bouton
+Annuler partagent le même `<form method="dialog">` ; un `<textarea required>` bloque la validation
+native du formulaire entier, Annuler compris, à moins que ce bouton précis porte
+`formnovalidate`. Sans lui, un motif de retrait vide aurait empêché jusqu'à l'abandon de l'action —
+`SlackInteractivityWiringTest` avait déjà montré, pour une autre raison, qu'un défaut de ce genre
+ne se découvre qu'en conduisant un vrai navigateur, jamais en relisant le code.
+
+**Un second piège, cette fois dans le test lui-même.** La première version attendait
+`page.waitForSelector('dialog#confirm:not([open])')` pour confirmer la fermeture après Annuler —
+un sélecteur qui matche bien un dialogue fermé, mais que l'état « visible » implicite de
+`waitForSelector` ne peut jamais satisfaire, puisqu'un `<dialog>` sans `open` devient `display:
+none`. Le formulaire se fermait correctement à chaque essai ; seule l'attente échouait,
+systématiquement, ce que des exécutions répétées avec un état propre ont fini par isoler en
+instrumentant chaque étape jusqu'à trouver laquelle bloquait réellement. La correction attend la
+disparition du dialogue (`{ state: 'hidden' }`) sur le sélecteur positif, jamais sur sa négation.
+
 ## Ce que les tests couvrent
 
 | Test | Ce qu'il verrouille |

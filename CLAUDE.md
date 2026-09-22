@@ -359,4 +359,30 @@ JDK 25 requis. La CI construit aussi l'image Docker et monte la stack de fumée.
   plateforme, à dire dans le code et la doc plutôt qu'à contourner par un flux qui semblerait
   fonctionner sans avoir jamais été vérifié contre un vrai tenant Teams.
 
+- **`onCredentialChange` ne se déclenche que sur `credentials.set(...)`, jamais sur un jeton relu
+  de `sessionStorage` au chargement.** Un abonné qui ne s'exécute qu'à ce changement-là (`whoami()`)
+  reste inerte pour quiconque revient sur un onglet déjà connecté — il faut aussi l'appeler une
+  fois, directement, dans le bloc de démarrage qui lit `credentials.get()`.
+
+- **Un `<textarea required>` ajouté à un dialogue partagé bloque aussi son bouton Annuler**, tant
+  que les deux boutons `submit` restent dans le même `<form method="dialog">` — la validation
+  native HTML porte sur le formulaire entier, pas sur le bouton cliqué. `formnovalidate` sur
+  Annuler seul referme cette fenêtre : sans lui, un champ obligatoire empêcherait jusqu'à l'abandon
+  de l'action qu'il est censé motiver.
+
+- **Étendre une fonction partagée par une douzaine d'appelants change son contrat de retour, pas
+  seulement son corps.** `confirmAction` rendait un booléen partout ; lui ajouter un champ de motif
+  ne pouvait pas se faire en renvoyant toujours `{ confirmed, reason }`, qui aurait cassé chaque
+  `if (!confirmed)` existant (un objet est toujours vrai). Le nouveau champ ne change donc le
+  contrat que pour l'appelant qui le demande explicitement (`reasonLabel` fourni) — jamais pour
+  ceux qui ne savent pas qu'il existe.
+
+- **`page.waitForSelector('sélecteur:not([attribut])')` sur un `<dialog>` ne se résout jamais après
+  fermeture.** L'état par défaut attendu est « visible » ; un `<dialog>` sans `open` devient
+  `display: none` par défaut, donc justement invisible — la négation matche le sélecteur mais
+  jamais l'état qu'on attend. Prouvé en isolant chaque étape du test en échec : le dialogue se
+  fermait bel et bien (`dialog.open` valait déjà `false`), seule l'attente échouait. Attendre la
+  disparition d'un `<dialog>` se fait sur le sélecteur positif avec `{ state: 'hidden' }`, jamais
+  sur sa négation.
+
 Le détail et les raisons sont dans [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

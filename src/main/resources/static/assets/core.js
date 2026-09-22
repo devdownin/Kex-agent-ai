@@ -512,18 +512,42 @@ export function dismissDrawer() {
  * Confirmation d'une action à impact. Le libellé du bouton reprend l'action — « Confirmer le
  * redémarrage de Consumer-02 » — plutôt qu'un « Êtes-vous sûr ? » qu'on approuve sans lire.
  */
-export function confirmAction({ title, lines, accept }) {
+/**
+ * `reasonLabel` change le contrat de retour : sans lui, la promesse rend le booléen qu'elle a
+ * toujours rendu, et chaque appelant existant le vérifie tel quel. Avec lui, elle rend
+ * `{ confirmed, reason }` — un opt-in, jamais un défaut qui romprait un appelant qui ne
+ * s'attendrait à recevoir qu'un booléen. `reasonRequired` pose l'attribut natif du champ, pas une
+ * validation à la main ; sans `formnovalidate` sur Annuler, cette validation bloquerait aussi
+ * l'abandon, ce que la balise porte déjà.
+ */
+export function confirmAction({ title, lines, accept, reasonLabel, reasonRequired = false }) {
   const dialog = $('#confirm');
   $('#confirm-title').textContent = title;
   $('#confirm-accept').textContent = accept;
-  $('#confirm-body').replaceChildren(...lines.filter(Boolean).map(([label, value]) => {
+  const body = $('#confirm-body');
+  body.replaceChildren(...lines.filter(Boolean).map(([label, value]) => {
     const row = el('div', 'confirm-row');
     row.append(el('span', 'label', label), el('span', 'value', value));
     return row;
   }));
+  let reasonField = null;
+  if (reasonLabel) {
+    const wrap = el('div', 'stack');
+    const label = el('label', null, reasonLabel);
+    reasonField = el('textarea');
+    reasonField.id = 'confirm-reason';
+    reasonField.rows = 2;
+    label.htmlFor = reasonField.id;
+    if (reasonRequired) reasonField.required = true;
+    wrap.append(label, reasonField);
+    body.append(wrap);
+  }
   dialog.showModal();
   return new Promise((resolve) => {
-    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), { once: true });
+    dialog.addEventListener('close', () => {
+      const confirmed = dialog.returnValue === 'confirm';
+      resolve(reasonLabel ? { confirmed, reason: reasonField.value.trim() } : confirmed);
+    }, { once: true });
   });
 }
 

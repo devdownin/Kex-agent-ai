@@ -741,6 +741,139 @@ await check('un processus se met en maintenance, et une fenêtre active propose 
     await page.unroute('**/api/agent/supervision/processes/order-integration/maintenance');
   });
 
+/* ── Gouvernance : charte, file de revue, curation ────────────────────── */
+
+await check('l’onglet Gouvernance bascule ses trois sections ensemble', async () => {
+  await page.goto(`${BASE}/#/agent`, { waitUntil: 'networkidle' });
+  await page.click('[data-agent-tab="governance"]');
+  await page.waitForSelector('[data-agent-section="governance"]:not([hidden])');
+  const hiddenCount = await page.$$eval('[data-agent-section="governance"]',
+    (nodes) => nodes.filter((node) => node.hidden).length);
+  assert.equal(hiddenCount, 0);
+  assert.equal(await page.$eval('[data-agent-section="general"]', (node) => node.hidden), true);
+});
+
+await check('le menu du jeton affiche l’acteur et le locataire actifs', async () => {
+  // Défaut possible : whoami() ne se déclenche qu'au changement de jeton (onCredentialChange), or
+  // celui-ci vient de sessionStorage au premier chargement de la page et ne passe jamais par
+  // credentials.set() — sans l'appel direct au démarrage, l'étiquette resterait vide indéfiniment.
+  // L'étiquette vit dans le popover des actions secondaires (<details>), fermé par défaut : sans
+  // l'ouvrir, elle reste hors écran même une fois remplie.
+  await page.click('.action-menu summary');
+  await page.waitForSelector('#whoami-label:not([hidden])', { timeout: 10000 });
+  assert.match(await page.$eval('#whoami-label', (node) => node.textContent), /Connecté comme/);
+  await page.click('.action-menu summary');
+});
+
+await check('la charte se rédige et affiche qui l’a écrite', async () => {
+  await page.fill('#charter-markdown', 'Ne jamais redémarrer un consumer en heures ouvrées.');
+  await page.fill('#charter-reason', 'Vérification navigateur');
+  const written = page.waitForResponse((response) => response.url().endsWith('/api/agent/charter')
+    && response.request().method() === 'PUT');
+  await page.click('#charter-form button[type=submit]');
+  await written;
+  await page.waitForSelector('#charter-current .summary');
+  assert.match(await page.$eval('#charter-current', (node) => node.textContent), /kex-agent-api/);
+});
+
+// Créée par appel direct, pas par un formulaire de proposition — il n'y en a pas dans la console,
+// une compétence naît d'une conversation. Le point sous test ici est la revue, pas la proposition.
+const proposal = await page.request.post(`${BASE}/api/agent/skills`, {
+  headers: { Authorization: `Bearer ${TOKEN}` },
+  data: {
+    title: 'Vérifier le lag avant un redémarrage',
+    markdown: '# Procédure\n1. Vérifier kex_consumer_lag avant tout redémarrage.',
+    evidence: 'Trois incidents évités', conversationId: null,
+  },
+});
+assert.equal(proposal.status(), 201, 'la proposition de compétence a échoué en amont du test');
+const proposed = await proposal.json();
+
+await check('la file de revue affiche la compétence proposée, tous propriétaires confondus', async () => {
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.click('[data-agent-tab="governance"]');
+  await page.waitForSelector('#skills-review-queue article.card');
+  assert.match(await page.$eval('#skills-review-queue', (node) => node.textContent),
+    /Vérifier le lag avant un redémarrage/);
+});
+
+await check('approuver la fait disparaître de la file et apparaître dans la bibliothèque', async () => {
+  const decided = page.waitForResponse((response) =>
+    response.url().endsWith(`/api/agent/skills/${proposed.id}/approve`));
+  await page.click('#skills-review-queue article.card button:has-text("Approuver")');
+  await page.waitForSelector('dialog#confirm[open]');
+  await page.click('#confirm-accept');
+  await decided;
+  await page.waitForSelector('#skills-review-queue [data-empty-state]');
+  assert.match(await page.$eval('#skills-curation', (node) => node.textContent),
+    /Vérifier le lag avant un redémarrage/);
+});
+
+// Le bouton Retirer ne rend que sur ce qui dépasse le plafond d'injection (5 par défaut) ou qui
+// n'a pas été revu depuis longtemps — une compétence tout juste approuvée reste "Injectée", sans
+// bouton. Cinq approbations supplémentaires repoussent la première "En sommeil" et lui en donnent
+// un ; SkillsService.ranked classe la plus récemment approuvée d'abord, donc la première approuvée
+// finit dernière — exactement la position que skip(limit) découvre.
+for (let i = 0; i < 5; i += 1) {
+  const filler = await page.request.post(`${BASE}/api/agent/skills`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+    data: {
+      title: `Compétence de remplissage ${i}`,
+      markdown: `# Procédure ${i}\nÉtape unique.`,
+      evidence: 'Remplissage pour dépasser le plafond d’injection', conversationId: null,
+    },
+  });
+  assert.equal(filler.status(), 201, 'une proposition de remplissage a échoué en amont du test');
+  const fillerEntry = await filler.json();
+  const fillerApproved = await page.request.post(`${BASE}/api/agent/skills/${fillerEntry.id}/approve`, {
+    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+    data: { reason: 'Remplissage de test' },
+  });
+  assert.equal(fillerApproved.status(), 200, 'une approbation de remplissage a échoué en amont du test');
+}
+
+// Ciblé par aria-label, pas par texte générique : plusieurs compétences peuvent devenir dormantes
+// à la fois, chacune avec son propre bouton « Retirer ».
+const retireButton = `#skills-curation button[aria-label="Retirer : ${proposed.title}"]`;
+
+await check('annuler un retrait fonctionne sans motif rempli (formnovalidate)', async () => {
+  // Défaut possible : un textarea required dans le même <form method="dialog"> que le bouton
+  // Confirmer bloquerait aussi Annuler côté navigateur, sans formnovalidate sur ce bouton-là.
+  // Un aller-retour de vue plutôt qu'un rechargement complet : route() ne recharge un écran que
+  // sur un changement de vue détecté, et c'est ce détour qui fait relire la curation à jour.
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/agent`, { waitUntil: 'domcontentloaded' });
+  await page.click('[data-agent-tab="governance"]');
+  await page.waitForSelector(retireButton);
+  await page.click(retireButton);
+  await page.waitForSelector('dialog#confirm[open]');
+  await page.click('#confirm button[value=cancel]');
+  // Un <dialog> sans l'attribut open devient display:none par défaut : attendre qu'il « ne
+  // matche plus [open] » avec l'état visible implicite de waitForSelector ne se résout jamais,
+  // puisqu'un dialogue fermé n'est justement plus visible. C'est sa disparition qu'il faut
+  // attendre, pas une variante du même sélecteur.
+  await page.waitForSelector('dialog#confirm', { state: 'hidden' });
+  assert.match(await page.$eval('#skills-curation', (node) => node.textContent),
+    /Vérifier le lag avant un redémarrage/);
+});
+
+await check('retirer avec un motif la fait disparaître de la bibliothèque', async () => {
+  // Les cinq compétences de remplissage restent approuvées et injectées : la bibliothèque n'est pas
+  // vide après ce retrait, seule la compétence dormante retirée en a disparu.
+  await page.click(retireButton);
+  await page.waitForSelector('dialog#confirm[open]');
+  await page.fill('#confirm-reason', 'Vérification navigateur : nettoyage');
+  const removed = page.waitForResponse((response) =>
+    response.url().endsWith(`/api/agent/skills/${proposed.id}/retire`));
+  const refreshed = page.waitForResponse((response) =>
+    response.url().endsWith('/api/agent/skills/curation'));
+  await page.click('#confirm-accept');
+  await removed;
+  await refreshed;
+  const text = await page.$eval('#skills-curation', (node) => node.textContent);
+  assert.doesNotMatch(text, /Vérifier le lag avant un redémarrage/);
+});
+
 await check('aucune erreur de script sur le parcours', () => {
   assert.deepEqual(scriptErrors, []);
 });

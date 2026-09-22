@@ -168,6 +168,15 @@ Le curateur signale, il ne retire rien de lui-même : retirer une compétence ch
 toutes les conversations suivantes du même propriétaire, exactement ce qu'une approbation humaine
 nommée existe pour trancher.
 
+La console les réunit avec la charte et la curation sous l'onglet **Gouvernance** de la vue Agent —
+un seul écran plutôt que trois entrées de navigation pour une question unique : que peut dire
+l'agent de plus que son prompt système, et qui l'a autorisé.
+
+`GET /api/agent/whoami` rend `{"name","tenant","roles"}` du principal courant — ouverte à `CHAT`
+comme aux autres rôles, une lecture pure n'étant pas un privilège de plus que converser. C'est elle
+qui alimente le menu du jeton dans la console : jusqu'ici, savoir à quel locataire sa propre clé
+appartenait exigeait de relire la configuration du serveur.
+
 ### `POST|GET /api/agent/charter`
 
 Consignes durables de l'exploitant, éditables sans redéployer, là où le prompt système reste figé au

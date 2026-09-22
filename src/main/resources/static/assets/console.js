@@ -11,6 +11,7 @@ import {
 } from './core.js';
 import * as chat from './chat.js';
 import * as llm from './llm.js';
+import * as skills from './skills.js';
 import * as supervision from './supervision.js';
 import * as tools from './tools.js';
 
@@ -20,7 +21,9 @@ const VIEWS = {
   overview: { title: 'Vue d’ensemble', load: supervision.overview },
   attention: { title: 'À traiter', load: supervision.attentionView },
   incidents: { title: 'Cockpit incident', load: supervision.incidents },
-  agent: { title: 'Agent', load: supervision.agent },
+  // La gouvernance (charte, compétences) est une lecture indépendante de l'état de l'agent :
+  // l'une ne doit pas retarder l'autre, comme pour la configuration plus bas.
+  agent: { title: 'Agent', load: () => Promise.all([supervision.agent(), skills.governance()]) },
   processes: { title: 'Processus', load: supervision.processes },
   decisions: { title: 'Décisions', load: supervision.decisions },
   // La configuration réunit deux lectures indépendantes : les seuils, modifiables, et le modèle,
@@ -273,6 +276,8 @@ function openCredentials() {
 onUnauthorized(openCredentials);
 onCredentialChange((value) => {
   $('#credential-label').textContent = value ? 'Jeton actif' : 'Jeton absent';
+  if (value) skills.whoami();
+  else $('#whoami-label').hidden = true;
 });
 
 /* ── Thème ─────────────────────────────────────────────────────────────── */
@@ -649,6 +654,7 @@ supervision.wire();
 supervision.onSnapshot(renderBadges);
 tools.wire();
 llm.wire();
+skills.wire();
 chat.wire(openCredentials);
 
 $('#run-cycle').addEventListener('click', runCycle);
@@ -677,6 +683,9 @@ syncDensityButton();
 applyPreferences();
 syncConnectivity();
 $('#credential-label').textContent = credentials.get() ? 'Jeton actif' : 'Jeton absent';
+// Une ligne directe, pas onCredentialChange : ce jeton vient de sessionStorage, il ne passe
+// jamais par credentials.set() ici, donc l'écouteur ne se déclencherait pas de lui-même.
+if (credentials.get()) skills.whoami();
 route();
 refreshStatus();
 if (!credentials.get()) openCredentials();
