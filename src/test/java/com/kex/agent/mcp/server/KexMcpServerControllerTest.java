@@ -219,7 +219,7 @@ class KexMcpServerControllerTest {
         org.assertj.core.api.Assertions.assertThat(meters.find("kex.mcp.server.request")
                 .tag("method", "ping").tag("outcome", "success").timer()).isNotNull();
         org.assertj.core.api.Assertions.assertThat(meters.find("kex.mcp.server.request")
-                .tag("method", "unknown").tag("outcome", "success").timer()).isNotNull();
+                .tag("method", "unknown").tag("outcome", "rpc_error").timer()).isNotNull();
     }
 
     @Test
