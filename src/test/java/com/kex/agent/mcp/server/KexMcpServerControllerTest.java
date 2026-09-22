@@ -52,7 +52,8 @@ class KexMcpServerControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value("hello"))
                 .andExpect(jsonPath("$.result.protocolVersion").value("2025-06-18"))
-                .andExpect(jsonPath("$.result.capabilities.tools.listChanged").value(false));
+                .andExpect(jsonPath("$.result.capabilities.tools.listChanged").value(false))
+                .andExpect(jsonPath("$.result.capabilities.resources.listChanged").value(false));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"))
                 .andExpect(status().isAccepted()).andExpect(content().string(""));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"))
@@ -67,6 +68,22 @@ class KexMcpServerControllerTest {
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}"))
                 .andExpect(jsonPath("$.result").isMap());
         verifyNoInteractions(supervision);
+    }
+
+    @Test
+    void lists_and_reads_read_only_supervision_resources() throws Exception {
+        when(supervision.alerts()).thenReturn(List.of());
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"resources/list\"}"))
+                .andExpect(jsonPath("$.result.resources.length()").value(5))
+                .andExpect(jsonPath("$.result.resources[0].uri").value("kex://supervision/status"))
+                .andExpect(jsonPath("$.result.resources[2].uri").value("kex://supervision/alerts"));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"resources/read\","
+                + "\"params\":{\"uri\":\"kex://supervision/alerts\"}}"))
+                .andExpect(jsonPath("$.result.contents[0].mimeType").value("application/json"))
+                .andExpect(jsonPath("$.result.contents[0].text").value("[]"));
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"resources/read\","
+                + "\"params\":{\"uri\":\"kex://unknown\"}}"))
+                .andExpect(jsonPath("$.error.code").value(-32002));
     }
 
     @Test
