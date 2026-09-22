@@ -9,6 +9,7 @@ import {
   $, ago, api, confirmAction, credentials, drawerOpen, el, onCredentialChange, onUnauthorized, report,
   restoreDrawerFromUrl, stamp, toast, viewName,
 } from './core.js';
+import * as automations from './automations.js';
 import * as chat from './chat.js';
 import * as llm from './llm.js';
 import * as skills from './skills.js';
@@ -23,7 +24,7 @@ const VIEWS = {
   incidents: { title: 'Cockpit incident', load: supervision.incidents },
   // La gouvernance (charte, compétences) est une lecture indépendante de l'état de l'agent :
   // l'une ne doit pas retarder l'autre, comme pour la configuration plus bas.
-  agent: { title: 'Agent', load: () => Promise.all([supervision.agent(), skills.governance()]) },
+  agent: { title: 'Agent', load: () => Promise.all([supervision.agent(), skills.governance(), automations.panel()]) },
   processes: { title: 'Processus', load: supervision.processes },
   decisions: { title: 'Décisions', load: supervision.decisions },
   // La configuration réunit deux lectures indépendantes : les seuils, modifiables, et le modèle,
@@ -655,6 +656,7 @@ supervision.onSnapshot(renderBadges);
 tools.wire();
 llm.wire();
 skills.wire();
+automations.wire();
 chat.wire(openCredentials);
 
 $('#run-cycle').addEventListener('click', runCycle);
