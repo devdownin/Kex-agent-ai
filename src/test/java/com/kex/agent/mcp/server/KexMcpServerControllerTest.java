@@ -7,12 +7,12 @@ import java.util.Map;
 import java.util.Set;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kex.agent.supervision.SupervisionService;
+import com.kex.agent.kafka.KafkaTopicLag;
+import com.kex.agent.kafka.KafkaViewService;
 import com.kex.agent.supervision.Coverage;
 import com.kex.agent.supervision.ProcessSnapshot;
 import com.kex.agent.supervision.ProcessState;
-import com.kex.agent.kafka.KafkaViewService;
-import com.kex.agent.kafka.KafkaTopicLag;
+import com.kex.agent.supervision.SupervisionService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
