@@ -40,12 +40,14 @@ public class KexMcpServerController {
     private static final int MAX_REQUEST_LENGTH = 65_536;
     private static final Map<String, Object> EMPTY_SCHEMA = Map.of(
             "type", "object", "properties", Map.of(), "additionalProperties", false);
+    // Phase 1 deliberately exposes observation only. Mutating supervision operations stay behind
+    // Kex's operator API/console until MCP-specific approval and audit semantics are defined.
     private static final List<Map<String, Object>> TOOLS = List.of(
-            tool("kex_status", "Read Kex supervision status.", true),
-            tool("kex_pending_decisions", "Read decisions awaiting human review. Cannot approve them.", true),
-            tool("kex_run_cycle", "Run a supervision cycle under the existing policy, confidence thresholds, "
-                    + "capability permissions and shared execution lock. May execute policy-authorized actions.", false),
-            tool("kex_pause", "Pause subsequent agent actions; the change is audited.", false));
+            tool("kex_status", "Read Kex supervision status."),
+            tool("kex_overview", "Read the current supervision overview, including process states and counts."),
+            tool("kex_alerts", "Read the currently active supervision alerts."),
+            tool("kex_incidents", "Read incidents correlated from the latest supervision cycle."),
+            tool("kex_pending_decisions", "Read decisions awaiting human review. Cannot approve them."));
 
     private final ObjectMapper mapper;
     private final ObjectProvider<SupervisionService> supervision;
@@ -132,8 +134,8 @@ public class KexMcpServerController {
         return result(id, Map.of("protocolVersion", PROTOCOLS.contains(requested) ? requested : PROTOCOL,
                 "serverInfo", Map.of("name", "kex-agent-ai", "version", "1.0.0"),
                 "capabilities", Map.of("tools", Map.of("listChanged", false)),
-                "instructions", "Human approvals stay in Kex's operator console. "
-                        + "This endpoint never approves decisions or changes governance."));
+                "instructions", "Read-only Kex supervision endpoint. Human approvals and all state changes "
+                        + "stay in Kex's authenticated operator API and console."));
     }
 
     private ResponseEntity<Object> call(Object id, JsonNode params, String actor) {
@@ -149,9 +151,10 @@ public class KexMcpServerController {
         try {
             Object value = switch (name) {
                 case "kex_status" -> service.status();
+                case "kex_overview" -> service.overview();
+                case "kex_alerts" -> service.alerts();
+                case "kex_incidents" -> service.incidents();
                 case "kex_pending_decisions" -> service.pending();
-                case "kex_run_cycle" -> service.runCycle(actor);
-                case "kex_pause" -> service.pause(actor);
                 default -> throw new IllegalStateException("Unreachable tool");
             };
             return toolResult(id, mapper.writeValueAsString(value), false);
@@ -182,10 +185,10 @@ public class KexMcpServerController {
         return headers.getAccept().stream().anyMatch(value -> value.getQualityValue() > 0 && value.includes(type));
     }
 
-    private static Map<String, Object> tool(String name, String description, boolean readOnly) {
+    private static Map<String, Object> tool(String name, String description) {
         return Map.of("name", name, "description", description, "inputSchema", EMPTY_SCHEMA,
-                "annotations", Map.of("readOnlyHint", readOnly, "destructiveHint", !readOnly,
-                        "idempotentHint", readOnly, "openWorldHint", !readOnly));
+                "annotations", Map.of("readOnlyHint", true, "destructiveHint", false,
+                        "idempotentHint", true, "openWorldHint", false));
     }
 
     private static ResponseEntity<Object> toolResult(Object id, String text, boolean error) {
