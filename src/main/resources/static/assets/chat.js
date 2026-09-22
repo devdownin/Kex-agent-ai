@@ -142,10 +142,135 @@ function nearBottom(container, threshold = 56) {
   return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
 }
 
+export function renderMarkdown(markdownText) {
+  const container = document.createElement('div');
+  container.className = 'markdown-body';
+  if (!markdownText) return container;
+
+  const codeBlockRegex = /```([a-z0-9_-]*)\n?([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = codeBlockRegex.exec(markdownText)) !== null) {
+    const textBefore = markdownText.slice(lastIndex, match.index);
+    if (textBefore) parseBlocks(textBefore, container);
+
+    const lang = match[1].trim();
+    const codeContent = match[2];
+
+    const pre = document.createElement('pre');
+    pre.className = 'code-block';
+    if (lang) pre.setAttribute('data-lang', lang);
+    const code = document.createElement('code');
+    code.textContent = codeContent;
+    pre.append(code);
+    container.append(pre);
+
+    lastIndex = codeBlockRegex.lastIndex;
+  }
+
+  const remaining = markdownText.slice(lastIndex);
+  if (remaining) {
+    const unclosed = remaining.match(/^```([a-z0-9_-]*)\n?([\s\S]*)$/);
+    if (unclosed) {
+      const lang = unclosed[1].trim();
+      const codeContent = unclosed[2];
+
+      const pre = document.createElement('pre');
+      pre.className = 'code-block streaming';
+      if (lang) pre.setAttribute('data-lang', lang);
+      const code = document.createElement('code');
+      code.textContent = codeContent;
+      pre.append(code);
+      container.append(pre);
+    } else {
+      parseBlocks(remaining, container);
+    }
+  }
+
+  return container;
+}
+
+function parseBlocks(text, parent) {
+  const paragraphs = text.split(/\n{2,}/);
+  for (const para of paragraphs) {
+    const trimmed = para.trim();
+    if (!trimmed) continue;
+
+    const lines = trimmed.split('\n');
+    const isList = lines.length > 0 && lines.every((l) => /^\s*[-*•]\s+/.test(l));
+
+    if (isList) {
+      const ul = document.createElement('ul');
+      for (const line of lines) {
+        const itemText = line.replace(/^\s*[-*•]\s+/, '');
+        const li = document.createElement('li');
+        parseInline(itemText, li);
+        ul.append(li);
+      }
+      parent.append(ul);
+    } else {
+      const headerMatch = trimmed.match(/^(#{1,3})\s+(.*)$/);
+      if (headerMatch && lines.length === 1) {
+        const level = headerMatch[1].length;
+        const hTag = level === 1 ? 'h3' : level === 2 ? 'h4' : 'h5';
+        const header = document.createElement(hTag);
+        header.className = 'chat-header';
+        parseInline(headerMatch[2], header);
+        parent.append(header);
+      } else {
+        const p = document.createElement('p');
+        p.className = 'chat-paragraph';
+        lines.forEach((line, idx) => {
+          if (idx > 0) p.append(document.createElement('br'));
+          parseInline(line, p);
+        });
+        parent.append(p);
+      }
+    }
+  }
+}
+
+function parseInline(text, parent) {
+  const regex = /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__)/g;
+  let lastIdx = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      parent.append(document.createTextNode(text.slice(lastIdx, match.index)));
+    }
+    const token = match[0];
+    if (token.startsWith('`') && token.endsWith('`')) {
+      const code = document.createElement('code');
+      code.className = 'inline-code';
+      code.textContent = token.slice(1, -1);
+      parent.append(code);
+    } else if ((token.startsWith('**') && token.endsWith('**')) || (token.startsWith('__') && token.endsWith('__'))) {
+      const strong = document.createElement('strong');
+      strong.textContent = token.slice(2, -2);
+      parent.append(strong);
+    }
+    lastIdx = regex.lastIndex;
+  }
+  if (lastIdx < text.length) {
+    parent.append(document.createTextNode(text.slice(lastIdx)));
+  }
+}
+
+function updateBubble(bubble, role, text) {
+  if (role === 'error') {
+    bubble.textContent = text || '';
+  } else {
+    bubble.replaceChildren(renderMarkdown(text || ''));
+  }
+}
+
 function addTurn(role, text) {
   const turn = el('li', `turn ${role}`);
   turn.append(el('span', 'who', role === 'user' ? 'vous' : role === 'error' ? 'erreur' : 'agent'));
-  const bubble = el('div', 'bubble', text || '');
+  const bubble = el('div', 'bubble');
+  updateBubble(bubble, role, text);
   turn.append(bubble);
   const transcript = $('#transcript');
   transcript.append(turn);
@@ -156,7 +281,9 @@ function addTurn(role, text) {
 function addContextTurn(role, text) {
   const turn = el('li', `turn ${role}`);
   turn.append(el('span', 'who', role === 'user' ? 'vous' : role === 'error' ? 'erreur' : 'agent'));
-  turn.append(el('div', 'bubble', text || ''));
+  const bubble = el('div', 'bubble');
+  updateBubble(bubble, role, text);
+  turn.append(bubble);
   const transcript = $('#context-chat-transcript');
   transcript.append(turn);
   transcript.scrollTop = transcript.scrollHeight;
@@ -293,8 +420,7 @@ async function* serverSentEvents(response) {
       const data = [];
       for (const line of block.split('\n')) {
         if (line.startsWith('event:')) name = line.slice(6).trim();
-        // Une seule espace après le deux-points est un délimiteur, les suivantes sont du contenu.
-        else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+        else if (line.startsWith('data:')) data.push(line.slice(5));
       }
       if (data.length) yield { name, data: data.join('\n') };
     }
@@ -320,6 +446,7 @@ async function sendStreaming(message) {
   // conversation pendant que ce flux tourne encore réassigne la variable partagée, et le flux
   // interrompu ne doit pas écrire son tour incomplet dans la conversation qui vient de le remplacer.
   let ownConversationId = null;
+  let accumulatedText = '';
   try {
     for await (const event of serverSentEvents(response)) {
       if (event.name === 'conversation') {
@@ -329,12 +456,11 @@ async function sendStreaming(message) {
         touchIndex(ownConversationId, message.slice(0, 48));
       } else if (event.name === 'token') {
         // Capturé avant d'ajouter le texte : une fois le contenu ajouté, `scrollHeight` a déjà
-        // grandi et la distance au bas ne dit plus si l'utilisateur y était avant ce jeton. Sans
-        // ce garde, remonter lire un passage précédent pendant que la réponse continue de s'écrire
-        // ramenait la vue en bas à chaque jeton, rendant la lecture impossible.
+        // grandi et la distance au bas ne dit plus si l'utilisateur y était avant ce jeton.
         const transcript = $('#transcript');
         const stick = nearBottom(transcript);
-        bubble.textContent += event.data;
+        accumulatedText += event.data;
+        updateBubble(bubble, 'agent', accumulatedText);
         if (stick) transcript.scrollTop = transcript.scrollHeight;
       } else if (event.name === 'tool') {
         calls.push(JSON.parse(event.data));
@@ -342,7 +468,8 @@ async function sendStreaming(message) {
         renderToolLog(calls);
       } else if (event.name === 'error') {
         turn.classList.add('error');
-        bubble.textContent += (bubble.textContent ? '\n\n' : '') + event.data;
+        accumulatedText += (accumulatedText ? '\n\n' : '') + event.data;
+        updateBubble(bubble, 'error', accumulatedText);
       }
     }
   } finally {
@@ -350,7 +477,7 @@ async function sendStreaming(message) {
     // Le motif d'arrêt n'arrive pas sur ce chemin (voir OBSERVABILITE.md) : rien à consigner ici,
     // contrairement au chemin bloquant.
     if (ownConversationId) {
-      appendTranscript(ownConversationId, { role: 'agent', text: bubble.textContent, tools: calls });
+      appendTranscript(ownConversationId, { role: 'agent', text: accumulatedText, tools: calls });
     }
     inFlight = null;
   }

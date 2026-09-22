@@ -1255,16 +1255,72 @@ table.grid tr.clickable:hover td:last-child { border-top-right-radius: var(--rad
 .turn .who { font-size: 11px; color: var(--ink-3); letter-spacing: .06em; text-transform: uppercase; }
 
 .bubble {
-  padding: 10px 14px;
+  padding: 12px 16px;
   border-radius: var(--radius);
   border: 1px solid var(--line-soft);
-  background: var(--surface-2);
-  white-space: pre-wrap;
+  background: var(--surface);
+  box-shadow: var(--shadow);
   overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.6;
 }
-.turn.user .bubble { background: var(--accent-soft); border-color: transparent; }
-.turn.error .bubble { border-color: var(--danger); color: var(--danger); }
+.turn.user .bubble {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--ink);
+  box-shadow: none;
+}
+.turn.error .bubble { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
 .turn.error .bubble::before { content: "✕ "; font-family: var(--mono); }
+
+.markdown-body { display: flex; flex-direction: column; gap: 8px; }
+.markdown-body p.chat-paragraph { margin: 0; }
+.markdown-body ul { margin: 4px 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.markdown-body li { line-height: 1.5; }
+.markdown-body h3.chat-header, .markdown-body h4.chat-header, .markdown-body h5.chat-header {
+  margin: 10px 0 4px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.markdown-body h3.chat-header { font-size: 16px; }
+.markdown-body h4.chat-header { font-size: 15px; }
+.markdown-body h5.chat-header { font-size: 14px; }
+
+.inline-code {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  color: var(--ink);
+}
+
+.code-block {
+  position: relative;
+  margin: 8px 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--rail-bg);
+  color: var(--rail-ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+}
+.code-block code { font-family: inherit; }
+.code-block[data-lang]::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--rail-muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
 .turn .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .chip {
