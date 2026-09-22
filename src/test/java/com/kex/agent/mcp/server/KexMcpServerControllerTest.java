@@ -231,6 +231,10 @@ class KexMcpServerControllerTest {
         mvc.perform(rpc(body).header("Origin", "null")).andExpect(status().isForbidden());
         mvc.perform(rpc(body).header("MCP-Protocol-Version", "1900-01-01")).andExpect(status().isBadRequest());
         mvc.perform(rpc(body).accept(MediaType.APPLICATION_JSON)).andExpect(status().isNotAcceptable());
+        org.assertj.core.api.Assertions.assertThat(meters.find("kex.mcp.server.transport.rejected")
+                .tag("reason", "authorization").counter()).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(meters.find("kex.mcp.server.transport.rejected")
+                .tag("reason", "accept").counter()).isNotNull();
         mvc.perform(get(PATH).principal(auth("ROLE_OPERATOR"))).andExpect(status().isMethodNotAllowed());
         mvc.perform(get(PATH).principal(auth("ROLE_OPERATOR")).header("Origin", "https://evil.example"))
                 .andExpect(status().isForbidden());
