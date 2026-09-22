@@ -42,6 +42,9 @@ public class KexMcpServerController {
             "type", "object", "properties", Map.of(), "additionalProperties", false);
     // Phase 1 deliberately exposes observation only. Mutating supervision operations stay behind
     // Kex's operator API/console until MCP-specific approval and audit semantics are defined.
+    private static final List<Map<String, Object>> PROMPTS = List.of(
+            Map.of("name", "kex_supervision_triage", "title", "Kex supervision triage",
+                    "description", "Guide a read-only investigation using Kex supervision tools and resources."));
     private static final List<Map<String, Object>> TOOLS = List.of(
             tool("kex_status", "Read Kex supervision status."),
             tool("kex_overview", "Read the current supervision overview, including process states and counts."),
@@ -124,6 +127,10 @@ public class KexMcpServerController {
                     ? error(id, -32602, "This server does not use pagination cursors")
                     : result(id, Map.of("resources", resources()));
             case "resources/read" -> readResource(id, params);
+            case "prompts/list" -> params.has("cursor")
+                    ? error(id, -32602, "This server does not use pagination cursors")
+                    : result(id, Map.of("prompts", PROMPTS));
+            case "prompts/get" -> getPrompt(id, params);
             default -> error(id, -32601, "Method not found");
         };
     }
@@ -137,7 +144,8 @@ public class KexMcpServerController {
         String requested = params.path("protocolVersion").asText();
         return result(id, Map.of("protocolVersion", PROTOCOLS.contains(requested) ? requested : PROTOCOL,
                 "serverInfo", Map.of("name", "kex-agent-ai", "version", "1.0.0"),
-                "capabilities", Map.of("tools", Map.of("listChanged", false), "resources", Map.of("listChanged", false)),
+                "capabilities", Map.of("tools", Map.of("listChanged", false),
+                        "resources", Map.of("listChanged", false), "prompts", Map.of("listChanged", false)),
                 "instructions", "Read-only Kex supervision endpoint. Human approvals and all state changes "
                         + "stay in Kex's authenticated operator API and console."));
     }
@@ -170,6 +178,23 @@ public class KexMcpServerController {
         }
     }
 
+
+    private ResponseEntity<Object> getPrompt(Object id, JsonNode params) {
+        String name = params.path("name").asText("");
+        if (!"kex_supervision_triage".equals(name)) return error(id, -32602, "Unknown prompt");
+        if (params.has("arguments") && (!params.get("arguments").isObject() || !params.get("arguments").isEmpty())) {
+            return error(id, -32602, "This prompt accepts no arguments");
+        }
+        String text = "Investigate the current Kex supervision state without changing it. "
+                + "Start with kex_status and kex_overview, then inspect kex_alerts and kex_incidents. "
+                + "Use kex_pending_decisions only to identify decisions awaiting human review. "
+                + "Correlate the observations, distinguish facts from hypotheses, and propose diagnostic next steps. "
+                + "Do not approve decisions, pause supervision, run cycles, or perform any state-changing action.";
+        return result(id, Map.of(
+                "description", "Read-only Kex supervision triage",
+                "messages", List.of(Map.of("role", "user",
+                        "content", Map.of("type", "text", "text", text)))));
+    }
 
     private List<Map<String, Object>> resources() {
         return List.of(
