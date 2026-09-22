@@ -233,8 +233,10 @@ sans redémarrer l'agent.
 ## Exposer Kex comme serveur MCP
 
 Kex peut aussi être consommé par un autre client MCP. Cette surface est **opt-in et en lecture seule**
-dans sa première phase : elle expose `kex_status`, `kex_overview`, `kex_alerts`,
-`kex_incidents` et `kex_pending_decisions`. Elle n'expose ni lancement de cycle, ni pause, ni
+dans sa première phase. Les mêmes observations sont disponibles comme **tools** (`kex_status`, `kex_overview`,
+`kex_alerts`, `kex_incidents`, `kex_pending_decisions`) et comme **resources** stables :
+`kex://supervision/status`, `kex://supervision/overview`, `kex://supervision/alerts`,
+`kex://supervision/incidents` et `kex://supervision/decisions/pending`. Elle n'expose ni lancement de cycle, ni pause, ni
 approbation/rejet de décision.
 
 Activez-la explicitement :
