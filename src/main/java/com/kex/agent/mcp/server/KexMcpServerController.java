@@ -316,7 +316,7 @@ public class KexMcpServerController {
                     "structuredContent", diagnosis,
                     "isError", false));
         }
-        catch (RuntimeException | JsonProcessingException ex) {
+        catch (RuntimeException ex) {
             return toolResult(id, "Kex could not complete the process diagnosis. Inspect the operator console.", true);
         }
     }
