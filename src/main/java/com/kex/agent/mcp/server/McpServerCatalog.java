@@ -14,7 +14,8 @@ final class McpServerCatalog {
     static final Map<String, Object> MEASURED_VALUE_SCHEMA = objectSchema(Map.of(
             "value", Map.of(), "measured", booleanSchema(), "reason", stringSchema()));
     static final Map<String, Object> COVERAGE_SCHEMA = objectSchema(Map.of(
-            "complete", booleanSchema(), "stopReason", stringSchema()));
+            "complete", booleanSchema(), "stopReason", stringSchema(),
+            "notReached", arraySchema(stringSchema()), "detail", stringSchema()));
     static final Map<String, Object> KAFKA_TOPIC_SCHEMA = objectSchema(Map.of(
             "name", stringSchema(), "partitions", integerSchema(), "records", MEASURED_VALUE_SCHEMA,
             "lastActivityMs", MEASURED_VALUE_SCHEMA, "deadLetter", booleanSchema()));
