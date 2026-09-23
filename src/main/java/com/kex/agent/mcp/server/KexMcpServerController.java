@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.mcp.server;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -89,17 +90,19 @@ public class KexMcpServerController {
     private final ObjectProvider<KafkaViewService> kafka;
     private final KexMcpServerProperties properties;
     private final ObjectProvider<BuildProperties> buildProperties;
+    private final ObjectProvider<McpServerAuditPublisher> audit;
     private final MeterRegistry meters;
 
     public KexMcpServerController(ObjectMapper mapper, ObjectProvider<SupervisionService> supervision,
                                   ObjectProvider<KafkaViewService> kafka,
                                   KexMcpServerProperties properties, ObjectProvider<BuildProperties> buildProperties,
-                                  MeterRegistry meters) {
+                                  ObjectProvider<McpServerAuditPublisher> audit, MeterRegistry meters) {
         this.mapper = mapper;
         this.supervision = supervision;
         this.kafka = kafka;
         this.properties = properties;
         this.buildProperties = buildProperties;
+        this.audit = audit;
         this.meters = meters;
     }
 
@@ -164,6 +167,7 @@ public class KexMcpServerController {
         }
         JsonNode params = request.path("params");
         Timer.Sample sample = Timer.start(meters);
+        long auditStarted = System.nanoTime();
         ResponseEntity<Object> response = switch (method) {
             case "initialize" -> initialize(id, params);
             case "ping" -> result(id, Map.of());
@@ -184,8 +188,9 @@ public class KexMcpServerController {
             case "prompts/get" -> getPrompt(id, params);
             default -> error(id, -32601, "Method not found");
         };
-        sample.stop(meters.timer("kex.mcp.server.request", "method", metricMethod(method),
-                "outcome", metricOutcome(response)));
+        String outcome = metricOutcome(response);
+        sample.stop(meters.timer("kex.mcp.server.request", "method", metricMethod(method), "outcome", outcome));
+        publishAudit(authentication, method, params, outcome, System.nanoTime() - auditStarted);
         return response;
     }
 
@@ -354,6 +359,19 @@ public class KexMcpServerController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         return null;
+    }
+
+    private void publishAudit(Authentication authentication, String method, JsonNode params,
+                              String outcome, long durationNanos) {
+        McpServerAuditPublisher publisher = audit.getIfAvailable();
+        if (publisher == null) return;
+        String target = switch (method) {
+            case "tools/call", "prompts/get" -> params.path("name").asText(null);
+            case "resources/read" -> params.path("uri").asText(null);
+            default -> null;
+        };
+        publisher.publish(new McpServerAuditEvent(Instant.now(), authentication.getName(),
+                metricMethod(method), target, outcome, durationNanos));
     }
 
     private ResponseEntity<Object> recordTransport(String reason, ResponseEntity<Object> response) {
