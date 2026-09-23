@@ -114,7 +114,11 @@ function overviewStub(overrides = {}) {
 }
 
 await page.goto(`${BASE}/#/settings`, { waitUntil: 'networkidle' });
-await page.waitForSelector('dialog[open]');
+// The credentials dialog is only auto-opened when no token is already available. CI may inject one.
+if (!(await page.locator('#credentials').evaluate((node) => node.open))) {
+  await page.click('#open-credentials');
+}
+await page.waitForSelector('#credentials[open]');
 await page.fill('#api-key', TOKEN);
 await page.click('#credentials-form button[type=submit]');
 
