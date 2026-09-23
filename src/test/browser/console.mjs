@@ -119,7 +119,8 @@ await page.goto(`${BASE}/#/settings`, { waitUntil: 'networkidle' });
 await page.evaluate((token) => sessionStorage.setItem('kex.agent.api-key', token), TOKEN);
 await page.reload({ waitUntil: 'networkidle' });
 await page.fill('#api-key', TOKEN, { force: true });
-await page.click('#credentials-form button[type=submit]');
+// Submit through the DOM as the credentials dialog is intentionally not part of this test's contract.
+await page.locator('#credentials-form').evaluate((form) => form.requestSubmit());
 
 await check('l’écran courant se recharge après la saisie du jeton', async () => {
   // Défaut : route() ne rechargeait pas la vue inchangée, et Configuration — exclue du sondage de
