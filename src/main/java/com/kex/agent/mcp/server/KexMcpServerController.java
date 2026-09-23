@@ -51,9 +51,15 @@ public class KexMcpServerController {
     private static final List<Map<String, Object>> PROMPTS = List.of(
             Map.of("name", "kex_supervision_triage", "title", "Kex supervision triage",
                     "description", "Guide a read-only investigation using Kex supervision tools and resources."));
-    private static final Map<String, Object> STATUS_SCHEMA = McpServerCatalog.objectSchema(Map.of(
-            "state", McpServerCatalog.stringSchema(), "mode", McpServerCatalog.stringSchema(), "paused", McpServerCatalog.booleanSchema(),
-            "analysing", McpServerCatalog.booleanSchema(), "confidenceThreshold", McpServerCatalog.numberSchema(),
+    private static final Map<String, Object> STATUS_SCHEMA = McpServerCatalog.objectSchema(McpServerCatalog.schema(
+            "state", McpServerCatalog.stringSchema(), "mode", McpServerCatalog.stringSchema(),
+            "paused", McpServerCatalog.booleanSchema(), "analysing", McpServerCatalog.booleanSchema(),
+            "lastCycleAt", McpServerCatalog.schema("type", List.of("string", "null")),
+            "lastCycleId", McpServerCatalog.schema("type", List.of("string", "null")),
+            "staleSince", McpServerCatalog.schema("type", List.of("string", "null")),
+            "policyVersion", McpServerCatalog.stringSchema(),
+            "confidenceThreshold", McpServerCatalog.numberSchema(),
+            "stateReason", McpServerCatalog.schema("type", List.of("string", "null")),
             "circuitBreakers", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema())));
     private static final Map<String, Object> OVERVIEW_SCHEMA = McpServerCatalog.objectSchema(McpServerCatalog.schema(
             "agent", STATUS_SCHEMA, "processesMonitored", McpServerCatalog.integerSchema(), "processesOk", McpServerCatalog.integerSchema(),

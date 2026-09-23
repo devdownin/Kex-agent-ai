@@ -87,7 +87,17 @@ jobs:
       - name: Start MCP server for external client
         run: |
           set -euo pipefail
-          java -jar target/kex-agent-ai-*.jar --server.port=8082             --kex.agent.api-key=ci-secret             --kex.mcp.server.enabled=true             --spring.ai.mcp.client.enabled=false             --spring.ai.model.chat=none --spring.ai.model.embedding=none             > "$RUNNER_TEMP/mcp-agent.log" 2>&1 &
+          java -jar target/kex-agent-ai-*.jar \
+            --server.port=8082 \
+            --kex.agent.api-key=ci-secret \
+            --kex.mcp.server.enabled=true \
+            --spring.ai.mcp.client.enabled=false \
+            --spring.ai.model.chat=openai \
+            --spring.ai.model.embedding=none \
+            --spring.ai.openai.api-key=ci-dummy \
+            --spring.ai.openai.base-url=http://127.0.0.1:8098 \
+            --spring.ai.openai.chat.options.model=c/moyen \
+            > "$RUNNER_TEMP/mcp-agent.log" 2>&1 &
           for i in $(seq 1 60); do
             if curl -fsS http://localhost:8082/actuator/health >/dev/null; then break; fi
             sleep 2
