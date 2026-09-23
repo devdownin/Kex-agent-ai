@@ -16,6 +16,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.info.BuildProperties;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -59,15 +60,18 @@ public class KexMcpServerController {
     private final ObjectProvider<SupervisionService> supervision;
     private final ObjectProvider<KafkaViewService> kafka;
     private final KexMcpServerProperties properties;
+    private final ObjectProvider<BuildProperties> buildProperties;
     private final MeterRegistry meters;
 
     public KexMcpServerController(ObjectMapper mapper, ObjectProvider<SupervisionService> supervision,
                                   ObjectProvider<KafkaViewService> kafka,
-                                  KexMcpServerProperties properties, MeterRegistry meters) {
+                                  KexMcpServerProperties properties, ObjectProvider<BuildProperties> buildProperties,
+                                  MeterRegistry meters) {
         this.mapper = mapper;
         this.supervision = supervision;
         this.kafka = kafka;
         this.properties = properties;
+        this.buildProperties = buildProperties;
         this.meters = meters;
     }
 
@@ -165,11 +169,18 @@ public class KexMcpServerController {
         }
         String requested = params.path("protocolVersion").asText();
         return result(id, Map.of("protocolVersion", PROTOCOLS.contains(requested) ? requested : PROTOCOL,
-                "serverInfo", Map.of("name", "kex-agent-ai", "version", "1.0.0"),
+                "serverInfo", Map.of("name", "kex-agent-ai", "version", serverVersion()),
                 "capabilities", Map.of("tools", Map.of("listChanged", false),
                         "resources", Map.of("listChanged", false), "prompts", Map.of("listChanged", false)),
                 "instructions", "Read-only Kex supervision endpoint. Human approvals and all state changes "
                         + "stay in Kex's authenticated operator API and console."));
+    }
+
+    private String serverVersion() {
+        BuildProperties build = buildProperties.getIfAvailable();
+        return build == null || build.getVersion() == null || build.getVersion().isBlank()
+                ? "development"
+                : build.getVersion();
     }
 
     private ResponseEntity<Object> call(Object id, JsonNode params) {
