@@ -417,7 +417,48 @@
         <button type="button" data-settings-target="settings-model">Modèle</button>
         <button type="button" data-settings-target="settings-detection">Détection</button>
         <button type="button" data-settings-target="settings-monitoring-panel">Surveillance</button>
+        <button type="button" data-settings-target="settings-mcp-server">Serveur MCP</button>
       </nav>
+      <section class="panel mcp-server-panel" id="settings-mcp-server">
+        <div class="panel-head">
+          <div><span class="panel-kicker">Exposition agentique</span><h1>Serveur MCP</h1></div>
+          <span class="status" id="mcp-server-status" data-state="unknown"><span class="status-mark" aria-hidden="true">●</span><span id="mcp-server-status-label">Vérification…</span></span>
+        </div>
+        <p class="hint">Inspecter exactement ce que Kex expose aux clients MCP. Les outils affichés ici restent en lecture seule.</p>
+        <nav class="local-nav mcp-tabs" aria-label="Vues du serveur MCP">
+          <button type="button" class="active" data-mcp-tab="overview">Vue d’ensemble</button>
+          <button type="button" data-mcp-tab="catalog">Catalogue</button>
+          <button type="button" data-mcp-tab="playground">Playground</button>
+        </nav>
+        <div data-mcp-panel="overview">
+          <div class="mcp-metrics" id="mcp-metrics">
+            <div class="metric"><strong id="mcp-tools-count">—</strong><span>Tools</span></div>
+            <div class="metric"><strong id="mcp-resources-count">—</strong><span>Resources</span></div>
+            <div class="metric"><strong id="mcp-templates-count">—</strong><span>Templates</span></div>
+            <div class="metric"><strong id="mcp-prompts-count">—</strong><span>Prompts</span></div>
+          </div>
+          <div class="mcp-summary-grid">
+            <div class="subpanel"><span class="panel-kicker">Contrat</span><h2>Lecture seule</h2><p class="hint">Les mutations gouvernées ne sont pas exposées par le catalogue MCP.</p></div>
+            <div class="subpanel"><span class="panel-kicker">Protocole</span><h2 id="mcp-protocol">—</h2><p class="hint" id="mcp-server-version">Version serveur inconnue</p></div>
+          </div>
+        </div>
+        <div data-mcp-panel="catalog" hidden>
+          <div class="toolbar"><label>Type <select id="mcp-catalog-kind"><option value="tools">Tools</option><option value="resources">Resources</option><option value="templates">Templates</option><option value="prompts">Prompts</option></select></label></div>
+          <div id="mcp-catalog-list" class="mcp-catalog-list"></div>
+        </div>
+        <div data-mcp-panel="playground" hidden>
+          <div class="mcp-playground-grid">
+            <form id="mcp-playground-form" class="subpanel">
+              <span class="panel-kicker">Requête</span><h2>Tester le contrat MCP</h2>
+              <label>Opération <select id="mcp-playground-operation"><option value="tool">Appeler un tool</option><option value="resource">Lire une resource</option><option value="prompt">Rendre un prompt</option></select></label>
+              <label>Cible <select id="mcp-playground-target"></select></label>
+              <label>Arguments JSON <textarea id="mcp-playground-arguments" rows="8" spellcheck="false">{}</textarea></label>
+              <button type="submit" class="primary">Exécuter</button>
+            </form>
+            <div class="subpanel"><span class="panel-kicker">Résultat</span><h2>Réponse structurée</h2><pre id="mcp-playground-result" tabindex="0">Aucune requête exécutée.</pre></div>
+          </div>
+        </div>
+      </section>
       <section class="panel" id="settings-preferences">
         <div class="panel-head">
           <div><span class="panel-kicker">Préférences locales</span><h1>Apparence et usage</h1></div>
