@@ -1609,3 +1609,26 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   .mcp-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mcp-summary-grid, .mcp-playground-grid { grid-template-columns: 1fr; }
 }
+
+
+/* ── Serveur MCP ─────────────────────────────────────────────────────── */
+.mcp-server-panel { scroll-margin-top: 16px; }
+.mcp-tabs { margin: 14px 0; }
+.mcp-tabs button.active { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
+.mcp-metrics { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 10px; margin: 14px 0; }
+.mcp-metrics .metric { padding: 14px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); }
+.mcp-metrics strong { display: block; font: 22px var(--mono); }
+.mcp-metrics span { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.mcp-summary-grid, .mcp-playground-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mcp-catalog-list { display: grid; gap: 8px; margin-top: 12px; }
+.mcp-catalog-card { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); }
+.mcp-catalog-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.mcp-catalog-name { font: 600 12px var(--mono); overflow-wrap: anywhere; }
+.mcp-catalog-card pre, #mcp-playground-result { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--mono); }
+#mcp-playground-form { display: grid; gap: 10px; }
+#mcp-playground-form label { display: grid; gap: 5px; }
+#mcp-playground-arguments { font: 12px var(--mono); }
+@media (max-width: 760px) {
+  .mcp-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mcp-summary-grid, .mcp-playground-grid { grid-template-columns: 1fr; }
+}
