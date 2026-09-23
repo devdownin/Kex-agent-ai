@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 
-import { $, api, el, report } from './core.js';
+import { $, credentials, el, report } from './core.js';
 
 const ENDPOINT = '/api/agent/mcp-server';
 const PROTOCOL = '2025-06-18';
@@ -10,14 +10,20 @@ let session = null;
 let catalog = { tools: [], resources: [], templates: [], prompts: [] };
 
 async function rpc(method, params = {}) {
-  const headers = { 'MCP-Protocol-Version': PROTOCOL };
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json, text/event-stream',
+    'MCP-Protocol-Version': PROTOCOL,
+  };
+  const token = credentials.get();
+  if (token) headers.Authorization = `Bearer ${token}`;
   if (session) headers['Mcp-Session-Id'] = session;
-  const response = await api(ENDPOINT, {
+  const response = await fetch(ENDPOINT, {
     method: 'POST', headers,
     body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }),
-    rawResponse: true,
   });
-  session = response.headers?.get?.('Mcp-Session-Id') || session;
+  session = response.headers.get('Mcp-Session-Id') || session;
+  if (!response.ok) throw new Error(`MCP HTTP ${response.status}`);
   const payload = await response.json();
   if (payload.error) throw new Error(payload.error.message || 'Erreur MCP');
   return payload.result;
