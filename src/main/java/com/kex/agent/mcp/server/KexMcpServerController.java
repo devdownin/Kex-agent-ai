@@ -49,12 +49,37 @@ public class KexMcpServerController {
     private static final List<Map<String, Object>> PROMPTS = List.of(
             Map.of("name", "kex_supervision_triage", "title", "Kex supervision triage",
                     "description", "Guide a read-only investigation using Kex supervision tools and resources."));
+    private static final Map<String, Object> STATUS_SCHEMA = objectSchema(Map.of(
+            "state", stringSchema(), "mode", stringSchema(), "paused", booleanSchema(),
+            "analysing", booleanSchema(), "confidenceThreshold", numberSchema(),
+            "circuitBreakers", arraySchema(objectSchema())));
+    private static final Map<String, Object> OVERVIEW_SCHEMA = objectSchema(Map.of(
+            "agent", STATUS_SCHEMA, "processesMonitored", integerSchema(), "processesOk", integerSchema(),
+            "processesWarning", integerSchema(), "processesError", integerSchema(),
+            "processesUnknown", integerSchema(), "anomaliesDetected", integerSchema(),
+            "pendingApprovals", integerSchema(), "processes", arraySchema(objectSchema()),
+            "alerts", arraySchema(objectSchema()), "pending", arraySchema(objectSchema()),
+            "maintenance", arraySchema(objectSchema()), "incidents", arraySchema(objectSchema())));
+    private static final Map<String, Object> ALERTS_SCHEMA = arraySchema(objectSchema(Map.of(
+            "id", stringSchema(), "processId", stringSchema(), "title", stringSchema(),
+            "severity", stringSchema(), "occurrences", integerSchema(), "confidence", numberSchema())));
+    private static final Map<String, Object> INCIDENTS_SCHEMA = arraySchema(objectSchema(Map.of(
+            "cycleId", stringSchema(), "processCount", integerSchema(), "severity", stringSchema(),
+            "processNames", arraySchema(stringSchema()), "titles", arraySchema(stringSchema()),
+            "alertIds", arraySchema(stringSchema()))));
+    private static final Map<String, Object> DECISIONS_SCHEMA = arraySchema(objectSchema(Map.of(
+            "id", stringSchema(), "processId", stringSchema(), "capability", stringSchema(),
+            "objective", stringSchema(), "action", stringSchema(), "confidence", numberSchema(),
+            "status", stringSchema(), "correlationId", stringSchema())));
+
     private static final List<Map<String, Object>> TOOLS = List.of(
-            tool("kex_status", "Read Kex supervision status."),
-            tool("kex_overview", "Read the current supervision overview, including process states and counts."),
-            tool("kex_alerts", "Read the currently active supervision alerts."),
-            tool("kex_incidents", "Read incidents correlated from the latest supervision cycle."),
-            tool("kex_pending_decisions", "Read decisions awaiting human review. Cannot approve them."));
+            tool("kex_status", "Read Kex supervision status.", STATUS_SCHEMA),
+            tool("kex_overview", "Read the current supervision overview, including process states and counts.",
+                    OVERVIEW_SCHEMA),
+            tool("kex_alerts", "Read the currently active supervision alerts.", ALERTS_SCHEMA),
+            tool("kex_incidents", "Read incidents correlated from the latest supervision cycle.", INCIDENTS_SCHEMA),
+            tool("kex_pending_decisions", "Read decisions awaiting human review. Cannot approve them.",
+                    DECISIONS_SCHEMA));
 
     private final ObjectMapper mapper;
     private final ObjectProvider<SupervisionService> supervision;
@@ -351,10 +376,38 @@ public class KexMcpServerController {
         return headers.getAccept().stream().anyMatch(value -> value.getQualityValue() > 0 && value.includes(type));
     }
 
-    private static Map<String, Object> tool(String name, String description) {
+    private static Map<String, Object> tool(String name, String description, Map<String, Object> outputSchema) {
         return Map.of("name", name, "description", description, "inputSchema", EMPTY_SCHEMA,
-                "annotations", Map.of("readOnlyHint", true, "destructiveHint", false,
-                        "idempotentHint", true, "openWorldHint", false));
+                "outputSchema", outputSchema, "annotations", Map.of("readOnlyHint", true,
+                        "destructiveHint", false, "idempotentHint", true, "openWorldHint", false));
+    }
+
+    private static Map<String, Object> objectSchema() {
+        return Map.of("type", "object");
+    }
+
+    private static Map<String, Object> objectSchema(Map<String, Object> properties) {
+        return Map.of("type", "object", "properties", properties);
+    }
+
+    private static Map<String, Object> arraySchema(Map<String, Object> items) {
+        return Map.of("type", "array", "items", items);
+    }
+
+    private static Map<String, Object> stringSchema() {
+        return Map.of("type", "string");
+    }
+
+    private static Map<String, Object> booleanSchema() {
+        return Map.of("type", "boolean");
+    }
+
+    private static Map<String, Object> integerSchema() {
+        return Map.of("type", "integer");
+    }
+
+    private static Map<String, Object> numberSchema() {
+        return Map.of("type", "number");
     }
 
     private static ResponseEntity<Object> toolResult(Object id, String text, boolean error) {
