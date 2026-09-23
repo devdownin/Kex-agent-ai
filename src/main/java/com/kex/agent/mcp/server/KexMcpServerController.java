@@ -299,10 +299,15 @@ public class KexMcpServerController {
         Object snapshot = service.snapshots().stream()
                 .filter(candidate -> candidate.processId().equals(processId)).findFirst().orElse(null);
         if (snapshot == null) return toolResult(id, "Process not found", true);
+        String processName = service.snapshots().stream()
+                .filter(candidate -> candidate.processId().equals(processId))
+                .map(candidate -> candidate.name()).findFirst().orElse(processId);
         Map<String, Object> diagnosis = Map.of(
                 "processId", processId,
                 "snapshot", snapshot,
                 "alerts", service.alerts().stream().filter(a -> processId.equals(a.processId())).toList(),
+                "incidents", service.incidents().stream()
+                        .filter(incident -> incident.processNames().contains(processName)).toList(),
                 "decisions", service.pending().stream().filter(d -> processId.equals(d.processId())).toList());
         try {
             return toolResult(id, "kex_diagnose_process", diagnosis, mapper);

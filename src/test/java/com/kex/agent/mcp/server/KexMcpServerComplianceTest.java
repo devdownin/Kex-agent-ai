@@ -51,6 +51,8 @@ class KexMcpServerComplianceTest {
                 .andExpect(jsonPath("$.result.tools[0].outputSchema.properties.state.type").value("string"))
                 .andExpect(jsonPath("$.result.tools[2].outputSchema.type").value("object"))
                 .andExpect(jsonPath("$.result.tools[2].outputSchema.properties.alerts.type").value("array"))
+                .andExpect(jsonPath("$.result.tools[?(@.name == 'kex_diagnose_topic')].outputSchema.properties.groups.items.properties.recordLag.properties.measured.type").value("boolean"))
+                .andExpect(jsonPath("$.result.tools[?(@.name == 'kex_diagnose_process')].outputSchema.properties.incidents.type").value("array"))
                 .andExpect(jsonPath("$.result.tools[0].annotations.readOnlyHint").value(true))
                 .andExpect(jsonPath("$.result.tools[0].annotations.destructiveHint").value(false));
     }
@@ -81,9 +83,14 @@ class KexMcpServerComplianceTest {
                         .content("{}").principal(new UsernamePasswordAuthenticationToken("operator", "n/a",
                                 AuthorityUtils.createAuthorityList("ROLE_OPERATOR"))))
                 .andExpect(status().isNotAcceptable());
-        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"ping\"}")
-                        .header("MCP-Protocol-Version", "2099-01-01"))
-                .andExpect(status().isBadRequest());
+        mvc.perform(post(PATH).contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
+                        .header("MCP-Protocol-Version", "2099-01-01")
+                        .content("{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"ping\"}")
+                        .principal(new UsernamePasswordAuthenticationToken("operator", "n/a",
+                                AuthorityUtils.createAuthorityList("ROLE_OPERATOR"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.message").value("Unsupported MCP protocol version"));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"resources/list\","
                         + "\"params\":{\"cursor\":\"next\"}}"))
                 .andExpect(jsonPath("$.error.code").value(-32602));
