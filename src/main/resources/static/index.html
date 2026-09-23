@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="assets/console.css">
 </head>
 <body>
-<a class="skip" href="#main">Aller au contenu</a>
+<a class="skip" href="#main" aria-label="Aller au contenu">Aller au contenu</a>
 
 <div class="shell">
   <aside class="rail">
@@ -112,7 +112,7 @@
             <span id="density-label">Affichage confortable</span>
           </button>
           <button type="button" class="menu-action" id="presentation-toggle" aria-label="Activer le mode présentation" aria-pressed="false">Mode présentation</button>
-          <a class="menu-action" href="swagger-ui.html" target="_blank" rel="noopener">Documentation API</a>
+          <a class="menu-action" href="swagger-ui.html" target="_blank" rel="noopener" aria-label="Documentation API">Documentation API</a>
         </div>
       </details>
     </div>
@@ -169,7 +169,7 @@
             <span class="panel-kicker">Synthèse de l’agent</span>
             <h2>Situation opérationnelle</h2>
           </div>
-          <a class="ghost" href="#/attention">Voir ce qui demande une action</a>
+          <a class="ghost" href="#/attention" aria-label="Voir ce qui demande une action">Voir ce qui demande une action</a>
         </div>
         <div id="agent-brief"></div>
       </section>
@@ -177,7 +177,7 @@
         <section class="panel">
           <div class="panel-head">
             <h1>Processus surveillés</h1>
-            <a class="ghost" href="#/processes">Tout voir</a>
+            <a class="ghost" href="#/processes" aria-label="Voir tous les processus">Tout voir</a>
           </div>
           <div id="overview-processes" data-skeleton="table"></div>
         </section>
@@ -326,7 +326,7 @@
             <div class="panel-head"><h2>File de revue</h2></div>
             <p class="hint">Compétences en attente, tous propriétaires confondus, la plus ancienne
               d'abord. Approuver ou rejeter reste un geste transverse — voir
-              <a href="swagger-ui.html" target="_blank" rel="noopener">l'API</a> — précisément
+              <a href="swagger-ui.html" target="_blank" rel="noopener" aria-label="Ouvrir la documentation API">l'API</a> — précisément
               parce qu'une compétence tirée d'un refus appartient à l'opérateur qui a refusé,
               jamais à l'administrateur qui tranche.</p>
             <div id="skills-review-queue" data-skeleton="list"></div>
@@ -667,7 +667,7 @@
       <label class="sr-only" for="context-chat-prompt">Question</label>
       <textarea id="context-chat-prompt" rows="2" placeholder="Posez une question sur cet incident…" required></textarea>
       <button type="submit" class="primary" id="context-chat-send">Envoyer</button>
-      <a class="ghost" href="#/chat" id="context-chat-full">Ouvrir la conversation</a>
+      <a class="ghost" href="#/chat" id="context-chat-full" aria-label="Ouvrir la conversation">Ouvrir la conversation</a>
     </form>
   </aside>
 </div>
