@@ -301,13 +301,16 @@ public class KexMcpServerController {
         if (snapshot == null) return toolResult(id, "Process not found", true);
         String processName = snapshot.name();
         try {
+            var alerts = java.util.Optional.ofNullable(service.alerts()).orElseGet(List::of);
+            var incidents = java.util.Optional.ofNullable(service.incidents()).orElseGet(List::of);
+            var decisions = java.util.Optional.ofNullable(service.pending()).orElseGet(List::of);
             Map<String, Object> diagnosis = Map.of(
                     "processId", processId,
                     "snapshot", snapshot,
-                    "alerts", service.alerts().stream().filter(a -> processId.equals(a.processId())).toList(),
-                    "incidents", service.incidents().stream()
+                    "alerts", alerts.stream().filter(a -> processId.equals(a.processId())).toList(),
+                    "incidents", incidents.stream()
                             .filter(incident -> incident.processNames().contains(processName)).toList(),
-                    "decisions", service.pending().stream().filter(d -> processId.equals(d.processId())).toList());
+                    "decisions", decisions.stream().filter(d -> processId.equals(d.processId())).toList());
             return toolResult(id, "kex_diagnose_process", diagnosis, mapper);
         }
         catch (RuntimeException | JsonProcessingException ex) {
