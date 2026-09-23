@@ -13,6 +13,7 @@ import * as automations from './automations.js';
 import * as channels from './channels.js';
 import * as chat from './chat.js';
 import * as llm from './llm.js';
+import * as mcpServer from './mcp-server.js';
 import * as skills from './skills.js';
 import * as supervision from './supervision.js';
 import * as tools from './tools.js';
