@@ -53,7 +53,7 @@ public class KexMcpServerController {
             "state", stringSchema(), "mode", stringSchema(), "paused", booleanSchema(),
             "analysing", booleanSchema(), "confidenceThreshold", numberSchema(),
             "circuitBreakers", arraySchema(objectSchema())));
-    private static final Map<String, Object> OVERVIEW_SCHEMA = objectSchema(Map.of(
+    private static final Map<String, Object> OVERVIEW_SCHEMA = objectSchema(schema(
             "agent", STATUS_SCHEMA, "processesMonitored", integerSchema(), "processesOk", integerSchema(),
             "processesWarning", integerSchema(), "processesError", integerSchema(),
             "processesUnknown", integerSchema(), "anomaliesDetected", integerSchema(),
@@ -380,6 +380,14 @@ public class KexMcpServerController {
         return Map.of("name", name, "description", description, "inputSchema", EMPTY_SCHEMA,
                 "outputSchema", outputSchema, "annotations", Map.of("readOnlyHint", true,
                         "destructiveHint", false, "idempotentHint", true, "openWorldHint", false));
+    }
+
+    private static Map<String, Object> schema(Object... entries) {
+        Map<String, Object> schema = new LinkedHashMap<>();
+        for (int i = 0; i < entries.length; i += 2) {
+            schema.put((String) entries[i], entries[i + 1]);
+        }
+        return Map.copyOf(schema);
     }
 
     private static Map<String, Object> objectSchema() {
