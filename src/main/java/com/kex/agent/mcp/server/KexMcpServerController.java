@@ -296,12 +296,10 @@ public class KexMcpServerController {
         SupervisionService service = supervision.getIfAvailable();
         if (service == null) return toolResult(id, "Supervision is disabled", true);
         String processId = arguments.path("processId").asText();
-        Object snapshot = service.snapshots().stream()
+        var snapshot = service.snapshots().stream()
                 .filter(candidate -> candidate.processId().equals(processId)).findFirst().orElse(null);
         if (snapshot == null) return toolResult(id, "Process not found", true);
-        String processName = service.snapshots().stream()
-                .filter(candidate -> candidate.processId().equals(processId))
-                .map(candidate -> candidate.name()).findFirst().orElse(processId);
+        String processName = snapshot.name();
         Map<String, Object> diagnosis = Map.of(
                 "processId", processId,
                 "snapshot", snapshot,
