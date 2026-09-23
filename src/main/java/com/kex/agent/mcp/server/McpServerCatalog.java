@@ -11,18 +11,32 @@ import org.springframework.http.MediaType;
 final class McpServerCatalog {
     static final Map<String, Object> EMPTY_SCHEMA = Map.of(
             "type", "object", "properties", Map.of(), "additionalProperties", false);
+    static final Map<String, Object> MEASURED_VALUE_SCHEMA = objectSchema(Map.of(
+            "value", Map.of(), "measured", booleanSchema(), "reason", stringSchema()));
+    static final Map<String, Object> COVERAGE_SCHEMA = objectSchema(Map.of(
+            "complete", booleanSchema(), "stopReason", stringSchema()));
+    static final Map<String, Object> KAFKA_TOPIC_SCHEMA = objectSchema(Map.of(
+            "name", stringSchema(), "partitions", integerSchema(), "records", MEASURED_VALUE_SCHEMA,
+            "lastActivityMs", MEASURED_VALUE_SCHEMA, "deadLetter", booleanSchema()));
     static final Map<String, Object> KAFKA_TOPICS_SCHEMA = objectSchema(Map.of(
-            "topics", arraySchema(objectSchema(Map.of(
-                    "name", stringSchema(), "partitions", integerSchema(), "deadLetter", booleanSchema()))),
-            "truncated", booleanSchema()));
+            "topics", arraySchema(KAFKA_TOPIC_SCHEMA), "coverage", COVERAGE_SCHEMA,
+            "warnings", arraySchema(stringSchema()), "truncated", booleanSchema(),
+            "unavailable", stringSchema()));
+    static final Map<String, Object> KAFKA_GROUP_LAG_SCHEMA = objectSchema(Map.of(
+            "groupId", stringSchema(), "state", stringSchema(), "type", stringSchema(),
+            "recordLag", MEASURED_VALUE_SCHEMA, "lagMillis", MEASURED_VALUE_SCHEMA,
+            "partitionsWithoutCommit", integerSchema(), "verdict", stringSchema(),
+            "explanation", stringSchema(), "error", stringSchema()));
     static final Map<String, Object> KAFKA_LAG_SCHEMA = objectSchema(Map.of(
-            "topic", stringSchema(), "groupsExamined", integerSchema(), "groupsInCluster", integerSchema(),
-            "worstVerdict", stringSchema(), "groups", arraySchema(objectSchema(Map.of(
-                    "groupId", stringSchema(), "state", stringSchema(), "type", stringSchema(),
-                    "partitionsWithoutCommit", integerSchema(), "verdict", stringSchema())))));
+            "topic", stringSchema(), "groups", arraySchema(KAFKA_GROUP_LAG_SCHEMA),
+            "groupsExamined", integerSchema(), "groupsInCluster", integerSchema(),
+            "worstVerdict", stringSchema(), "coverage", COVERAGE_SCHEMA,
+            "warnings", arraySchema(stringSchema()), "truncated", booleanSchema(),
+            "unavailable", stringSchema()));
     static final Map<String, Object> PROCESS_DIAGNOSIS_SCHEMA = objectSchema(Map.of(
             "processId", stringSchema(), "snapshot", objectSchema(),
-            "alerts", arraySchema(objectSchema()), "decisions", arraySchema(objectSchema())));
+            "alerts", arraySchema(objectSchema()), "incidents", arraySchema(objectSchema()),
+            "decisions", arraySchema(objectSchema())));
 
     static Map<String, Object> tool(String name, String description, Map<String, Object> outputSchema) {
         return Map.of("name", name, "description", description, "inputSchema", EMPTY_SCHEMA,
