@@ -228,12 +228,17 @@ public class KexMcpServerController {
     }
 
     private ResponseEntity<Object> call(Object id, JsonNode params) {
+        if (!params.path("name").isTextual()) return error(id, -32602, "A textual tool name is required");
         String name = params.path("name").asText("");
         if (TOOLS.stream().noneMatch(tool -> tool.get("name").equals(name))) {
             return error(id, -32602, "Unknown tool");
         }
-        if (!params.path("name").isTextual()) return error(id, -32602, "A textual tool name is required");
-        if (params.has("arguments") && (!params.get("arguments").isObject() || !params.get("arguments").isEmpty())) {
+        JsonNode arguments = params.path("arguments");
+        if (params.has("arguments") && !arguments.isObject()) {
+            return error(id, -32602, "Tool arguments must be an object");
+        }
+        if ("kex_diagnose_topic".equals(name)) return diagnoseTopic(id, arguments);
+        if (params.has("arguments") && !arguments.isEmpty()) {
             return error(id, -32602, "This tool accepts an empty arguments object");
         }
         SupervisionService service = supervision.getIfAvailable();
@@ -250,12 +255,24 @@ public class KexMcpServerController {
             return toolResult(id, name, value, mapper);
         }
         catch (RuntimeException | JsonProcessingException ex) {
-            // Provider errors can contain URLs or credentials. They belong in existing audited
-            // services, not in a response passed to another model.
             return toolResult(id, "Kex could not complete the operation. Inspect the operator console.", true);
         }
     }
 
+    private ResponseEntity<Object> diagnoseTopic(Object id, JsonNode arguments) {
+        if (!arguments.path("topic").isTextual() || arguments.path("topic").asText().isBlank()
+                || arguments.size() != 1) {
+            return error(id, -32602, "kex_diagnose_topic requires only a non-blank textual topic");
+        }
+        KafkaViewService service = kafka.getIfAvailable();
+        if (service == null) return toolResult(id, "Kafka view is disabled", true);
+        try {
+            return toolResult(id, "kex_diagnose_topic", service.lag(arguments.path("topic").asText()), mapper);
+        }
+        catch (RuntimeException | JsonProcessingException ex) {
+            return toolResult(id, "Kex could not complete the operation. Inspect the operator console.", true);
+        }
+    }
 
     private ResponseEntity<Object> getPrompt(Object id, JsonNode params) {
         if (!params.path("name").isTextual()) return error(id, -32602, "A textual prompt name is required");
