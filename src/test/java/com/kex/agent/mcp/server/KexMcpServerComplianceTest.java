@@ -74,6 +74,28 @@ class KexMcpServerComplianceTest {
                 .andExpect(jsonPath("$.result.prompts[0].name").value("kex_supervision_triage"));
     }
 
+
+    @Test
+    void rejects_invalid_transport_and_protocol_inputs() throws Exception {
+        mvc.perform(post(PATH).contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_JSON)
+                        .content("{}").principal(new UsernamePasswordAuthenticationToken("operator", "n/a",
+                                AuthorityUtils.createAuthorityList("ROLE_OPERATOR"))))
+                .andExpect(status().isNotAcceptable());
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"ping\"}")
+                        .header("MCP-Protocol-Version", "2099-01-01"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"resources/list\","
+                        + "\"params\":{\"cursor\":\"next\"}}"))
+                .andExpect(jsonPath("$.error.code").value(-32602));
+    }
+
+    @Test
+    void notifications_cannot_invoke_request_methods() throws Exception {
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\","
+                + "\"params\":{\"name\":\"kex_status\"}}"))
+                .andExpect(status().isBadRequest());
+    }
+
     private MockHttpServletRequestBuilder rpc(String body) {
         return post(PATH).contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
