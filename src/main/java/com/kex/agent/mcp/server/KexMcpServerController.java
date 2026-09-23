@@ -41,6 +41,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class KexMcpServerController {
 
     private static final String PROTOCOL = "2025-06-18";
+    private static final String SESSION_HEADER = "Mcp-Session-Id";
     private static final Set<String> PROTOCOLS = Set.of(PROTOCOL, "2025-03-26");
     private static final int MAX_REQUEST_LENGTH = 65_536;
     private static final Map<String, Object> EMPTY_SCHEMA = Map.of(
@@ -50,44 +51,49 @@ public class KexMcpServerController {
     private static final List<Map<String, Object>> PROMPTS = List.of(
             Map.of("name", "kex_supervision_triage", "title", "Kex supervision triage",
                     "description", "Guide a read-only investigation using Kex supervision tools and resources."));
-    private static final Map<String, Object> STATUS_SCHEMA = objectSchema(Map.of(
-            "state", stringSchema(), "mode", stringSchema(), "paused", booleanSchema(),
-            "analysing", booleanSchema(), "confidenceThreshold", numberSchema(),
-            "circuitBreakers", arraySchema(objectSchema())));
-    private static final Map<String, Object> OVERVIEW_SCHEMA = objectSchema(schema(
-            "agent", STATUS_SCHEMA, "processesMonitored", integerSchema(), "processesOk", integerSchema(),
-            "processesWarning", integerSchema(), "processesError", integerSchema(),
-            "processesUnknown", integerSchema(), "anomaliesDetected", integerSchema(),
-            "pendingApprovals", integerSchema(), "processes", arraySchema(objectSchema()),
-            "alerts", arraySchema(objectSchema()), "pending", arraySchema(objectSchema()),
-            "maintenance", arraySchema(objectSchema()), "incidents", arraySchema(objectSchema())));
-    private static final Map<String, Object> ALERTS_SCHEMA = objectSchema(Map.of(
-            "alerts", arraySchema(objectSchema(Map.of(
-                    "id", stringSchema(), "processId", stringSchema(), "title", stringSchema(),
-                    "severity", stringSchema(), "occurrences", integerSchema(), "confidence", numberSchema())))));
-    private static final Map<String, Object> INCIDENTS_SCHEMA = objectSchema(Map.of(
-            "incidents", arraySchema(objectSchema(Map.of(
-                    "cycleId", stringSchema(), "processCount", integerSchema(), "severity", stringSchema(),
-                    "processNames", arraySchema(stringSchema()), "titles", arraySchema(stringSchema()),
-                    "alertIds", arraySchema(stringSchema()))))));
-    private static final Map<String, Object> DECISIONS_SCHEMA = objectSchema(Map.of(
-            "decisions", arraySchema(objectSchema(Map.of(
-                    "id", stringSchema(), "processId", stringSchema(), "capability", stringSchema(),
-                    "objective", stringSchema(), "action", stringSchema(), "confidence", numberSchema(),
-                    "status", stringSchema(), "correlationId", stringSchema())))));
+    private static final Map<String, Object> STATUS_SCHEMA = McpServerCatalog.objectSchema(Map.of(
+            "state", McpServerCatalog.stringSchema(), "mode", McpServerCatalog.stringSchema(), "paused", McpServerCatalog.booleanSchema(),
+            "analysing", McpServerCatalog.booleanSchema(), "confidenceThreshold", McpServerCatalog.numberSchema(),
+            "circuitBreakers", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema())));
+    private static final Map<String, Object> OVERVIEW_SCHEMA = McpServerCatalog.objectSchema(McpServerCatalog.schema(
+            "agent", STATUS_SCHEMA, "processesMonitored", McpServerCatalog.integerSchema(), "processesOk", McpServerCatalog.integerSchema(),
+            "processesWarning", McpServerCatalog.integerSchema(), "processesError", McpServerCatalog.integerSchema(),
+            "processesUnknown", McpServerCatalog.integerSchema(), "anomaliesDetected", McpServerCatalog.integerSchema(),
+            "pendingApprovals", McpServerCatalog.integerSchema(), "processes", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema()),
+            "alerts", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema()), "pending", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema()),
+            "maintenance", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema()), "incidents", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema())));
+    private static final Map<String, Object> ALERTS_SCHEMA = McpServerCatalog.objectSchema(Map.of(
+            "alerts", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema(Map.of(
+                    "id", McpServerCatalog.stringSchema(), "processId", McpServerCatalog.stringSchema(), "title", McpServerCatalog.stringSchema(),
+                    "severity", McpServerCatalog.stringSchema(), "occurrences", McpServerCatalog.integerSchema(), "confidence", McpServerCatalog.numberSchema())))));
+    private static final Map<String, Object> INCIDENTS_SCHEMA = McpServerCatalog.objectSchema(Map.of(
+            "incidents", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema(Map.of(
+                    "cycleId", McpServerCatalog.stringSchema(), "processCount", McpServerCatalog.integerSchema(), "severity", McpServerCatalog.stringSchema(),
+                    "processNames", McpServerCatalog.arraySchema(McpServerCatalog.stringSchema()), "titles", McpServerCatalog.arraySchema(McpServerCatalog.stringSchema()),
+                    "alertIds", McpServerCatalog.arraySchema(McpServerCatalog.stringSchema()))))));
+    private static final Map<String, Object> DECISIONS_SCHEMA = McpServerCatalog.objectSchema(Map.of(
+            "decisions", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema(Map.of(
+                    "id", McpServerCatalog.stringSchema(), "processId", McpServerCatalog.stringSchema(), "capability", McpServerCatalog.stringSchema(),
+                    "objective", McpServerCatalog.stringSchema(), "action", McpServerCatalog.stringSchema(), "confidence", McpServerCatalog.numberSchema(),
+                    "status", McpServerCatalog.stringSchema(), "correlationId", McpServerCatalog.stringSchema())))));
 
     private static final List<Map<String, Object>> TOOLS = List.of(
-            tool("kex_status", "Read Kex supervision status.", STATUS_SCHEMA),
-            tool("kex_overview", "Read the current supervision overview, including process states and counts.",
+            McpServerCatalog.tool("kex_status", "Read Kex supervision status.", STATUS_SCHEMA),
+            McpServerCatalog.tool("kex_overview", "Read the current supervision overview, including process states and counts.",
                     OVERVIEW_SCHEMA),
-            tool("kex_alerts", "Read the currently active supervision alerts.", ALERTS_SCHEMA),
-            tool("kex_incidents", "Read incidents correlated from the latest supervision cycle.", INCIDENTS_SCHEMA),
-            tool("kex_pending_decisions", "Read decisions awaiting human review. Cannot approve them.",
+            McpServerCatalog.tool("kex_alerts", "Read the currently active supervision alerts.", ALERTS_SCHEMA),
+            McpServerCatalog.tool("kex_incidents", "Read incidents correlated from the latest supervision cycle.", INCIDENTS_SCHEMA),
+            McpServerCatalog.tool("kex_pending_decisions", "Read decisions awaiting human review. Cannot approve them.",
                     DECISIONS_SCHEMA),
-            toolWithInput("kex_diagnose_topic", "Read the current Kafka lag diagnosis for one topic.",
-                    Map.of("type", "object", "properties", Map.of("topic", stringSchema()),
+            McpServerCatalog.toolWithInput("kex_diagnose_topic", "Read the current Kafka lag diagnosis for one topic.",
+                    Map.of("type", "object", "properties", Map.of("topic", McpServerCatalog.stringSchema()),
                             "required", List.of("topic"), "additionalProperties", false),
-                    objectSchema()));
+                    McpServerCatalog.KAFKA_LAG_SCHEMA),
+            McpServerCatalog.toolWithInput("kex_diagnose_process",
+                    "Correlate snapshot, alerts and pending decisions for one process.",
+                    Map.of("type", "object", "properties", Map.of("processId", McpServerCatalog.stringSchema()),
+                            "required", List.of("processId"), "additionalProperties", false),
+                    McpServerCatalog.PROCESS_DIAGNOSIS_SCHEMA));
 
     private final ObjectMapper mapper;
     private final ObjectProvider<SupervisionService> supervision;
@@ -97,6 +103,7 @@ public class KexMcpServerController {
     private final ObjectProvider<McpServerAuditPublisher> audit;
     private final ObjectProvider<McpServerRateLimiter> rateLimiter;
     private final MeterRegistry meters;
+    private final McpClientSessionRegistry sessions = new McpClientSessionRegistry();
 
     public KexMcpServerController(ObjectMapper mapper, ObjectProvider<SupervisionService> supervision,
                                   ObjectProvider<KafkaViewService> kafka,
@@ -199,9 +206,15 @@ public class KexMcpServerController {
             case "prompts/get" -> getPrompt(id, params);
             default -> error(id, -32601, "Method not found");
         };
+        if ("initialize".equals(method) && response.getStatusCode().is2xxSuccessful()) {
+            String sessionId = sessions.open(params.path("clientInfo").path("name").asText("unknown"),
+                    params.path("clientInfo").path("version").asText("unknown"));
+            response = ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders())
+                    .header(SESSION_HEADER, sessionId).body(response.getBody());
+        }
         String outcome = metricOutcome(response);
         sample.stop(meters.timer("kex.mcp.server.request", "method", metricMethod(method), "outcome", outcome));
-        publishAudit(authentication, method, params, outcome, System.nanoTime() - auditStarted);
+        publishAudit(authentication, headers, method, params, outcome, System.nanoTime() - auditStarted);
         return response;
     }
 
@@ -238,6 +251,7 @@ public class KexMcpServerController {
             return error(id, -32602, "Tool arguments must be an object");
         }
         if ("kex_diagnose_topic".equals(name)) return diagnoseTopic(id, arguments);
+        if ("kex_diagnose_process".equals(name)) return diagnoseProcess(id, arguments);
         if (params.has("arguments") && !arguments.isEmpty()) {
             return error(id, -32602, "This tool accepts an empty arguments object");
         }
@@ -271,6 +285,30 @@ public class KexMcpServerController {
         }
         catch (RuntimeException | JsonProcessingException ex) {
             return toolResult(id, "Kex could not complete the operation. Inspect the operator console.", true);
+        }
+    }
+
+    private ResponseEntity<Object> diagnoseProcess(Object id, JsonNode arguments) {
+        if (!arguments.path("processId").isTextual() || arguments.path("processId").asText().isBlank()
+                || arguments.size() != 1) {
+            return error(id, -32602, "kex_diagnose_process requires only a non-blank textual processId");
+        }
+        SupervisionService service = supervision.getIfAvailable();
+        if (service == null) return toolResult(id, "Supervision is disabled", true);
+        String processId = arguments.path("processId").asText();
+        Object snapshot = service.snapshots().stream()
+                .filter(candidate -> candidate.processId().equals(processId)).findFirst().orElse(null);
+        if (snapshot == null) return toolResult(id, "Process not found", true);
+        Map<String, Object> diagnosis = Map.of(
+                "processId", processId,
+                "snapshot", snapshot,
+                "alerts", service.alerts().stream().filter(a -> processId.equals(a.processId())).toList(),
+                "decisions", service.pending().stream().filter(d -> processId.equals(d.processId())).toList());
+        try {
+            return toolResult(id, "kex_diagnose_process", diagnosis, mapper);
+        }
+        catch (JsonProcessingException ex) {
+            return toolResult(id, "Kex could not serialize the process diagnosis", true);
         }
     }
 
@@ -309,6 +347,14 @@ public class KexMcpServerController {
                         "name", "Kex process snapshot",
                         "description", "Read the current supervision snapshot for one configured process.",
                         "mimeType", MediaType.APPLICATION_JSON_VALUE),
+                Map.of("uriTemplate", "kex://kafka/topics/{topic}",
+                        "name", "Kafka topic",
+                        "description", "Read topic metadata including its partition count.",
+                        "mimeType", MediaType.APPLICATION_JSON_VALUE),
+                Map.of("uriTemplate", "kex://kafka/topics/{topic}/consumer-groups",
+                        "name", "Kafka consumer groups",
+                        "description", "Read consumer-group state and lag for one Kafka topic.",
+                        "mimeType", MediaType.APPLICATION_JSON_VALUE),
                 Map.of("uriTemplate", "kex://kafka/topics/{topic}/lag",
                         "name", "Kafka topic lag",
                         "description", "Read the consumer-group lag view for one Kafka topic.",
@@ -317,12 +363,12 @@ public class KexMcpServerController {
 
     private List<Map<String, Object>> resources() {
         return List.of(
-                resource("kex://supervision/status", "Kex supervision status"),
-                resource("kex://supervision/overview", "Kex supervision overview"),
-                resource("kex://supervision/alerts", "Kex active alerts"),
-                resource("kex://supervision/incidents", "Kex correlated incidents"),
-                resource("kex://supervision/decisions/pending", "Kex pending decisions"),
-                resource("kex://kafka/topics", "Kafka topics"));
+                McpServerCatalog.resource("kex://supervision/status", "Kex supervision status"),
+                McpServerCatalog.resource("kex://supervision/overview", "Kex supervision overview"),
+                McpServerCatalog.resource("kex://supervision/alerts", "Kex active alerts"),
+                McpServerCatalog.resource("kex://supervision/incidents", "Kex correlated incidents"),
+                McpServerCatalog.resource("kex://supervision/decisions/pending", "Kex pending decisions"),
+                McpServerCatalog.resource("kex://kafka/topics", "Kafka topics"));
     }
 
     private static Map<String, Object> resource(String uri, String name) {
@@ -339,6 +385,14 @@ public class KexMcpServerController {
             return jsonResource(id, uri, service.topics());
         }
         String kafkaPrefix = "kex://kafka/topics/";
+        String groupsSuffix = "/consumer-groups";
+        if (uri.startsWith(kafkaPrefix) && uri.endsWith(groupsSuffix)) {
+            String topic = uri.substring(kafkaPrefix.length(), uri.length() - groupsSuffix.length());
+            if (topic.isBlank() || topic.contains("/")) return error(id, -32002, "Resource not found");
+            KafkaViewService service = kafka.getIfAvailable();
+            if (service == null) return error(id, -32603, "Kafka view is disabled");
+            return jsonResource(id, uri, service.lag(topic).groups());
+        }
         String kafkaSuffix = "/lag";
         if (uri.startsWith(kafkaPrefix) && uri.endsWith(kafkaSuffix)) {
             String topic = uri.substring(kafkaPrefix.length(), uri.length() - kafkaSuffix.length());
@@ -346,6 +400,15 @@ public class KexMcpServerController {
             KafkaViewService service = kafka.getIfAvailable();
             if (service == null) return error(id, -32603, "Kafka view is disabled");
             return jsonResource(id, uri, service.lag(topic));
+        }
+        if (uri.startsWith(kafkaPrefix) && !uri.endsWith(kafkaSuffix)) {
+            String topic = uri.substring(kafkaPrefix.length());
+            if (topic.isBlank() || topic.contains("/")) return error(id, -32002, "Resource not found");
+            KafkaViewService service = kafka.getIfAvailable();
+            if (service == null) return error(id, -32603, "Kafka view is disabled");
+            Object metadata = service.topics().topics().stream()
+                    .filter(candidate -> topic.equals(candidate.name())).findFirst().orElse(null);
+            return metadata == null ? error(id, -32002, "Resource not found") : jsonResource(id, uri, metadata);
         }
         String processPrefix = "kex://supervision/processes/";
         if (uri.startsWith(processPrefix)) {
@@ -395,7 +458,7 @@ public class KexMcpServerController {
         return null;
     }
 
-    private void publishAudit(Authentication authentication, String method, JsonNode params,
+    private void publishAudit(Authentication authentication, HttpHeaders headers, String method, JsonNode params,
                               String outcome, long durationNanos) {
         McpServerAuditPublisher publisher = audit.getIfAvailable();
         if (publisher == null) return;
@@ -429,56 +492,6 @@ public class KexMcpServerController {
 
     private static boolean accepts(HttpHeaders headers, MediaType type) {
         return headers.getAccept().stream().anyMatch(value -> value.getQualityValue() > 0 && value.includes(type));
-    }
-
-    private static Map<String, Object> tool(String name, String description, Map<String, Object> outputSchema) {
-        return Map.of("name", name, "description", description, "inputSchema", EMPTY_SCHEMA,
-                "outputSchema", outputSchema, "annotations", Map.of("readOnlyHint", true,
-                        "destructiveHint", false, "idempotentHint", true, "openWorldHint", false));
-    }
-
-    private static Map<String, Object> toolWithInput(String name, String description,
-                                                      Map<String, Object> inputSchema,
-                                                      Map<String, Object> outputSchema) {
-        return Map.of("name", name, "description", description, "inputSchema", inputSchema,
-                "outputSchema", outputSchema, "annotations", Map.of("readOnlyHint", true,
-                        "destructiveHint", false, "idempotentHint", true, "openWorldHint", false));
-    }
-
-    private static Map<String, Object> schema(Object... entries) {
-        Map<String, Object> schema = new LinkedHashMap<>();
-        for (int i = 0; i < entries.length; i += 2) {
-            schema.put((String) entries[i], entries[i + 1]);
-        }
-        return Map.copyOf(schema);
-    }
-
-    private static Map<String, Object> objectSchema() {
-        return Map.of("type", "object");
-    }
-
-    private static Map<String, Object> objectSchema(Map<String, Object> properties) {
-        return Map.of("type", "object", "properties", properties);
-    }
-
-    private static Map<String, Object> arraySchema(Map<String, Object> items) {
-        return Map.of("type", "array", "items", items);
-    }
-
-    private static Map<String, Object> stringSchema() {
-        return Map.of("type", "string");
-    }
-
-    private static Map<String, Object> booleanSchema() {
-        return Map.of("type", "boolean");
-    }
-
-    private static Map<String, Object> integerSchema() {
-        return Map.of("type", "integer");
-    }
-
-    private static Map<String, Object> numberSchema() {
-        return Map.of("type", "number");
     }
 
     private static ResponseEntity<Object> toolResult(Object id, String text, boolean error) {

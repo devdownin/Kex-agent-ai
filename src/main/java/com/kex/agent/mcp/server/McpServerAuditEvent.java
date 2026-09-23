@@ -4,10 +4,11 @@ package com.kex.agent.mcp.server;
 
 import java.time.Instant;
 
-/**
- * Metadata-only audit event for inbound MCP operations. Payloads and business responses are
- * deliberately excluded so observability cannot become a second store for supervised data.
- */
-public record McpServerAuditEvent(Instant at, String actor, String method, String target,
+/** Metadata-only audit event. Business payloads and responses are deliberately excluded. */
+public record McpServerAuditEvent(Instant at, String actor, String client, String method, String target,
                                   String outcome, long durationNanos) {
+    public McpServerAuditEvent(Instant at, String actor, String method, String target,
+                               String outcome, long durationNanos) {
+        this(at, actor, null, method, target, outcome, durationNanos);
+    }
 }

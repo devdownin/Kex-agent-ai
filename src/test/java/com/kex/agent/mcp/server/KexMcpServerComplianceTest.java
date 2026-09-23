@@ -46,7 +46,7 @@ class KexMcpServerComplianceTest {
     void advertises_typed_read_only_tools_only() throws Exception {
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.tools.length()").value(6))
+                .andExpect(jsonPath("$.result.tools.length()").value(7))
                 .andExpect(jsonPath("$.result.tools[0].outputSchema.type").value("object"))
                 .andExpect(jsonPath("$.result.tools[0].outputSchema.properties.state.type").value("string"))
                 .andExpect(jsonPath("$.result.tools[2].outputSchema.type").value("object"))
@@ -69,7 +69,7 @@ class KexMcpServerComplianceTest {
     @Test
     void exposes_resources_templates_and_prompts_without_mutation_capabilities() throws Exception {
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"resources/templates/list\"}"))
-                .andExpect(jsonPath("$.result.resourceTemplates.length()").value(2));
+                .andExpect(jsonPath("$.result.resourceTemplates.length()").value(4));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"prompts/list\"}"))
                 .andExpect(jsonPath("$.result.prompts[0].name").value("kex_supervision_triage"));
     }
