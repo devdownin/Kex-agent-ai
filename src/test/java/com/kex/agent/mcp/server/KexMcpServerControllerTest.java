@@ -166,7 +166,7 @@ class KexMcpServerControllerTest {
                 .andExpect(jsonPath("$.result.isError").value(false))
                 .andExpect(jsonPath("$.result.content[0].type").value("text"))
                 .andExpect(jsonPath("$.result.content[0].text").value("[]"))
-                .andExpect(jsonPath("$.result.structuredContent").isArray());
+                .andExpect(jsonPath("$.result.structuredContent.alerts").isArray());
     }
 
     @Test
