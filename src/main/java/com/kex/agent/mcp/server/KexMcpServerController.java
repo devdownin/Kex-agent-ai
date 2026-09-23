@@ -300,7 +300,8 @@ public class KexMcpServerController {
                 resource("kex://supervision/overview", "Kex supervision overview"),
                 resource("kex://supervision/alerts", "Kex active alerts"),
                 resource("kex://supervision/incidents", "Kex correlated incidents"),
-                resource("kex://supervision/decisions/pending", "Kex pending decisions"));
+                resource("kex://supervision/decisions/pending", "Kex pending decisions"),
+                resource("kex://kafka/topics", "Kafka topics"));
     }
 
     private static Map<String, Object> resource(String uri, String name) {
@@ -311,6 +312,11 @@ public class KexMcpServerController {
         if (!params.path("uri").isTextual()) return error(id, -32602, "A textual resource URI is required");
         String uri = params.path("uri").asText("");
         if (uri.isBlank()) return error(id, -32602, "A resource URI is required");
+        if (uri.equals("kex://kafka/topics")) {
+            KafkaViewService service = kafka.getIfAvailable();
+            if (service == null) return error(id, -32603, "Kafka view is disabled");
+            return jsonResource(id, uri, service.topics());
+        }
         String kafkaPrefix = "kex://kafka/topics/";
         String kafkaSuffix = "/lag";
         if (uri.startsWith(kafkaPrefix) && uri.endsWith(kafkaSuffix)) {
