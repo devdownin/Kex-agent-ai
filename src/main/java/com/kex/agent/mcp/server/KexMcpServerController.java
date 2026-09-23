@@ -83,7 +83,11 @@ public class KexMcpServerController {
             tool("kex_alerts", "Read the currently active supervision alerts.", ALERTS_SCHEMA),
             tool("kex_incidents", "Read incidents correlated from the latest supervision cycle.", INCIDENTS_SCHEMA),
             tool("kex_pending_decisions", "Read decisions awaiting human review. Cannot approve them.",
-                    DECISIONS_SCHEMA));
+                    DECISIONS_SCHEMA),
+            toolWithInput("kex_diagnose_topic", "Read the current Kafka lag diagnosis for one topic.",
+                    Map.of("type", "object", "properties", Map.of("topic", stringSchema()),
+                            "required", List.of("topic"), "additionalProperties", false),
+                    objectSchema()));
 
     private final ObjectMapper mapper;
     private final ObjectProvider<SupervisionService> supervision;
@@ -91,18 +95,21 @@ public class KexMcpServerController {
     private final KexMcpServerProperties properties;
     private final ObjectProvider<BuildProperties> buildProperties;
     private final ObjectProvider<McpServerAuditPublisher> audit;
+    private final ObjectProvider<McpServerRateLimiter> rateLimiter;
     private final MeterRegistry meters;
 
     public KexMcpServerController(ObjectMapper mapper, ObjectProvider<SupervisionService> supervision,
                                   ObjectProvider<KafkaViewService> kafka,
                                   KexMcpServerProperties properties, ObjectProvider<BuildProperties> buildProperties,
-                                  ObjectProvider<McpServerAuditPublisher> audit, MeterRegistry meters) {
+                                  ObjectProvider<McpServerAuditPublisher> audit, ObjectProvider<McpServerRateLimiter> rateLimiter,
+                                  MeterRegistry meters) {
         this.mapper = mapper;
         this.supervision = supervision;
         this.kafka = kafka;
         this.properties = properties;
         this.buildProperties = buildProperties;
         this.audit = audit;
+        this.rateLimiter = rateLimiter;
         this.meters = meters;
     }
 
@@ -118,6 +125,10 @@ public class KexMcpServerController {
                                     Authentication authentication) {
         ResponseEntity<Object> rejected = authorize(headers, authentication);
         if (rejected != null) return recordTransport("authorization", rejected);
+        McpServerRateLimiter limiter = rateLimiter.getIfAvailable();
+        if (limiter != null && !limiter.allow(authentication.getName())) {
+            return recordTransport("rate_limit", ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).build());
+        }
         if (!accepts(headers, MediaType.APPLICATION_JSON) || !accepts(headers, MediaType.TEXT_EVENT_STREAM)) {
             return recordTransport("accept", ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build());
         }
@@ -217,12 +228,17 @@ public class KexMcpServerController {
     }
 
     private ResponseEntity<Object> call(Object id, JsonNode params) {
+        if (!params.path("name").isTextual()) return error(id, -32602, "A textual tool name is required");
         String name = params.path("name").asText("");
         if (TOOLS.stream().noneMatch(tool -> tool.get("name").equals(name))) {
             return error(id, -32602, "Unknown tool");
         }
-        if (!params.path("name").isTextual()) return error(id, -32602, "A textual tool name is required");
-        if (params.has("arguments") && (!params.get("arguments").isObject() || !params.get("arguments").isEmpty())) {
+        JsonNode arguments = params.path("arguments");
+        if (params.has("arguments") && !arguments.isObject()) {
+            return error(id, -32602, "Tool arguments must be an object");
+        }
+        if ("kex_diagnose_topic".equals(name)) return diagnoseTopic(id, arguments);
+        if (params.has("arguments") && !arguments.isEmpty()) {
             return error(id, -32602, "This tool accepts an empty arguments object");
         }
         SupervisionService service = supervision.getIfAvailable();
@@ -239,12 +255,24 @@ public class KexMcpServerController {
             return toolResult(id, name, value, mapper);
         }
         catch (RuntimeException | JsonProcessingException ex) {
-            // Provider errors can contain URLs or credentials. They belong in existing audited
-            // services, not in a response passed to another model.
             return toolResult(id, "Kex could not complete the operation. Inspect the operator console.", true);
         }
     }
 
+    private ResponseEntity<Object> diagnoseTopic(Object id, JsonNode arguments) {
+        if (!arguments.path("topic").isTextual() || arguments.path("topic").asText().isBlank()
+                || arguments.size() != 1) {
+            return error(id, -32602, "kex_diagnose_topic requires only a non-blank textual topic");
+        }
+        KafkaViewService service = kafka.getIfAvailable();
+        if (service == null) return toolResult(id, "Kafka view is disabled", true);
+        try {
+            return toolResult(id, "kex_diagnose_topic", service.lag(arguments.path("topic").asText()), mapper);
+        }
+        catch (RuntimeException | JsonProcessingException ex) {
+            return toolResult(id, "Kex could not complete the operation. Inspect the operator console.", true);
+        }
+    }
 
     private ResponseEntity<Object> getPrompt(Object id, JsonNode params) {
         if (!params.path("name").isTextual()) return error(id, -32602, "A textual prompt name is required");
@@ -293,7 +321,8 @@ public class KexMcpServerController {
                 resource("kex://supervision/overview", "Kex supervision overview"),
                 resource("kex://supervision/alerts", "Kex active alerts"),
                 resource("kex://supervision/incidents", "Kex correlated incidents"),
-                resource("kex://supervision/decisions/pending", "Kex pending decisions"));
+                resource("kex://supervision/decisions/pending", "Kex pending decisions"),
+                resource("kex://kafka/topics", "Kafka topics"));
     }
 
     private static Map<String, Object> resource(String uri, String name) {
@@ -304,6 +333,11 @@ public class KexMcpServerController {
         if (!params.path("uri").isTextual()) return error(id, -32602, "A textual resource URI is required");
         String uri = params.path("uri").asText("");
         if (uri.isBlank()) return error(id, -32602, "A resource URI is required");
+        if (uri.equals("kex://kafka/topics")) {
+            KafkaViewService service = kafka.getIfAvailable();
+            if (service == null) return error(id, -32603, "Kafka view is disabled");
+            return jsonResource(id, uri, service.topics());
+        }
         String kafkaPrefix = "kex://kafka/topics/";
         String kafkaSuffix = "/lag";
         if (uri.startsWith(kafkaPrefix) && uri.endsWith(kafkaSuffix)) {
@@ -399,6 +433,14 @@ public class KexMcpServerController {
 
     private static Map<String, Object> tool(String name, String description, Map<String, Object> outputSchema) {
         return Map.of("name", name, "description", description, "inputSchema", EMPTY_SCHEMA,
+                "outputSchema", outputSchema, "annotations", Map.of("readOnlyHint", true,
+                        "destructiveHint", false, "idempotentHint", true, "openWorldHint", false));
+    }
+
+    private static Map<String, Object> toolWithInput(String name, String description,
+                                                      Map<String, Object> inputSchema,
+                                                      Map<String, Object> outputSchema) {
+        return Map.of("name", name, "description", description, "inputSchema", inputSchema,
                 "outputSchema", outputSchema, "annotations", Map.of("readOnlyHint", true,
                         "destructiveHint", false, "idempotentHint", true, "openWorldHint", false));
     }

@@ -36,7 +36,7 @@ public class KexMcpServerHealthIndicator implements HealthIndicator {
         details.put("supervision", supervisionReady ? "ready" : "unavailable");
         details.put("kafkaView", kafkaReady ? "ready" : "unavailable");
         Health.Builder health = supervisionReady ? Health.up() : Health.down();
-        if (!kafkaReady) health.withDetail("optionalDependency", "kafkaView");
+        if (supervisionReady && !kafkaReady) health.status("DEGRADED").withDetail("reason", "Kafka view unavailable");
         return health.withDetails(details).build();
     }
 }

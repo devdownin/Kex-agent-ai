@@ -23,7 +23,7 @@ class KexMcpServerHealthIndicatorTest {
                 beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class))
                 .health();
 
-        assertThat(health.getStatus()).isEqualTo(Status.UP);
+        assertThat(health.getStatus()).isEqualTo(new Status("DEGRADED"));
         assertThat(health.getDetails()).containsEntry("server", "enabled")
                 .containsEntry("supervision", "ready").containsEntry("kafkaView", "unavailable");
     }

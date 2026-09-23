@@ -288,3 +288,16 @@ servie sur `/mcp`. Trois principes valent la peine d'être repris de l'Explorer 
 - [Spécification MCP](https://modelcontextprotocol.io) — le protocole lui-même
 - [Référence Spring AI MCP](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html)
 - [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) — comment cet agent s'en sert, et pourquoi ainsi
+
+
+## Governed mutations
+
+Inbound MCP mutations remain disabled by default. The configuration switch
+`kex.mcp.server.governed-mutations-enabled` only enables the mutation boundary; it does not
+create a new execution path. A mutation must reference an existing decision whose status is
+`PENDING_APPROVAL`. Approval or rejection is then delegated to `SupervisionService`, preserving
+its policy checks, execution locking, human actor attribution and audit trail.
+
+The public MCP tool registry remains read-only until mutation tools are deliberately exposed in a
+separate change. This separates enabling the governed backend contract from widening the external
+MCP surface.

@@ -53,8 +53,8 @@ class KexMcpServerControllerTest {
         meters = new SimpleMeterRegistry();
         mvc = MockMvcBuilders.standaloneSetup(new KexMcpServerController(new ObjectMapper(),
                 beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class),
-                new KexMcpServerProperties(true, Set.of("https://console.example")),
-                beans.getBeanProvider(BuildProperties.class), beans.getBeanProvider(McpServerAuditPublisher.class), meters)).build();
+                new KexMcpServerProperties(true, Set.of("https://console.example"), 120),
+                beans.getBeanProvider(BuildProperties.class), beans.getBeanProvider(McpServerAuditPublisher.class), beans.getBeanProvider(McpServerRateLimiter.class), meters)).build();
     }
 
     @Test
@@ -74,7 +74,7 @@ class KexMcpServerControllerTest {
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"))
                 .andExpect(status().isAccepted()).andExpect(content().string(""));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"))
-                .andExpect(jsonPath("$.result.tools.length()").value(5))
+                .andExpect(jsonPath("$.result.tools.length()").value(6))
                 .andExpect(jsonPath("$.result.tools[0].name").value("kex_status"))
                 .andExpect(jsonPath("$.result.tools[1].name").value("kex_overview"))
                 .andExpect(jsonPath("$.result.tools[2].name").value("kex_alerts"))

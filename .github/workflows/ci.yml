@@ -60,6 +60,24 @@ jobs:
   # existent ; elle n'exécute pas une ligne de JavaScript. Les défauts d'interface corrigés
   # jusqu'ici ont tous été trouvés à la main, donc une fois, donc sans garantie qu'ils ne
   # reviennent pas. Ce job les rejoue.
+
+  mcp-interop:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      - name: Set up JDK 25
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+      - name: Run MCP interoperability contract
+        run: ./mvnw -B --no-transfer-progress -Dtest=KexMcpServerInteropContractTest,KexMcpServerComplianceTest test
+
+
   browser:
     needs: build
     runs-on: ubuntu-latest
