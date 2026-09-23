@@ -53,6 +53,10 @@ class KexMcpServerComplianceTest {
                 .andExpect(jsonPath("$.result.tools[2].outputSchema.properties.alerts.type").value("array"))
                 .andExpect(jsonPath("$.result.tools[?(@.name == 'kex_diagnose_topic')].outputSchema.properties.groups.items.properties.recordLag.properties.measured.type").value("boolean"))
                 .andExpect(jsonPath("$.result.tools[?(@.name == 'kex_diagnose_process')].outputSchema.properties.incidents.type").value("array"))
+                .andExpect(jsonPath("$.result.tools[?(@.name == 'kex_diagnose_topic')].outputSchema.additionalProperties").value(false))
+                .andExpect(jsonPath("$.result.tools[?(@.name == 'kex_diagnose_topic')].outputSchema.required.length()").value(9))
+                .andExpect(jsonPath("$.result.tools[?(@.name == 'kex_diagnose_topic')].outputSchema.properties.groups.items.additionalProperties").value(false))
+                .andExpect(jsonPath("$.result.tools[?(@.name == 'kex_diagnose_process')].outputSchema.additionalProperties").value(false))
                 .andExpect(jsonPath("$.result.tools[0].annotations.readOnlyHint").value(true))
                 .andExpect(jsonPath("$.result.tools[0].annotations.destructiveHint").value(false));
     }
