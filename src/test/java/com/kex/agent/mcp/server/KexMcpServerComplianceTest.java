@@ -69,7 +69,7 @@ class KexMcpServerComplianceTest {
     @Test
     void exposes_resources_templates_and_prompts_without_mutation_capabilities() throws Exception {
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"resources/templates/list\"}"))
-                .andExpect(jsonPath("$.result.resourceTemplates.length()").value(2));
+                .andExpect(jsonPath("$.result.resourceTemplates.length()").value(4));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"prompts/list\"}"))
                 .andExpect(jsonPath("$.result.prompts[0].name").value("kex_supervision_triage"));
     }
