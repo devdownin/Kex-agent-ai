@@ -314,3 +314,27 @@ State-changing MCP tools remain disabled. The reserved contracts are `kex_approv
 default and are not advertised or dispatched. A future activation must route an existing pending
 decision through the current supervision approval/rejection service so policy checks, human identity,
 audit and single-execution locking cannot be bypassed.
+
+
+## MCP server architecture and diagnostics
+
+The inbound server now separates protocol descriptors into `McpServerCatalog`, while the HTTP
+controller remains responsible for transport and JSON-RPC dispatch. This keeps tool/resource
+schemas out of transport code and is the first boundary toward dedicated registries and dispatchers.
+
+A successful `initialize` returns an `Mcp-Session-Id`. Kex associates that session with the
+declared MCP `clientInfo` and records the client label separately from the authenticated Kex
+actor in audit metadata. Authentication remains authoritative: a client-declared name never
+replaces the authenticated identity.
+
+Kafka discovery is available through `kex://kafka/topics`,
+`kex://kafka/topics/{topic}`, `kex://kafka/topics/{topic}/lag` and
+`kex://kafka/topics/{topic}/consumer-groups`. Topic metadata exposes the partition count already
+provided by the configured Kafka MCP source. The `kex_diagnose_topic` output contract is typed
+instead of an unconstrained object.
+
+The read-only `kex_diagnose_process(processId)` tool correlates the current process snapshot,
+active alerts and pending decisions. It does not execute, approve or reject anything.
+
+The interoperability suite exercises both supported protocol versions, initialization/session
+negotiation and discovery. Unknown protocol versions are rejected at the transport boundary.
