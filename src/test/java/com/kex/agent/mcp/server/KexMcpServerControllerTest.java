@@ -91,7 +91,7 @@ class KexMcpServerControllerTest {
     void lists_and_reads_read_only_supervision_resources() throws Exception {
         when(supervision.alerts()).thenReturn(List.of());
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"resources/list\"}"))
-                .andExpect(jsonPath("$.result.resources.length()").value(5))
+                .andExpect(jsonPath("$.result.resources.length()").value(6))
                 .andExpect(jsonPath("$.result.resources[0].uri").value("kex://supervision/status"))
                 .andExpect(jsonPath("$.result.resources[2].uri").value("kex://supervision/alerts"));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"resources/read\","
