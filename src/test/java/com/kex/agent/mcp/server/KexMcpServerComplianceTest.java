@@ -38,7 +38,8 @@ class KexMcpServerComplianceTest {
         mvc = MockMvcBuilders.standaloneSetup(new KexMcpServerController(new ObjectMapper(),
                 beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class),
                 new KexMcpServerProperties(true, Set.of("https://console.example")),
-                beans.getBeanProvider(BuildProperties.class), new SimpleMeterRegistry())).build();
+                beans.getBeanProvider(BuildProperties.class), beans.getBeanProvider(McpServerAuditPublisher.class),
+                new SimpleMeterRegistry())).build();
     }
 
     @Test
