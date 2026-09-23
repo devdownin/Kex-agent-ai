@@ -54,7 +54,8 @@ public class KexMcpServerController {
     private static final Map<String, Object> STATUS_SCHEMA = McpServerCatalog.objectSchema(Map.of(
             "state", McpServerCatalog.stringSchema(), "mode", McpServerCatalog.stringSchema(), "paused", McpServerCatalog.booleanSchema(),
             "analysing", McpServerCatalog.booleanSchema(), "confidenceThreshold", McpServerCatalog.numberSchema(),
-            "circuitBreakers", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema())));
+            "circuitBreakers", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema()),
+            "mcpServers", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema())));
     private static final Map<String, Object> OVERVIEW_SCHEMA = McpServerCatalog.objectSchema(McpServerCatalog.schema(
             "agent", STATUS_SCHEMA, "processesMonitored", McpServerCatalog.integerSchema(), "processesOk", McpServerCatalog.integerSchema(),
             "processesWarning", McpServerCatalog.integerSchema(), "processesError", McpServerCatalog.integerSchema(),
