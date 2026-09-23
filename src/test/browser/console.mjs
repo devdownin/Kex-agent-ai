@@ -946,10 +946,10 @@ await check('la file de revue affiche la compétence proposée, tous propriétai
 });
 
 await check('approuver la fait disparaître de la file et apparaître dans la bibliothèque', async () => {
-  const decided = page.waitForResponse((response) =>
-    response.url().endsWith(`/api/agent/skills/${proposed.id}/approve`));
   await page.click('#skills-review-queue article.card button:has-text("Approuver")');
   await page.waitForSelector('dialog#confirm[open]');
+  const decided = page.waitForResponse((response) =>
+    response.url().endsWith(`/api/agent/skills/${proposed.id}/approve`));
   await page.click('#confirm-accept');
   await decided;
   await page.waitForSelector('#skills-review-queue [data-empty-state]');
