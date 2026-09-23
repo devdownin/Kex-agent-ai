@@ -300,18 +300,18 @@ public class KexMcpServerController {
                 .filter(candidate -> candidate.processId().equals(processId)).findFirst().orElse(null);
         if (snapshot == null) return toolResult(id, "Process not found", true);
         String processName = snapshot.name();
-        Map<String, Object> diagnosis = Map.of(
-                "processId", processId,
-                "snapshot", snapshot,
-                "alerts", service.alerts().stream().filter(a -> processId.equals(a.processId())).toList(),
-                "incidents", service.incidents().stream()
-                        .filter(incident -> incident.processNames().contains(processName)).toList(),
-                "decisions", service.pending().stream().filter(d -> processId.equals(d.processId())).toList());
         try {
+            Map<String, Object> diagnosis = Map.of(
+                    "processId", processId,
+                    "snapshot", snapshot,
+                    "alerts", service.alerts().stream().filter(a -> processId.equals(a.processId())).toList(),
+                    "incidents", service.incidents().stream()
+                            .filter(incident -> incident.processNames().contains(processName)).toList(),
+                    "decisions", service.pending().stream().filter(d -> processId.equals(d.processId())).toList());
             return toolResult(id, "kex_diagnose_process", diagnosis, mapper);
         }
-        catch (JsonProcessingException ex) {
-            return toolResult(id, "Kex could not serialize the process diagnosis", true);
+        catch (RuntimeException | JsonProcessingException ex) {
+            return toolResult(id, "Kex could not complete the process diagnosis. Inspect the operator console.", true);
         }
     }
 
