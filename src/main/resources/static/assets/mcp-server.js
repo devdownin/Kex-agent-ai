@@ -25,15 +25,20 @@ async function rpc(method, params = {}) {
   session = response.headers.get('Mcp-Session-Id') || session;
   if (!response.ok) throw new Error(`MCP HTTP ${response.status}`);
   const payload = await response.json();
-  if (payload.error) throw new Error(payload.error.message || 'Erreur MCP');
-  return payload.result;
+  if (payload.error) {
+    const error = new Error(payload.error.message || 'Erreur MCP');
+    error.rpc = payload;
+    error.status = response.status;
+    throw error;
+  }
+  return { result: payload.result, envelope: payload, status: response.status };
 }
 
 async function initialize() {
-  return rpc('initialize', {
+  return (await rpc('initialize', {
     protocolVersion: PROTOCOL, capabilities: {},
     clientInfo: { name: 'kex-control-center', version: '1' },
-  });
+  })).result;
 }
 
 function setStatus(ok, label) {
@@ -89,9 +94,14 @@ async function executePlayground(event) {
     if (op === 'tool') payload = await rpc('tools/call', { name: target, arguments: args });
     else if (op === 'resource') payload = await rpc('resources/read', { uri: target });
     else payload = await rpc('prompts/get', { name: target, arguments: args });
-    result.textContent = JSON.stringify(payload, null, 2);
+    const value = payload.result || {};
+    $('#mcp-playground-structured').textContent = JSON.stringify(value.structuredContent ?? value, null, 2);
+    $('#mcp-playground-text').textContent = (value.content || []).filter((item) => item.type === 'text').map((item) => item.text).join('\n') || '—';
+    result.textContent = JSON.stringify(payload.envelope, null, 2);
   } catch (error) {
-    result.textContent = `Erreur : ${error.message}`;
+    $('#mcp-playground-structured').textContent = '—';
+    $('#mcp-playground-text').textContent = error.message;
+    result.textContent = JSON.stringify(error.rpc || { error: error.message, httpStatus: error.status }, null, 2);
     report(error);
   }
 }
@@ -103,8 +113,8 @@ export async function view() {
       rpc('tools/list'), rpc('resources/list'), rpc('resources/templates/list'), rpc('prompts/list'),
     ]);
     catalog = {
-      tools: tools.tools || [], resources: resources.resources || [],
-      templates: templates.resourceTemplates || [], prompts: prompts.prompts || [],
+      tools: tools.result.tools || [], resources: resources.result.resources || [],
+      templates: templates.result.resourceTemplates || [], prompts: prompts.result.prompts || [],
     };
     $('#mcp-tools-count').textContent = catalog.tools.length;
     $('#mcp-resources-count').textContent = catalog.resources.length;
@@ -131,4 +141,7 @@ export function bind() {
   $('#mcp-catalog-kind')?.addEventListener('change', () => renderCatalog());
   $('#mcp-playground-operation')?.addEventListener('change', playgroundTargets);
   $('#mcp-playground-form')?.addEventListener('submit', executePlayground);
+  $('#mcp-playground-copy')?.addEventListener('click', async () => {
+    await navigator.clipboard.writeText($('#mcp-playground-result').textContent);
+  });
 }
