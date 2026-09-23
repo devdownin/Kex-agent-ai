@@ -11,7 +11,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties("kex.mcp.server")
 public record KexMcpServerProperties(@DefaultValue("false") boolean enabled,
                                      @DefaultValue Set<String> allowedOrigins,
-                                     @DefaultValue("120") int requestsPerMinute) {
+                                     @DefaultValue("120") int requestsPerMinute,
+                                     @DefaultValue("false") boolean governedMutationsEnabled) {
     public KexMcpServerProperties {
         allowedOrigins = allowedOrigins == null ? Set.of() : Set.copyOf(allowedOrigins);
         if (requestsPerMinute < 1) throw new IllegalArgumentException("MCP server rate limit must be positive");
