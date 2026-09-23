@@ -88,7 +88,12 @@ public class KexMcpServerController {
             McpServerCatalog.toolWithInput("kex_diagnose_topic", "Read the current Kafka lag diagnosis for one topic.",
                     Map.of("type", "object", "properties", Map.of("topic", McpServerCatalog.stringSchema()),
                             "required", List.of("topic"), "additionalProperties", false),
-                    McpServerCatalog.objectSchema()));
+                    McpServerCatalog.KAFKA_LAG_SCHEMA),
+            McpServerCatalog.toolWithInput("kex_diagnose_process",
+                    "Correlate snapshot, alerts and pending decisions for one process.",
+                    Map.of("type", "object", "properties", Map.of("processId", McpServerCatalog.stringSchema()),
+                            "required", List.of("processId"), "additionalProperties", false),
+                    McpServerCatalog.PROCESS_DIAGNOSIS_SCHEMA));
 
     private final ObjectMapper mapper;
     private final ObjectProvider<SupervisionService> supervision;
