@@ -77,6 +77,35 @@ jobs:
       - name: Run MCP interoperability contract
         run: ./mvnw -B --no-transfer-progress -Dtest=KexMcpServerInteropContractTest,KexMcpServerComplianceTest test
 
+      # Vérifie le serveur via le SDK MCP officiel, pas seulement via MockMvc.
+      - name: Package the MCP server
+        run: ./mvnw -B --no-transfer-progress -DskipTests package
+
+      - name: Install official MCP client
+        run: npm install --prefix "$RUNNER_TEMP/mcp-client" --no-save --no-package-lock @modelcontextprotocol/sdk@1.18.2
+
+      - name: Start MCP server for external client
+        run: |
+          set -euo pipefail
+          java -jar target/kex-agent-ai-*.jar --server.port=8082             --kex.agent.api-key=ci-secret             --kex.mcp.server.enabled=true             --spring.ai.mcp.client.enabled=false             --spring.ai.model.chat=none --spring.ai.model.embedding=none             > "$RUNNER_TEMP/mcp-agent.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8082/actuator/health >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8082/actuator/health
+
+      - name: Drive MCP with official SDK
+        env:
+          MCP_SDK_MODULE: ${{ runner.temp }}/mcp-client/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js
+          MCP_SDK_HTTP_MODULE: ${{ runner.temp }}/mcp-client/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js
+          KEX_MCP_URL: http://localhost:8082/api/agent/mcp-server
+          KEX_AGENT_API_KEY: ci-secret
+        run: node src/test/mcp/external-client.mjs
+
+      - name: MCP server logs on failure
+        if: failure()
+        run: cat "$RUNNER_TEMP/mcp-agent.log" || true
+
 
   browser:
     needs: build
