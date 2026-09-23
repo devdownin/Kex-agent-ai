@@ -40,7 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
 @ConditionalOnProperty(prefix = "kex.mcp.server", name = "enabled", havingValue = "true")
 public class KexMcpServerController {
 
-    private static final String PROTOCOL = "2025-06-18";
+    private static final String PROTOCOL = "2025-06-18";\n    private static final String SESSION_HEADER = "Mcp-Session-Id";
     private static final Set<String> PROTOCOLS = Set.of(PROTOCOL, "2025-03-26");
     private static final int MAX_REQUEST_LENGTH = 65_536;
     private static final Map<String, Object> EMPTY_SCHEMA = Map.of(
@@ -199,9 +199,15 @@ public class KexMcpServerController {
             case "prompts/get" -> getPrompt(id, params);
             default -> error(id, -32601, "Method not found");
         };
+        if ("initialize".equals(method) && response.getStatusCode().is2xxSuccessful()) {
+            String sessionId = sessions.open(params.path("clientInfo").path("name").asText("unknown"),
+                    params.path("clientInfo").path("version").asText("unknown"));
+            response = ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders())
+                    .header(SESSION_HEADER, sessionId).body(response.getBody());
+        }
         String outcome = metricOutcome(response);
         sample.stop(meters.timer("kex.mcp.server.request", "method", metricMethod(method), "outcome", outcome));
-        publishAudit(authentication, method, params, outcome, System.nanoTime() - auditStarted);
+        publishAudit(authentication, headers, method, params, outcome, System.nanoTime() - auditStarted);
         return response;
     }
 
@@ -429,7 +435,7 @@ public class KexMcpServerController {
         return null;
     }
 
-    private void publishAudit(Authentication authentication, String method, JsonNode params,
+    private void publishAudit(Authentication authentication, HttpHeaders headers, String method, JsonNode params,
                               String outcome, long durationNanos) {
         McpServerAuditPublisher publisher = audit.getIfAvailable();
         if (publisher == null) return;
