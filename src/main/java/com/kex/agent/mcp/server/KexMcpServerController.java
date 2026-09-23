@@ -60,17 +60,20 @@ public class KexMcpServerController {
             "pendingApprovals", integerSchema(), "processes", arraySchema(objectSchema()),
             "alerts", arraySchema(objectSchema()), "pending", arraySchema(objectSchema()),
             "maintenance", arraySchema(objectSchema()), "incidents", arraySchema(objectSchema())));
-    private static final Map<String, Object> ALERTS_SCHEMA = arraySchema(objectSchema(Map.of(
-            "id", stringSchema(), "processId", stringSchema(), "title", stringSchema(),
-            "severity", stringSchema(), "occurrences", integerSchema(), "confidence", numberSchema())));
-    private static final Map<String, Object> INCIDENTS_SCHEMA = arraySchema(objectSchema(Map.of(
-            "cycleId", stringSchema(), "processCount", integerSchema(), "severity", stringSchema(),
-            "processNames", arraySchema(stringSchema()), "titles", arraySchema(stringSchema()),
-            "alertIds", arraySchema(stringSchema()))));
-    private static final Map<String, Object> DECISIONS_SCHEMA = arraySchema(objectSchema(Map.of(
-            "id", stringSchema(), "processId", stringSchema(), "capability", stringSchema(),
-            "objective", stringSchema(), "action", stringSchema(), "confidence", numberSchema(),
-            "status", stringSchema(), "correlationId", stringSchema())));
+    private static final Map<String, Object> ALERTS_SCHEMA = objectSchema(Map.of(
+            "alerts", arraySchema(objectSchema(Map.of(
+                    "id", stringSchema(), "processId", stringSchema(), "title", stringSchema(),
+                    "severity", stringSchema(), "occurrences", integerSchema(), "confidence", numberSchema())))));
+    private static final Map<String, Object> INCIDENTS_SCHEMA = objectSchema(Map.of(
+            "incidents", arraySchema(objectSchema(Map.of(
+                    "cycleId", stringSchema(), "processCount", integerSchema(), "severity", stringSchema(),
+                    "processNames", arraySchema(stringSchema()), "titles", arraySchema(stringSchema()),
+                    "alertIds", arraySchema(stringSchema()))))));
+    private static final Map<String, Object> DECISIONS_SCHEMA = objectSchema(Map.of(
+            "decisions", arraySchema(objectSchema(Map.of(
+                    "id", stringSchema(), "processId", stringSchema(), "capability", stringSchema(),
+                    "objective", stringSchema(), "action", stringSchema(), "confidence", numberSchema(),
+                    "status", stringSchema(), "correlationId", stringSchema())))));
 
     private static final List<Map<String, Object>> TOOLS = List.of(
             tool("kex_status", "Read Kex supervision status.", STATUS_SCHEMA),
@@ -228,7 +231,7 @@ public class KexMcpServerController {
                 case "kex_pending_decisions" -> service.pending();
                 default -> throw new IllegalStateException("Unreachable tool");
             };
-            return toolResult(id, value, mapper);
+            return toolResult(id, name, value, mapper);
         }
         catch (RuntimeException | JsonProcessingException ex) {
             // Provider errors can contain URLs or credentials. They belong in existing audited
@@ -422,11 +425,17 @@ public class KexMcpServerController {
         return result(id, Map.of("content", List.of(Map.of("type", "text", "text", text)), "isError", error));
     }
 
-    private static ResponseEntity<Object> toolResult(Object id, Object value, ObjectMapper mapper)
+    private static ResponseEntity<Object> toolResult(Object id, String name, Object value, ObjectMapper mapper)
             throws JsonProcessingException {
+        Object structured = switch (name) {
+            case "kex_alerts" -> Map.of("alerts", value);
+            case "kex_incidents" -> Map.of("incidents", value);
+            case "kex_pending_decisions" -> Map.of("decisions", value);
+            default -> value;
+        };
         return result(id, Map.of(
                 "content", List.of(Map.of("type", "text", "text", mapper.writeValueAsString(value))),
-                "structuredContent", value,
+                "structuredContent", structured,
                 "isError", false));
     }
 
