@@ -53,7 +53,7 @@ class KexMcpServerControllerTest {
         meters = new SimpleMeterRegistry();
         mvc = MockMvcBuilders.standaloneSetup(new KexMcpServerController(new ObjectMapper(),
                 beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class),
-                new KexMcpServerProperties(true, Set.of("https://console.example"), 120),
+                new KexMcpServerProperties(true, Set.of("https://console.example"), 120, false),
                 beans.getBeanProvider(BuildProperties.class), beans.getBeanProvider(McpServerAuditPublisher.class), beans.getBeanProvider(McpServerRateLimiter.class), meters)).build();
     }
 
