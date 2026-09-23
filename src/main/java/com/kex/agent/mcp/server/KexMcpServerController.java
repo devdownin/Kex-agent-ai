@@ -40,7 +40,8 @@ import org.springframework.web.bind.annotation.RestController;
 @ConditionalOnProperty(prefix = "kex.mcp.server", name = "enabled", havingValue = "true")
 public class KexMcpServerController {
 
-    private static final String PROTOCOL = "2025-06-18";\n    private static final String SESSION_HEADER = "Mcp-Session-Id";
+    private static final String PROTOCOL = "2025-06-18";
+    private static final String SESSION_HEADER = "Mcp-Session-Id";
     private static final Set<String> PROTOCOLS = Set.of(PROTOCOL, "2025-03-26");
     private static final int MAX_REQUEST_LENGTH = 65_536;
     private static final Map<String, Object> EMPTY_SCHEMA = Map.of(
@@ -96,7 +97,8 @@ public class KexMcpServerController {
     private final ObjectProvider<BuildProperties> buildProperties;
     private final ObjectProvider<McpServerAuditPublisher> audit;
     private final ObjectProvider<McpServerRateLimiter> rateLimiter;
-    private final MeterRegistry meters;\n    private final McpClientSessionRegistry sessions = new McpClientSessionRegistry();
+    private final MeterRegistry meters;
+    private final McpClientSessionRegistry sessions = new McpClientSessionRegistry();
 
     public KexMcpServerController(ObjectMapper mapper, ObjectProvider<SupervisionService> supervision,
                                   ObjectProvider<KafkaViewService> kafka,
@@ -340,7 +342,15 @@ public class KexMcpServerController {
                         "name", "Kex process snapshot",
                         "description", "Read the current supervision snapshot for one configured process.",
                         "mimeType", MediaType.APPLICATION_JSON_VALUE),
-                Map.of("uriTemplate", "kex://kafka/topics/{topic}",\n                        "name", "Kafka topic",\n                        "description", "Read topic metadata including its partition count.",\n                        "mimeType", MediaType.APPLICATION_JSON_VALUE),\n                Map.of("uriTemplate", "kex://kafka/topics/{topic}/consumer-groups",\n                        "name", "Kafka consumer groups",\n                        "description", "Read consumer-group state and lag for one Kafka topic.",\n                        "mimeType", MediaType.APPLICATION_JSON_VALUE),\n                Map.of("uriTemplate", "kex://kafka/topics/{topic}/lag",
+                Map.of("uriTemplate", "kex://kafka/topics/{topic}",
+                        "name", "Kafka topic",
+                        "description", "Read topic metadata including its partition count.",
+                        "mimeType", MediaType.APPLICATION_JSON_VALUE),
+                Map.of("uriTemplate", "kex://kafka/topics/{topic}/consumer-groups",
+                        "name", "Kafka consumer groups",
+                        "description", "Read consumer-group state and lag for one Kafka topic.",
+                        "mimeType", MediaType.APPLICATION_JSON_VALUE),
+                Map.of("uriTemplate", "kex://kafka/topics/{topic}/lag",
                         "name", "Kafka topic lag",
                         "description", "Read the consumer-group lag view for one Kafka topic.",
                         "mimeType", MediaType.APPLICATION_JSON_VALUE));
