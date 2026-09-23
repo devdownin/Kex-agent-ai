@@ -21,7 +21,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;\nimport static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class KexMcpServerInteropContractTest {
@@ -46,13 +46,13 @@ class KexMcpServerInteropContractTest {
                 + "\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},"
                 + "\"clientInfo\":{\"name\":\"interop-client\",\"version\":\"1.0\"}}}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.protocolVersion").value("2025-06-18"))
+                .andExpect(jsonPath("$.result.protocolVersion").value("2025-06-18"))\n                .andExpect(header().exists("Mcp-Session-Id"))
                 .andExpect(jsonPath("$.result.capabilities.tools").exists())
                 .andExpect(jsonPath("$.result.capabilities.resources").exists())
                 .andExpect(jsonPath("$.result.capabilities.prompts").exists());
 
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.result.tools.length()").value(6));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.result.tools.length()").value(7));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"resources/list\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.result.resources").isArray());
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"prompts/list\"}"))
