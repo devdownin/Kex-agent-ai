@@ -311,7 +311,10 @@ public class KexMcpServerController {
                     "incidents", incidents.stream()
                             .filter(incident -> incident.processNames().contains(processName)).toList(),
                     "decisions", decisions.stream().filter(d -> processId.equals(d.processId())).toList());
-            return toolResult(id, "kex_diagnose_process", diagnosis, mapper);
+            return result(id, Map.of(
+                    "content", List.of(Map.of("type", "text", "text", "Process diagnosis for " + processId)),
+                    "structuredContent", diagnosis,
+                    "isError", false));
         }
         catch (RuntimeException | JsonProcessingException ex) {
             return toolResult(id, "Kex could not complete the process diagnosis. Inspect the operator console.", true);
