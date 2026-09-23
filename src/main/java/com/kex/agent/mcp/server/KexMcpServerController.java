@@ -296,24 +296,28 @@ public class KexMcpServerController {
         SupervisionService service = supervision.getIfAvailable();
         if (service == null) return toolResult(id, "Supervision is disabled", true);
         String processId = arguments.path("processId").asText();
-        Object snapshot = service.snapshots().stream()
+        var snapshot = service.snapshots().stream()
                 .filter(candidate -> candidate.processId().equals(processId)).findFirst().orElse(null);
         if (snapshot == null) return toolResult(id, "Process not found", true);
-        String processName = service.snapshots().stream()
-                .filter(candidate -> candidate.processId().equals(processId))
-                .map(candidate -> candidate.name()).findFirst().orElse(processId);
-        Map<String, Object> diagnosis = Map.of(
-                "processId", processId,
-                "snapshot", snapshot,
-                "alerts", service.alerts().stream().filter(a -> processId.equals(a.processId())).toList(),
-                "incidents", service.incidents().stream()
-                        .filter(incident -> incident.processNames().contains(processName)).toList(),
-                "decisions", service.pending().stream().filter(d -> processId.equals(d.processId())).toList());
+        String processName = snapshot.name();
         try {
-            return toolResult(id, "kex_diagnose_process", diagnosis, mapper);
+            var alerts = java.util.Optional.ofNullable(service.alerts()).orElseGet(List::of);
+            var incidents = java.util.Optional.ofNullable(service.incidents()).orElseGet(List::of);
+            var decisions = java.util.Optional.ofNullable(service.pending()).orElseGet(List::of);
+            Map<String, Object> diagnosis = Map.of(
+                    "processId", processId,
+                    "snapshot", snapshot,
+                    "alerts", alerts.stream().filter(a -> processId.equals(a.processId())).toList(),
+                    "incidents", incidents.stream()
+                            .filter(incident -> incident.processNames().contains(processName)).toList(),
+                    "decisions", decisions.stream().filter(d -> processId.equals(d.processId())).toList());
+            return result(id, Map.of(
+                    "content", List.of(Map.of("type", "text", "text", "Process diagnosis for " + processId)),
+                    "structuredContent", diagnosis,
+                    "isError", false));
         }
-        catch (JsonProcessingException ex) {
-            return toolResult(id, "Kex could not serialize the process diagnosis", true);
+        catch (RuntimeException ex) {
+            return toolResult(id, "Kex could not complete the process diagnosis. Inspect the operator console.", true);
         }
     }
 

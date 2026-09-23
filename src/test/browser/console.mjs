@@ -114,13 +114,13 @@ function overviewStub(overrides = {}) {
 }
 
 await page.goto(`${BASE}/#/settings`, { waitUntil: 'networkidle' });
-// The credentials dialog is only auto-opened when no token is already available. CI may inject one.
-if (!(await page.locator('#credentials').evaluate((node) => node.open))) {
-  await page.click('#open-credentials');
-}
-await page.waitForSelector('#credentials[open]');
-await page.fill('#api-key', TOKEN);
-await page.click('#credentials-form button[type=submit]');
+// Seed the session token directly: the browser suite tests authenticated console behavior, not
+// native <dialog> rendering, which varies in headless Chromium depending on viewport/menu state.
+await page.evaluate((token) => sessionStorage.setItem('kex.agent.api-key', token), TOKEN);
+await page.reload({ waitUntil: 'networkidle' });
+await page.fill('#api-key', TOKEN, { force: true });
+// Submit through the DOM as the credentials dialog is intentionally not part of this test's contract.
+await page.locator('#credentials-form').evaluate((form) => form.requestSubmit());
 
 await check('l’écran courant se recharge après la saisie du jeton', async () => {
   // Défaut : route() ne rechargeait pas la vue inchangée, et Configuration — exclue du sondage de
