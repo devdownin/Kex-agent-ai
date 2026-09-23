@@ -83,7 +83,11 @@ public class KexMcpServerController {
             tool("kex_alerts", "Read the currently active supervision alerts.", ALERTS_SCHEMA),
             tool("kex_incidents", "Read incidents correlated from the latest supervision cycle.", INCIDENTS_SCHEMA),
             tool("kex_pending_decisions", "Read decisions awaiting human review. Cannot approve them.",
-                    DECISIONS_SCHEMA));
+                    DECISIONS_SCHEMA),
+            toolWithInput("kex_diagnose_topic", "Read the current Kafka lag diagnosis for one topic.",
+                    Map.of("type", "object", "properties", Map.of("topic", stringSchema()),
+                            "required", List.of("topic"), "additionalProperties", false),
+                    objectSchema()));
 
     private final ObjectMapper mapper;
     private final ObjectProvider<SupervisionService> supervision;
@@ -412,6 +416,14 @@ public class KexMcpServerController {
 
     private static Map<String, Object> tool(String name, String description, Map<String, Object> outputSchema) {
         return Map.of("name", name, "description", description, "inputSchema", EMPTY_SCHEMA,
+                "outputSchema", outputSchema, "annotations", Map.of("readOnlyHint", true,
+                        "destructiveHint", false, "idempotentHint", true, "openWorldHint", false));
+    }
+
+    private static Map<String, Object> toolWithInput(String name, String description,
+                                                      Map<String, Object> inputSchema,
+                                                      Map<String, Object> outputSchema) {
+        return Map.of("name", name, "description", description, "inputSchema", inputSchema,
                 "outputSchema", outputSchema, "annotations", Map.of("readOnlyHint", true,
                         "destructiveHint", false, "idempotentHint", true, "openWorldHint", false));
     }
