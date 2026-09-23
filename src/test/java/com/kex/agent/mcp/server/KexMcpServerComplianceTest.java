@@ -48,7 +48,8 @@ class KexMcpServerComplianceTest {
                 .andExpect(jsonPath("$.result.tools.length()").value(5))
                 .andExpect(jsonPath("$.result.tools[0].outputSchema.type").value("object"))
                 .andExpect(jsonPath("$.result.tools[0].outputSchema.properties.state.type").value("string"))
-                .andExpect(jsonPath("$.result.tools[2].outputSchema.type").value("array"))
+                .andExpect(jsonPath("$.result.tools[2].outputSchema.type").value("object"))
+                .andExpect(jsonPath("$.result.tools[2].outputSchema.properties.alerts.type").value("array"))
                 .andExpect(jsonPath("$.result.tools[0].annotations.readOnlyHint").value(true))
                 .andExpect(jsonPath("$.result.tools[0].annotations.destructiveHint").value(false));
     }
