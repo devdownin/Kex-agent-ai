@@ -91,18 +91,21 @@ public class KexMcpServerController {
     private final KexMcpServerProperties properties;
     private final ObjectProvider<BuildProperties> buildProperties;
     private final ObjectProvider<McpServerAuditPublisher> audit;
+    private final ObjectProvider<McpServerRateLimiter> rateLimiter;
     private final MeterRegistry meters;
 
     public KexMcpServerController(ObjectMapper mapper, ObjectProvider<SupervisionService> supervision,
                                   ObjectProvider<KafkaViewService> kafka,
                                   KexMcpServerProperties properties, ObjectProvider<BuildProperties> buildProperties,
-                                  ObjectProvider<McpServerAuditPublisher> audit, MeterRegistry meters) {
+                                  ObjectProvider<McpServerAuditPublisher> audit, ObjectProvider<McpServerRateLimiter> rateLimiter,
+                                  MeterRegistry meters) {
         this.mapper = mapper;
         this.supervision = supervision;
         this.kafka = kafka;
         this.properties = properties;
         this.buildProperties = buildProperties;
         this.audit = audit;
+        this.rateLimiter = rateLimiter;
         this.meters = meters;
     }
 
@@ -118,6 +121,10 @@ public class KexMcpServerController {
                                     Authentication authentication) {
         ResponseEntity<Object> rejected = authorize(headers, authentication);
         if (rejected != null) return recordTransport("authorization", rejected);
+        McpServerRateLimiter limiter = rateLimiter.getIfAvailable();
+        if (limiter != null && !limiter.allow(authentication.getName())) {
+            return recordTransport("rate_limit", ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).build());
+        }
         if (!accepts(headers, MediaType.APPLICATION_JSON) || !accepts(headers, MediaType.TEXT_EVENT_STREAM)) {
             return recordTransport("accept", ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build());
         }
