@@ -74,7 +74,7 @@ class KexMcpServerControllerTest {
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"))
                 .andExpect(status().isAccepted()).andExpect(content().string(""));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"))
-                .andExpect(jsonPath("$.result.tools.length()").value(6))
+                .andExpect(jsonPath("$.result.tools.length()").value(7))
                 .andExpect(jsonPath("$.result.tools[0].name").value("kex_status"))
                 .andExpect(jsonPath("$.result.tools[1].name").value("kex_overview"))
                 .andExpect(jsonPath("$.result.tools[2].name").value("kex_alerts"))
@@ -108,7 +108,7 @@ class KexMcpServerControllerTest {
         when(supervision.snapshots()).thenReturn(List.of(new ProcessSnapshot(
                 "orders", "Orders", ProcessState.OK, null, null, 0L, "Nominal", Coverage.notReported())));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":16,\"method\":\"resources/templates/list\"}"))
-                .andExpect(jsonPath("$.result.resourceTemplates.length()").value(2))
+                .andExpect(jsonPath("$.result.resourceTemplates.length()").value(4))
                 .andExpect(jsonPath("$.result.resourceTemplates[0].uriTemplate")
                         .value("kex://supervision/processes/{processId}"));
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":17,\"method\":\"resources/read\","
