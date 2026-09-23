@@ -340,7 +340,7 @@ public class KexMcpServerController {
                         "name", "Kex process snapshot",
                         "description", "Read the current supervision snapshot for one configured process.",
                         "mimeType", MediaType.APPLICATION_JSON_VALUE),
-                Map.of("uriTemplate", "kex://kafka/topics/{topic}",\n                        "name", "Kafka topic",\n                        "description", "Read topic metadata including its partition count.",\n                        "mimeType", MediaType.APPLICATION_JSON_VALUE),\n                Map.of("uriTemplate", "kex://kafka/topics/{topic}/lag",
+                Map.of("uriTemplate", "kex://kafka/topics/{topic}",\n                        "name", "Kafka topic",\n                        "description", "Read topic metadata including its partition count.",\n                        "mimeType", MediaType.APPLICATION_JSON_VALUE),\n                Map.of("uriTemplate", "kex://kafka/topics/{topic}/consumer-groups",\n                        "name", "Kafka consumer groups",\n                        "description", "Read consumer-group state and lag for one Kafka topic.",\n                        "mimeType", MediaType.APPLICATION_JSON_VALUE),\n                Map.of("uriTemplate", "kex://kafka/topics/{topic}/lag",
                         "name", "Kafka topic lag",
                         "description", "Read the consumer-group lag view for one Kafka topic.",
                         "mimeType", MediaType.APPLICATION_JSON_VALUE));
@@ -370,6 +370,14 @@ public class KexMcpServerController {
             return jsonResource(id, uri, service.topics());
         }
         String kafkaPrefix = "kex://kafka/topics/";
+        String groupsSuffix = "/consumer-groups";
+        if (uri.startsWith(kafkaPrefix) && uri.endsWith(groupsSuffix)) {
+            String topic = uri.substring(kafkaPrefix.length(), uri.length() - groupsSuffix.length());
+            if (topic.isBlank() || topic.contains("/")) return error(id, -32002, "Resource not found");
+            KafkaViewService service = kafka.getIfAvailable();
+            if (service == null) return error(id, -32603, "Kafka view is disabled");
+            return jsonResource(id, uri, service.lag(topic).groups());
+        }
         String kafkaSuffix = "/lag";
         if (uri.startsWith(kafkaPrefix) && uri.endsWith(kafkaSuffix)) {
             String topic = uri.substring(kafkaPrefix.length(), uri.length() - kafkaSuffix.length());
