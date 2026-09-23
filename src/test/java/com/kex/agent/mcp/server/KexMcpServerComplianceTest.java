@@ -37,7 +37,7 @@ class KexMcpServerComplianceTest {
         var beans = new StaticListableBeanFactory(Map.of("supervision", supervision, "kafka", kafka));
         mvc = MockMvcBuilders.standaloneSetup(new KexMcpServerController(new ObjectMapper(),
                 beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class),
-                new KexMcpServerProperties(true, Set.of("https://console.example"), 120),
+                new KexMcpServerProperties(true, Set.of("https://console.example"), 120, false),
                 beans.getBeanProvider(BuildProperties.class), beans.getBeanProvider(McpServerAuditPublisher.class), beans.getBeanProvider(McpServerRateLimiter.class),
                 new SimpleMeterRegistry())).build();
     }

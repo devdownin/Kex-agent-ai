@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Fixed one-minute quota per authenticated actor; bounded counters are reset lazily each minute. */
@@ -17,6 +18,7 @@ public class McpServerRateLimiter {
     private final KexMcpServerProperties properties;
     private final Clock clock;
 
+    @Autowired
     public McpServerRateLimiter(KexMcpServerProperties properties) {
         this(properties, Clock.systemUTC());
     }

@@ -301,3 +301,16 @@ its policy checks, execution locking, human actor attribution and audit trail.
 The public MCP tool registry remains read-only until mutation tools are deliberately exposed in a
 separate change. This separates enabling the governed backend contract from widening the external
 MCP surface.
+
+
+## Interoperability and governed mutations
+
+CI replays an MCP client handshake against the public HTTP contract: `initialize`, `tools/list`,
+`resources/list` and `prompts/list`. This catches wire-level drift independently from individual
+controller tests.
+
+State-changing MCP tools remain disabled. The reserved contracts are `kex_approve_decision` and
+`kex_reject_decision`; they are guarded by `kex.mcp.server.governed-mutations-enabled=false` by
+default and are not advertised or dispatched. A future activation must route an existing pending
+decision through the current supervision approval/rejection service so policy checks, human identity,
+audit and single-execution locking cannot be bypassed.
