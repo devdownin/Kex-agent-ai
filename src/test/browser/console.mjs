@@ -1179,7 +1179,10 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
   await page.selectOption('#mcp-playground-target', 'kex_status');
   await page.fill('#mcp-playground-arguments', '{}');
   await page.click('#mcp-playground-form button[type="submit"]');
-  await page.waitForFunction(() => document.querySelector('#mcp-playground-result')?.textContent.includes('"state": "OK"'));
+  await page.waitForFunction(() => document.querySelector('#mcp-playground-structured')?.textContent.includes('"state": "OK"'));
+  assert.match(await page.textContent('#mcp-playground-structured'), /"state": "OK"/);
+  assert.match(await page.textContent('#mcp-playground-text'), /ok/);
+  assert.match(await page.textContent('#mcp-playground-result'), /"structuredContent"/);
   assert.match(await page.textContent('#mcp-playground-result'), /"isError": false/);
 
   await page.unroute('**/api/agent/mcp-server');
