@@ -61,9 +61,12 @@ final class McpServerCatalog {
         for (int i = 0; i < entries.length; i += 2) schema.put((String) entries[i], entries[i + 1]);
         return Map.copyOf(schema);
     }
-    static Map<String, Object> objectSchema() { return Map.of("type", "object"); }
+    static Map<String, Object> objectSchema() {
+        return Map.of("type", "object", "properties", Map.of(), "additionalProperties", true);
+    }
     static Map<String, Object> objectSchema(Map<String, Object> properties) {
-        return Map.of("type", "object", "properties", properties);
+        return schema("type", "object", "properties", properties,
+                "required", properties.keySet().stream().sorted().toList(), "additionalProperties", false);
     }
     static Map<String, Object> arraySchema(Map<String, Object> items) {
         return Map.of("type", "array", "items", items);
