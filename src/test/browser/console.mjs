@@ -946,10 +946,10 @@ await check('la file de revue affiche la compétence proposée, tous propriétai
 });
 
 await check('approuver la fait disparaître de la file et apparaître dans la bibliothèque', async () => {
-  const decided = page.waitForResponse((response) =>
-    response.url().endsWith(`/api/agent/skills/${proposed.id}/approve`));
   await page.click('#skills-review-queue article.card button:has-text("Approuver")');
   await page.waitForSelector('dialog#confirm[open]');
+  const decided = page.waitForResponse((response) =>
+    response.url().endsWith(`/api/agent/skills/${proposed.id}/approve`));
   await page.click('#confirm-accept');
   await decided;
   await page.waitForSelector('#skills-review-queue [data-empty-state]');
@@ -1139,6 +1139,50 @@ await check('un canal actif se distingue d’un canal inactif', async () => {
   assert.match(text, /URL de console[\s\S]*Configurée/);
 
   await page.unroute('**/api/agent/channels/status');
+});
+
+await check('le serveur MCP expose ses onglets et exécute un tool dans le playground', async () => {
+  let nextId = 0;
+  await page.route('**/api/agent/mcp-server', async (route) => {
+    const request = route.request();
+    const rpc = JSON.parse(request.postData() || '{}');
+    nextId = rpc.id || nextId + 1;
+    const results = {
+      initialize: { protocolVersion: '2025-06-18', serverInfo: { name: 'kex-agent-ai', version: 'test' }, capabilities: {} },
+      'tools/list': { tools: [{ name: 'kex_status', description: 'Current status', inputSchema: { type: 'object' }, outputSchema: { type: 'object' } }] },
+      'resources/list': { resources: [{ uri: 'kex://supervision/status', name: 'Status' }] },
+      'resources/templates/list': { resourceTemplates: [{ uriTemplate: 'kex://supervision/processes/{processId}', name: 'Process' }] },
+      'prompts/list': { prompts: [{ name: 'kex_supervision_triage', description: 'Triage' }] },
+      'tools/call': { content: [{ type: 'text', text: 'ok' }], structuredContent: { state: 'OK' }, isError: false },
+    };
+    await route.fulfill({
+      status: 200, contentType: 'application/json',
+      headers: { 'Mcp-Session-Id': 'browser-test-session' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: nextId, result: results[rpc.method] || {} }),
+    });
+  });
+
+  await page.goto(`${BASE}/#/settings`, { waitUntil: 'domcontentloaded' });
+  await page.click('[data-settings-target="settings-mcp-server"]');
+  await page.waitForFunction(() => document.querySelector('#mcp-tools-count')?.textContent === '1');
+  assert.equal(await page.textContent('#mcp-server-status-label'), 'Opérationnel · lecture seule');
+  assert.equal(await page.textContent('#mcp-resources-count'), '1');
+  assert.equal(await page.textContent('#mcp-templates-count'), '1');
+  assert.equal(await page.textContent('#mcp-prompts-count'), '1');
+
+  await page.click('[data-mcp-tab="catalog"]');
+  await page.waitForSelector('[data-mcp-panel="catalog"]:not([hidden]) .mcp-catalog-card');
+  assert.match(await page.textContent('#mcp-catalog-list'), /kex_status/);
+
+  await page.click('[data-mcp-tab="playground"]');
+  await page.selectOption('#mcp-playground-operation', 'tool');
+  await page.selectOption('#mcp-playground-target', 'kex_status');
+  await page.fill('#mcp-playground-arguments', '{}');
+  await page.click('#mcp-playground-form button[type="submit"]');
+  await page.waitForFunction(() => document.querySelector('#mcp-playground-result')?.textContent.includes('"state": "OK"'));
+  assert.match(await page.textContent('#mcp-playground-result'), /"isError": false/);
+
+  await page.unroute('**/api/agent/mcp-server');
 });
 
 await check('aucune erreur de script sur le parcours', () => {
