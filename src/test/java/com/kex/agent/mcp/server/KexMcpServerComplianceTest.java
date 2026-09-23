@@ -46,7 +46,7 @@ class KexMcpServerComplianceTest {
     void advertises_typed_read_only_tools_only() throws Exception {
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.tools.length()").value(6))
+                .andExpect(jsonPath("$.result.tools.length()").value(7))
                 .andExpect(jsonPath("$.result.tools[0].outputSchema.type").value("object"))
                 .andExpect(jsonPath("$.result.tools[0].outputSchema.properties.state.type").value("string"))
                 .andExpect(jsonPath("$.result.tools[2].outputSchema.type").value("object"))
