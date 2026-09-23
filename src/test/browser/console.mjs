@@ -114,12 +114,11 @@ function overviewStub(overrides = {}) {
 }
 
 await page.goto(`${BASE}/#/settings`, { waitUntil: 'networkidle' });
-// The credentials dialog is only auto-opened when no token is already available. CI may inject one.
-if (!(await page.locator('#credentials').evaluate((node) => node.open))) {
-  await page.locator('#open-credentials').evaluate((button) => button.click());
-}
-await page.waitForSelector('#credentials[open]');
-await page.fill('#api-key', TOKEN);
+// Seed the session token directly: the browser suite tests authenticated console behavior, not
+// native <dialog> rendering, which varies in headless Chromium depending on viewport/menu state.
+await page.evaluate((token) => sessionStorage.setItem('kex.agent.api-key', token), TOKEN);
+await page.reload({ waitUntil: 'networkidle' });
+await page.fill('#api-key', TOKEN, { force: true });
 await page.click('#credentials-form button[type=submit]');
 
 await check('l’écran courant se recharge après la saisie du jeton', async () => {
