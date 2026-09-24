@@ -62,7 +62,8 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
   assert.match(await page.textContent('#mcp-playground-result'), /"isError": false/);
 
   await page.selectOption('#mcp-playground-operation', 'template');
-  await page.selectOption('#mcp-playground-target', 'Process');
+  // Switching operation must immediately render fields for the newly selected first template.
+  await page.waitForSelector('#mcp-template-fields input[name="processId"]');
   await page.locator('#mcp-template-fields input[name="processId"]').fill('order-integration');
   await page.click('#mcp-playground-form button[type="submit"]');
   await page.waitForFunction(() => document.querySelector('#mcp-playground-result')?.textContent.includes('order-integration'));
