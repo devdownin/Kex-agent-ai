@@ -67,6 +67,7 @@ public class KexMcpServerController {
             "processesUnknown", McpServerCatalog.integerSchema(), "anomaliesDetected", McpServerCatalog.integerSchema(),
             "pendingApprovals", McpServerCatalog.integerSchema(), "processes", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema()),
             "alerts", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema()), "pending", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema()),
+            "lastCycle", McpServerCatalog.schema("type", List.of("object", "null")),
             "maintenance", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema()), "incidents", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema())));
     private static final Map<String, Object> ALERTS_SCHEMA = McpServerCatalog.objectSchema(Map.of(
             "alerts", McpServerCatalog.arraySchema(McpServerCatalog.objectSchema(Map.of(
