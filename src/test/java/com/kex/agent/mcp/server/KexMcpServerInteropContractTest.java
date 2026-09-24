@@ -54,7 +54,7 @@ class KexMcpServerInteropContractTest {
                 beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class),
                 new KexMcpServerProperties(true, Set.of(), 120, false),
                 beans.getBeanProvider(BuildProperties.class), beans.getBeanProvider(McpServerAuditPublisher.class),
-                beans.getBeanProvider(McpServerRateLimiter.class), new SimpleMeterRegistry())).build();
+                beans.getBeanProvider(McpServerRateLimiter.class), new SimpleMeterRegistry(), new McpClientSessionRegistry())).build();
     }
 
     @Test
