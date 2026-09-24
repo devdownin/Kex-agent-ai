@@ -134,7 +134,7 @@ function card(server) {
           : `${metric.callCount} appel(s) · ${Math.round(metric.averageDurationMs)} ms en moyenne`;
         button.append(el('span', 'muted', label));
       }
-      button.addEventListener('click', () => invoke(node, server.connection, tool));
+      button.addEventListener('click', () => invoke(null, server.connection, tool));
       item.append(button);
       list.append(item);
     });
@@ -144,6 +144,11 @@ function card(server) {
   }
 
   const actions = el('div', 'server-actions');
+  const details = el('button', 'ghost', 'Détails');
+  details.type = 'button';
+  details.setAttribute('aria-label', `Détails du serveur ${server.connection}`);
+  details.addEventListener('click', () => openServerDrawer(server));
+  actions.append(details);
   const resources = el('button', 'ghost', 'Ressources');
   resources.type = 'button';
   resources.disabled = Boolean(managed && !managed.enabled);
@@ -208,6 +213,69 @@ function card(server) {
   node.append(actions);
   return node;
 }
+
+
+function openServerDrawer(server, updateUrl = true) {
+  const managed = runtimeServers.get(server.connection);
+  if (updateUrl) setDrawerParam('mcp', server.connection);
+  const state = managed && !managed.enabled ? 'UNKNOWN' : (server.initialized ? 'OK' : 'UNKNOWN');
+  const body = el('div', 'stack');
+  body.append(
+    definition('État', stateTag(state,
+      managed && !managed.enabled ? 'Désactivé' : (server.initialized ? 'Initialisé' : 'Pas de handshake'))),
+    definition('Connexion', el('code', 'technical-id', server.connection)),
+    definition('Serveur', el('span', null, server.serverName || 'Non annoncé')),
+    definition('Version', el('span', null, server.version || '—')),
+    definition('Protocole', el('span', null, server.protocolVersion || '—')),
+    definition('Transport', el('span', null, managed?.transport || '—')),
+    definition('Outils', el('span', null, String(server.tools?.length || 0))),
+  );
+  if (server.circuitBreakerState) {
+    body.append(definition('Disjoncteur', circuitStateTag(server.circuitBreakerState,
+      server.circuitBreakerState)));
+  }
+
+  const tools = server.tools || [];
+  body.append(el('h3', 'drawer-sub', 'Outils exposés'));
+  if (!tools.length) {
+    body.append(empty('Aucun outil exposé.',
+      'Le serveur est connu mais son catalogue d’outils est vide ou n’a pas encore été chargé.'));
+  } else {
+    const list = el('div', 'drawer-tool-list');
+    tools.forEach((tool) => {
+      const button = el('button', 'drawer-tool');
+      button.type = 'button';
+      button.append(el('strong', null, tool.name));
+      if (tool.description) button.append(el('span', 'muted', tool.description));
+      button.addEventListener('click', () => invoke(null, server.connection, tool));
+      list.append(button);
+    });
+    body.append(list);
+  }
+
+  if (managed) {
+    const actions = el('div', 'row-end');
+    const edit = el('button', 'ghost', 'Modifier');
+    edit.type = 'button';
+    edit.addEventListener('click', () => openEditor(managed));
+    const diagnostic = el('button', 'ghost', 'Diagnostic');
+    diagnostic.type = 'button';
+    diagnostic.addEventListener('click', async () => {
+      try {
+        const diagnostics = await api(`/api/agent/mcp/servers/${encodeURIComponent(server.connection)}/diagnostics`);
+        const panel = el('div', 'stack');
+        panel.append(el('p', 'muted',
+          `${diagnostics.connected ? 'Connecté' : 'Hors ligne'} · ${diagnostics.toolCount} outil(s)`));
+        if (diagnostics.toolDiff) panel.append(renderToolDiff(diagnostics.toolDiff));
+        openDrawer(`Diagnostic · ${server.connection}`, panel);
+      } catch (error) { report(error); }
+    });
+    actions.append(edit, diagnostic);
+    body.append(actions);
+  }
+  openDrawer(`Serveur MCP · ${server.connection}`, body);
+}
+
 
 function renderStorageStatus(storage) {
   const host = $('#mcp-storage-status');
