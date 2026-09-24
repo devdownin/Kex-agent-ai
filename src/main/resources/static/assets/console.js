@@ -6,8 +6,8 @@
 // chaînes pour une poignée de fichiers statiques.
 
 import {
-  $, ago, api, confirmAction, credentials, drawerOpen, el, onCredentialChange, onUnauthorized, refreshFreshnessTag,
-  report, restoreDrawerFromUrl, stamp, toast, viewName,
+  $, ago, api, confirmAction, credentials, drawerOpen, el, onCredentialChange, onUnauthorized, operatorContext,
+  refreshFreshnessTag, report, restoreDrawerFromUrl, setOperatorContext, stamp, toast, viewName,
 } from './core.js';
 import * as automations from './automations.js';
 import * as channels from './channels.js';
@@ -24,6 +24,7 @@ const VIEWS = {
   overview: { title: 'Vue d’ensemble', load: supervision.overview },
   attention: { title: 'À traiter', load: supervision.attentionView },
   incidents: { title: 'Cockpit incident', load: supervision.incidents },
+  activity: { title: 'Activité', load: supervision.activity },
   // La gouvernance (charte, compétences) est une lecture indépendante de l'état de l'agent :
   // l'une ne doit pas retarder l'autre, comme pour la configuration plus bas.
   agent: { title: 'Agent', load: () => Promise.all([supervision.agent(), skills.governance(),
@@ -98,6 +99,8 @@ function renderBadges(data) {
   badge('#nav-attention', (data?.pendingApprovals || 0) + (data?.anomaliesDetected || 0));
   if (data?.agent) renderStatus(data.agent);
   renderOnboarding(data);
+  syncOperatorContext(data);
+  applyDashboardLayout();
   renderNotifications(data);
   renderComparison(data);
 }
@@ -172,32 +175,52 @@ function comparisonMetric(label, value, state) {
   return node;
 }
 
-function renderOnboarding(data) {
+let capabilityProbe = null;
+let capabilityProbeAt = 0;
+
+async function platformCapabilities() {
+  if (capabilityProbe && Date.now() - capabilityProbeAt < 30_000) return capabilityProbe;
+  const [mcp, automations, kafka] = await Promise.all([
+    api('/api/agent/mcp/servers').then((rows) => ({ supported: true, ready: rows.length > 0 })).catch(() => ({ supported: true, ready: false })),
+    api('/api/agent/automations').then((rows) => ({ supported: true, ready: rows.length > 0 }))
+      .catch((error) => ({ supported: error.status !== 404, ready: false })),
+    api('/api/agent/kafka/topics').then((value) => ({ supported: true, ready: !value?.unavailable }))
+      .catch(() => ({ supported: true, ready: false })),
+  ]);
+  capabilityProbe = { mcp, automations, kafka };
+  capabilityProbeAt = Date.now();
+  return capabilityProbe;
+}
+
+async function renderOnboarding(data) {
   const host = $('#onboarding');
   if (!host || !data) return;
+  const capabilities = await platformCapabilities();
   const steps = [
-    { done: Boolean(credentials.get()), label: 'Connecter le jeton API', href: null, action: openCredentials },
+    { done: Boolean(credentials.get()), label: 'Connecter le jeton API', action: openCredentials },
     { done: data.processesMonitored > 0, label: 'Déclarer les processus surveillés', href: '#/settings' },
     { done: Boolean(data.agent?.lastCycleAt), label: 'Exécuter le premier cycle', action: runCycle },
+    { done: capabilities.mcp.ready, label: 'Ajouter une connexion MCP externe', href: '#/integrations' },
+    { done: capabilities.kafka.ready, label: 'Connecter Kafka', href: '#/integrations' },
+    ...(capabilities.automations.supported
+      ? [{ done: capabilities.automations.ready, label: 'Créer une première automatisation', href: '#/agent' }]
+      : []),
   ];
-  const complete = steps.filter((step) => step.done).length;
-  host.hidden = complete === steps.length;
+  const incomplete = steps.filter((step) => !step.done);
+  host.hidden = incomplete.length === 0;
   if (host.hidden) return;
-  $('#onboarding-progress').textContent = `${complete}/${steps.length}`;
+  $('#onboarding-progress').textContent = `${steps.length - incomplete.length}/${steps.length}`;
   const list = $('#onboarding-steps');
-  list.replaceChildren(...steps.map((step, index) => {
-    const item = el('div', step.done ? 'onboarding-step done' : 'onboarding-step');
-    item.append(el('span', 'onboarding-mark', step.done ? '✓' : String(index + 1)));
-    item.append(el('span', 'strong', step.label));
-    if (!step.done) {
-      const action = el(step.href ? 'a' : 'button', 'ghost', 'Configurer');
-      if (step.href) action.href = step.href;
-      else {
-        action.type = 'button';
-        action.addEventListener('click', step.action);
-      }
-      item.append(action);
+  list.replaceChildren(...incomplete.map((step, index) => {
+    const item = el('div', 'onboarding-step');
+    item.append(el('span', 'onboarding-mark', String(index + 1)), el('span', 'strong', step.label));
+    const action = el(step.href ? 'a' : 'button', 'ghost', 'Configurer');
+    if (step.href) action.href = step.href;
+    else {
+      action.type = 'button';
+      action.addEventListener('click', step.action);
     }
+    item.append(action);
     return item;
   }));
 }
@@ -206,6 +229,104 @@ function badge(selector, count) {
   const node = $(selector);
   node.textContent = String(count ?? 0);
   node.hidden = !count;
+}
+
+/* ── Contexte opérateur et tableau de bord ───────────────────────────── */
+
+const DASHBOARD_DEFAULT = ['hero', 'kpis', 'onboarding', 'incidents', 'comparison', 'brief', 'operations', 'timeline'];
+const DASHBOARD_LABELS = {
+  hero: 'Synthèse globale', kpis: 'Indicateurs clés', onboarding: 'Configuration restante',
+  incidents: 'Incidents', comparison: 'Comparaison de cycles', brief: 'Synthèse de l’agent',
+  operations: 'Processus et décisions', timeline: 'Dernier cycle',
+};
+
+function dashboardLayout() {
+  const saved = readJson('kex.agent.dashboard-layout', null);
+  if (!saved) return DASHBOARD_DEFAULT.map((id) => ({ id, visible: true }));
+  const known = new Map(saved.map((item) => [item.id, item]));
+  return DASHBOARD_DEFAULT.map((id) => known.get(id) || { id, visible: true });
+}
+
+function saveDashboardLayout(layout) {
+  writeJson('kex.agent.dashboard-layout', layout);
+  applyDashboardLayout();
+  renderDashboardCustomizer();
+}
+
+function applyDashboardLayout() {
+  dashboardLayout().forEach((item, index) => {
+    const node = document.querySelector(`#view-overview [data-dashboard-block="${item.id}"]`);
+    if (!node) return;
+    node.style.order = String(index + 1);
+    node.classList.toggle('dashboard-user-hidden', !item.visible);
+  });
+}
+
+function renderDashboardCustomizer() {
+  const host = $('#dashboard-customizer-panel');
+  if (!host) return;
+  const layout = dashboardLayout();
+  host.replaceChildren(...layout.map((item, index) => {
+    const row = el('div', 'dashboard-customizer-row');
+    const label = el('label', 'choice');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox'; checkbox.checked = item.visible;
+    checkbox.addEventListener('change', () => {
+      layout[index].visible = checkbox.checked;
+      saveDashboardLayout(layout);
+    });
+    label.append(checkbox, el('span', null, DASHBOARD_LABELS[item.id] || item.id));
+    const actions = el('span', 'dashboard-order-actions');
+    const up = el('button', 'ghost compact', '↑'); up.type = 'button'; up.disabled = index === 0;
+    const down = el('button', 'ghost compact', '↓'); down.type = 'button'; down.disabled = index === layout.length - 1;
+    up.setAttribute('aria-label', `Monter ${DASHBOARD_LABELS[item.id]}`);
+    down.setAttribute('aria-label', `Descendre ${DASHBOARD_LABELS[item.id]}`);
+    up.addEventListener('click', () => {
+      [layout[index - 1], layout[index]] = [layout[index], layout[index - 1]];
+      saveDashboardLayout(layout);
+    });
+    down.addEventListener('click', () => {
+      [layout[index + 1], layout[index]] = [layout[index], layout[index + 1]];
+      saveDashboardLayout(layout);
+    });
+    actions.append(up, down); row.append(label, actions); return row;
+  }));
+}
+
+function syncOperatorContext(data) {
+  const select = $('#context-process');
+  if (!select || !data?.processes) return;
+  const current = operatorContext();
+  const existing = new Set([...select.options].map((option) => option.value));
+  for (const process of data.processes) {
+    if (existing.has(process.processId)) continue;
+    const option = document.createElement('option');
+    option.value = process.processId; option.textContent = process.name || process.processId;
+    select.append(option);
+  }
+  select.value = current.process || '';
+  $('#context-period').value = current.period || '1h';
+}
+
+function wireOperatorContext() {
+  const current = operatorContext();
+  $('#context-process').value = current.process || '';
+  $('#context-period').value = current.period || '1h';
+  $('#context-process').addEventListener('change', (event) => {
+    setOperatorContext({ process: event.target.value });
+    reload();
+  });
+  $('#context-period').addEventListener('change', (event) => {
+    setOperatorContext({ period: event.target.value });
+    reload();
+  });
+  $('#context-reset').addEventListener('click', () => {
+    setOperatorContext({ process: '', period: '1h' });
+    syncOperatorContext(supervision.current());
+    reload();
+  });
+  renderDashboardCustomizer();
+  applyDashboardLayout();
 }
 
 /* ── Pilotage ──────────────────────────────────────────────────────────── */
@@ -700,7 +821,9 @@ llm.wire();
 skills.wire();
 automations.wire();
 chat.wire(openCredentials);
+wireOperatorContext();
 
+$('#refresh-activity')?.addEventListener('click', supervision.activity);
 $('#run-cycle').addEventListener('click', runCycle);
 $('#toggle-pause').addEventListener('click', togglePause);
 $('#open-credentials').addEventListener('click', openCredentials);

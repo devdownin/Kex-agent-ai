@@ -5,8 +5,8 @@
 // bord métier n'en soit pas saturé — les signaux bruts sont au second niveau, jamais au premier.
 
 import {
-  $, api, busy, circuitStateTag, confirmAction, definition, el, empty, exampleFromSchema, freshnessTag,
-  openDrawer, params, registerDrawer, render, report, schemaErrors, setDrawerParam, setParams, stateTag, toast,
+  $, ago, api, busy, circuitStateTag, confirmAction, definition, el, empty, exampleFromSchema, freshnessTag,
+  openDrawer, params, registerDrawer, render, report, schemaErrors, setDrawerParam, setParams, stamp, stateTag, toast,
 } from './core.js';
 import * as kafka from './kafka.js';
 import * as knowledge from './knowledge.js';
@@ -63,8 +63,75 @@ export async function servers() {
     lastMetrics = metrics;
     lastServersAt = new Date().toISOString();
     renderStorageStatus(storage);
+    renderMcpCockpit();
     return lastServers;
   }, renderServers);
+}
+
+function connectionState(server) {
+  const managed = runtimeServers.get(server.connection);
+  if (managed && !managed.enabled) return { state: 'UNKNOWN', label: 'Désactivée' };
+  if (server.circuitBreakerState === 'OPEN' || server.circuitBreakerState === 'FORCED_OPEN') {
+    return { state: 'ERROR', label: 'Indisponible' };
+  }
+  if (!server.initialized || server.circuitBreakerState === 'HALF_OPEN') {
+    return { state: 'WARNING', label: server.initialized ? 'Dégradée' : 'Non initialisée' };
+  }
+  return { state: 'OK', label: 'Opérationnelle' };
+}
+
+function connectionMetrics(connection) {
+  const metrics = lastMetrics.filter((item) => item.connection === connection);
+  return {
+    calls: metrics.reduce((sum, item) => sum + Number(item.callCount || 0), 0),
+    p95: metrics.map((item) => item.p95DurationMs ?? item.p95LatencyMs).filter((value) => value != null)
+      .reduce((max, value) => Math.max(max, Number(value)), 0),
+    last: metrics.map((item) => item.lastCallAt || item.lastActivityAt).filter(Boolean)
+      .sort().at(-1) || null,
+  };
+}
+
+function renderMcpCockpit() {
+  const host = $('#mcp-connection-cockpit');
+  if (!host) return;
+  if (!lastServers.length) {
+    host.replaceChildren(empty('Aucune connexion MCP.',
+      'Ajoutez une connexion pour rendre des outils externes disponibles à l’agent.',
+      { label: 'Ajouter une connexion', onClick: () => openEditor() }));
+    return;
+  }
+  const states = lastServers.map((server) => connectionState(server));
+  const ok = states.filter((item) => item.state === 'OK').length;
+  const degraded = states.filter((item) => item.state !== 'OK').length;
+  const summary = el('div', 'mcp-cockpit-summary');
+  summary.append(el('strong', null, `${lastServers.length} connexion${lastServers.length > 1 ? 's' : ''}`),
+    stateTag(ok === lastServers.length ? 'OK' : 'WARNING', `${ok} OK`));
+  if (degraded) summary.append(stateTag('WARNING', `${degraded} à vérifier`));
+  if (lastServersAt) summary.append(freshnessTag(lastServersAt, 'Relevé', 45_000));
+
+  const table = el('table', 'grid mcp-cockpit-table');
+  const head = el('thead'); const row = el('tr');
+  ['Connexion', 'État', 'Sessions', 'Appels', 'p95', 'Dernière activité', ''].forEach((label) => row.append(el('th', null, label)));
+  head.append(row); table.append(head);
+  const body = el('tbody');
+  lastServers.forEach((server) => {
+    const line = el('tr');
+    const state = connectionState(server);
+    const metrics = connectionMetrics(server.connection);
+    line.append(el('td', 'strong', server.connection), el('td', null));
+    line.cells[1].append(stateTag(state.state, state.label));
+    line.append(el('td', 'muted', '—'));
+    line.append(el('td', 'mono', String(metrics.calls)));
+    line.append(el('td', 'mono', metrics.p95 ? `${Math.round(metrics.p95)} ms` : '—'));
+    const activity = el('td', 'muted', metrics.last ? (ago(metrics.last) || stamp(metrics.last)) : '—');
+    line.append(activity);
+    const action = el('td'); const details = el('button', 'ghost compact', 'Détails');
+    details.type = 'button'; details.addEventListener('click', () => openServerDrawer(server));
+    action.append(details); line.append(action); body.append(line);
+  });
+  table.append(body);
+  const scroll = el('div', 'scroll-x'); scroll.append(table);
+  host.replaceChildren(summary, scroll);
 }
 
 function renderServers(list) {

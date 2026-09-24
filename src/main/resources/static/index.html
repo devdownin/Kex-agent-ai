@@ -50,6 +50,9 @@
       <a class="nav-item" href="#/chat" data-view="chat" aria-label="Conversation">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4.5 5.5h15v11h-9.2L6 20v-3.5H4.5Z"/></svg>
         Conversation</a>
+      <a class="nav-item" href="#/activity" data-view="activity" aria-label="Activité">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 12h3l2-5 4 10 2-5h3"/><circle cx="12" cy="12" r="9"/></svg>
+        Activité</a>
       <a class="nav-item nav-secondary" href="#/alerts" data-view="alerts" aria-label="Alertes">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 4 21 19H3Z"/><path d="M12 10.3v3.4"/></svg>
         Alertes <span class="badge" id="nav-alerts" hidden>0</span></a>
@@ -145,11 +148,30 @@
     <p class="offline" id="offline" role="status" hidden>
       Navigateur hors ligne — ce qui est affiché date de la dernière connexion.
     </p>
+    <section class="operator-context" id="operator-context" aria-label="Contexte opérateur">
+      <span class="context-scope">Instance courante</span>
+      <label>Processus
+        <select id="context-process"><option value="">Tous</option></select>
+      </label>
+      <label>Période
+        <select id="context-period">
+          <option value="15m">15 min</option><option value="1h">1 h</option>
+          <option value="24h">24 h</option><option value="7d">7 jours</option><option value="all">Tout</option>
+        </select>
+      </label>
+      <button type="button" class="ghost compact" id="context-reset">Réinitialiser</button>
+    </section>
 
 
     <!-- ══ Vue d'ensemble ══ -->
     <section class="view" id="view-overview" hidden>
-      <section class="overview-hero" aria-labelledby="overview-title">
+      <div class="overview-customizer">
+        <details id="dashboard-customizer">
+          <summary class="ghost">Personnaliser le tableau de bord</summary>
+          <div class="dashboard-customizer-panel" id="dashboard-customizer-panel"></div>
+        </details>
+      </div>
+      <section class="overview-hero" data-dashboard-block="hero" aria-labelledby="overview-title">
         <div class="hero-copy">
           <span class="hero-eyebrow">Centre de supervision</span>
           <h1 id="overview-title">Kex veille sur vos processus</h1>
@@ -163,20 +185,20 @@
           </span>
         </div>
       </section>
-      <div class="kpis" id="kpis"></div>
-      <section class="panel onboarding" id="onboarding" hidden>
+      <div class="kpis" id="kpis" data-dashboard-block="kpis"></div>
+      <section class="panel onboarding" id="onboarding" data-dashboard-block="onboarding" hidden>
         <div class="panel-head">
           <div><span class="panel-kicker">Premiers pas</span><h2>Configurer votre centre de contrôle</h2></div>
           <span class="onboarding-progress" id="onboarding-progress"></span>
         </div>
         <div class="onboarding-steps" id="onboarding-steps"></div>
       </section>
-      <div id="incident-banner"></div>
-      <section class="panel cycle-comparison" id="cycle-comparison" hidden>
+      <div id="incident-banner" data-dashboard-block="incidents"></div>
+      <section class="panel cycle-comparison" id="cycle-comparison" data-dashboard-block="comparison" hidden>
         <div class="panel-head"><h2>Depuis le cycle précédent</h2><span class="muted" id="comparison-time"></span></div>
         <div class="comparison-grid" id="comparison-grid"></div>
       </section>
-      <section class="panel agent-brief-panel">
+      <section class="panel agent-brief-panel" data-dashboard-block="brief">
         <div class="panel-head">
           <div>
             <span class="panel-kicker">Synthèse de l’agent</span>
@@ -186,7 +208,7 @@
         </div>
         <div id="agent-brief"></div>
       </section>
-      <div class="split">
+      <div class="split" data-dashboard-block="operations">
         <section class="panel">
           <div class="panel-head">
             <h1>Processus surveillés</h1>
@@ -199,10 +221,22 @@
           <div id="overview-attention" data-skeleton="list"></div>
         </section>
       </div>
-      <section class="panel">
+      <section class="panel" data-dashboard-block="timeline">
         <div class="panel-head"><h2>Déroulé du dernier cycle</h2></div>
         <div class="cycle-live" id="cycle-live" role="status" aria-live="polite" hidden></div>
         <div id="overview-timeline"></div>
+      </section>
+    </section>
+
+    <!-- ══ Activité ══ -->
+    <section class="view" id="view-activity" hidden>
+      <section class="workspace-heading">
+        <div><span class="panel-kicker">Chronologie opérationnelle</span><h1>Activité</h1>
+          <p>Alertes, décisions, actions et changements d’état réunis dans un seul fil.</p></div>
+        <button type="button" class="ghost" id="refresh-activity">Actualiser</button>
+      </section>
+      <section class="panel">
+        <div id="activity-timeline" data-skeleton="list"></div>
       </section>
     </section>
 
@@ -591,9 +625,9 @@
       <section class="workspace-heading">
         <div><span class="panel-kicker">Plateforme</span><h1>Intégrations</h1><p>Connexions externes utilisées par l’agent pour observer et agir.</p></div>
       </section>
-      <section class="panel">
+      <section class="panel mcp-cockpit-panel">
         <div class="panel-head">
-          <h1>Connexions MCP</h1>
+          <div><span class="panel-kicker">Cockpit MCP</span><h1>Connexions MCP</h1></div>
           <div class="panel-actions">
             <button type="button" class="ghost" id="import-mcp">Importer</button>
             <button type="button" class="ghost" id="export-mcp">Exporter</button>
@@ -603,6 +637,7 @@
           </div>
         </div>
         <p class="hint">Serveurs MCP externes consommés par Kex. Le serveur MCP Kex exposé aux clients se configure séparément.</p>
+        <div id="mcp-connection-cockpit" class="mcp-connection-cockpit"></div>
         <div class="mcp-storage-status" id="mcp-storage-status" aria-live="polite"></div>
         <input type="file" id="mcp-import-file" accept="application/json" aria-label="Importer une configuration MCP" hidden>
         <label class="sr-only" for="tools-search">Rechercher un serveur ou un outil</label>

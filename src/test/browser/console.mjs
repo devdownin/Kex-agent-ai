@@ -150,7 +150,7 @@ await check('la navigation latérale se replie, reste découvrable et mémorise 
   await page.reload({ waitUntil: 'domcontentloaded' });
 
   assert.equal(await page.$eval('html', (node) => node.dataset.rail), 'expanded');
-  const labels = await page.$eval('.nav-item', (nodes) => nodes.map((node) => ({
+  const labels = await page.$$eval('.nav-item', (nodes) => nodes.map((node) => ({
     aria: node.getAttribute('aria-label'), title: node.getAttribute('title'),
   })));
   assert.ok(labels.every((item) => item.aria && item.title === item.aria),
@@ -491,6 +491,8 @@ await check('le diagnostic MCP distingue ajout, suppression et changement de sch
 });
 
 await check('la base de connaissance affiche un état désactivé sans le confondre avec une panne', async () => {
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/knowledge`, { waitUntil: 'domcontentloaded' });
   // kex.agent.knowledge.enabled vaut false par défaut et la CI ne le change pas : la route répond
   // réellement 404 ici, sans simulation — le cas exact que le piège documenté (une route éteinte
   // n'est pas une panne) couvre.
@@ -1185,6 +1187,70 @@ await check('un canal actif se distingue d’un canal inactif', async () => {
   await page.unroute('**/api/agent/channels/status');
 });
 
+
+await check('le tableau de bord se personnalise et conserve la visibilité des blocs', async () => {
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.click('#dashboard-customizer > summary');
+  await page.waitForSelector('#dashboard-customizer-panel');
+  const briefChoice = page.locator('#dashboard-customizer-panel label', { hasText: 'Synthèse de l’agent' }).locator('input');
+  await briefChoice.evaluate((input) => {
+    input.checked = false;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.waitForFunction(() => document.querySelector('.agent-brief-panel')?.classList.contains('dashboard-user-hidden'));
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('kex.agent.dashboard-layout')));
+  assert.equal(stored.find((item) => item.id === 'brief').visible, false);
+  await briefChoice.evaluate((input) => {
+    input.checked = true;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+});
+
+await check('le contexte opérateur est persistant et réinitialisable', async () => {
+  await page.selectOption('#context-period', 'all');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('kex.agent.operator-context')).period), 'all');
+  await page.click('#context-reset');
+  assert.equal(await page.inputValue('#context-period'), '1h');
+});
+
+await check('la vue Activité réunit les événements opérationnels', async () => {
+  await page.goto(`${BASE}/#/activity`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => document.querySelector('#activity-timeline')?.children.length > 0);
+  const text = await page.textContent('#activity-timeline');
+  assert.ok(text.trim().length > 0);
+});
+
+await check('le cockpit MCP synthétise les connexions et leurs métriques', async () => {
+  await page.route('**/api/agent/mcp/servers', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify([{
+      connection: 'ops-demo', initialized: true, serverName: 'demo', version: '1',
+      protocolVersion: '2025-06-18', circuitBreakerState: 'CLOSED', tools: [{ name: 'status', description: 'Status' }],
+    }]),
+  }));
+  await page.route('**/api/agent/mcp/metrics', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify([{
+      connection: 'ops-demo', tool: 'status', callCount: 4, averageDurationMs: 12, p95DurationMs: 19,
+      lastCallAt: new Date().toISOString(),
+    }]),
+  }));
+  await page.route('**/api/agent/mcp/runtime-servers', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: '[]',
+  }));
+  await page.route('**/api/agent/mcp/storage', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: 'null',
+  }));
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/integrations`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#mcp-connection-cockpit table');
+  const cockpit = await page.textContent('#mcp-connection-cockpit');
+  assert.match(cockpit, /1 connexion/);
+  assert.match(cockpit, /ops-demo/);
+  assert.match(cockpit, /4/);
+  await page.unroute('**/api/agent/mcp/servers');
+  await page.unroute('**/api/agent/mcp/metrics');
+  await page.unroute('**/api/agent/mcp/runtime-servers');
+  await page.unroute('**/api/agent/mcp/storage');
+});
 
 await check('aucune erreur de script sur le parcours', () => {
   if (scriptErrors.length) console.error('Erreurs navigateur capturées :', JSON.stringify(scriptErrors, null, 2));

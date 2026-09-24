@@ -5,8 +5,8 @@
 
 import {
   $, ago, api, busy, circuitBreakersValue, clockTime, confirmAction, definition, dismissDrawer,
-  downloadCsv, drawerOpen, duration, el, empty, errorState, frag, freshnessTag, loading, openDrawer, params,
-  percent, registerDrawer, render, report, setParams, skeleton, sortable, sparkline, stamp, stateMark,
+  downloadCsv, drawerOpen, duration, el, empty, errorState, frag, freshnessTag, inOperatorPeriod, loading,
+  openDrawer, operatorContext, params, percent, registerDrawer, render, report, setParams, skeleton, sortable, sparkline, stamp, stateMark,
   stateTag, toast,
 } from './core.js';
 
@@ -105,13 +105,44 @@ export async function refresh() {
 
 export const current = () => snapshot;
 
+function matchesOperatorProcess(item, context) {
+  if (!context.process) return true;
+  return item.processId === context.process || item.id === context.process;
+}
+
+function operatorTimestamp(item) {
+  return item.lastRun || item.lastSeenAt || item.firstSeenAt || item.decidedAt || item.resolvedAt
+    || item.createdAt || item.at || item.expiresAt;
+}
+
+function contextual(data) {
+  const context = operatorContext();
+  const processes = (data.processes || []).filter((item) =>
+    matchesOperatorProcess(item, context) && inOperatorPeriod(item.lastRun, context));
+  const alerts = (data.alerts || []).filter((item) =>
+    matchesOperatorProcess(item, context) && inOperatorPeriod(operatorTimestamp(item), context));
+  const pending = (data.pending || []).filter((item) =>
+    matchesOperatorProcess(item, context) && inOperatorPeriod(operatorTimestamp(item), context));
+  if (!context.process && context.period === 'all') return data;
+  return {
+    ...data, processes, alerts, pending,
+    processesMonitored: processes.length,
+    processesOk: processes.filter((item) => item.state === 'OK').length,
+    processesWarning: processes.filter((item) => item.state === 'WARNING').length,
+    processesError: processes.filter((item) => item.state === 'ERROR').length,
+    processesUnknown: processes.filter((item) => item.state === 'UNKNOWN').length,
+    anomaliesDetected: alerts.length,
+    pendingApprovals: pending.length,
+  };
+}
+
 /* ── Vue d'ensemble ────────────────────────────────────────────────────── */
 
 export async function overview() {
   const host = $('#kpis');
   host.replaceChildren(skeleton('kpis', 'Analyse des processus…'));
   try {
-    const data = await refresh();
+    const data = contextual(await refresh());
     renderOverviewHero(data);
     $('#agent-brief').replaceChildren(agentBrief(data));
     host.replaceChildren(kpis(data));
@@ -183,7 +214,7 @@ export function liveCycle(progress) {
 /* ── File d'action ─────────────────────────────────────────────────────── */
 
 export async function attentionView() {
-  await render($('#attention-workspace'), refresh, (data) => {
+  await render($('#attention-workspace'), async () => contextual(await refresh()), (data) => {
     const severity = { ERROR: 0, WARNING: 1, UNKNOWN: 2, OK: 3 };
     const pending = [...(data.pending || [])].sort((a, b) => {
       const left = a.expiresAt ? new Date(a.expiresAt).getTime() : Number.MAX_SAFE_INTEGER;
@@ -229,8 +260,10 @@ export async function attentionView() {
 
 export async function incidents() {
   await render($('#incident-workspace'), async () => {
-    const data = await refresh();
-    const history = await api(`${BASE}/decisions`).catch(() => data.pending || []);
+    const data = contextual(await refresh());
+    const context = operatorContext();
+    const history = (await api(`${BASE}/decisions`).catch(() => data.pending || []))
+      .filter((item) => matchesOperatorProcess(item, context) && inOperatorPeriod(operatorTimestamp(item), context));
     return { data, history };
   }, ({ data, history }) => incidentWorkspace(data, history));
 }
@@ -589,7 +622,8 @@ function timeline(cycle) {
 /* ── Processus ─────────────────────────────────────────────────────────── */
 
 export async function processes() {
-  await render($('#processes-table'), refresh, (data) => processTable(filtered(data.processes), openProcess));
+  await render($('#processes-table'), async () => contextual(await refresh()),
+    (data) => processTable(filtered(data.processes), openProcess));
 }
 
 // Lus dans l'URL, pas dans une variable de module : un rechargement ou un lien partagé retrouve
@@ -1034,13 +1068,16 @@ async function resolveDecision(decision, approve) {
 }
 
 export async function decisions() {
+  const context = operatorContext();
   await render($('#decisions-list'), () => api(`${BASE}/decisions`), (rows) => {
     const state = params().get('decisionEtat') || stored(DECISION_FILTER_STORAGE, 'ALL');
-    const matching = rows.filter((decision) => state === 'ALL'
+    const scoped = rows.filter((decision) =>
+      matchesOperatorProcess(decision, context) && inOperatorPeriod(operatorTimestamp(decision), context));
+    const matching = scoped.filter((decision) => state === 'ALL'
       || (state === 'PENDING' && decision.status === 'PENDING_APPROVAL')
       || (state === 'FAILED' && ['FAILED', 'EXPIRED'].includes(decision.status))
       || (state === 'RESOLVED' && ['EXECUTED', 'REJECTED', 'BLOCKED', 'SIMULATED'].includes(decision.status)));
-    if (!rows.length) return empty('Aucune décision.', 'Elles apparaîtront après un cycle d’analyse.',
+    if (!scoped.length) return empty('Aucune décision dans ce contexte.', 'Élargissez la période ou choisissez tous les processus.',
       { href: '#/overview', label: 'Lancer une analyse' });
     if (!matching.length) return empty('Aucune décision dans cette vue.', 'Choisissez un autre filtre.');
     const list = el('div', 'cards wide');
@@ -1224,7 +1261,10 @@ function decisionSection(title) {
 /* ── Alertes ───────────────────────────────────────────────────────────── */
 
 export async function alerts() {
+  const context = operatorContext();
   await render($('#alerts-list'), () => api(`${BASE}/alerts`), (items) => {
+    items = items.filter((item) =>
+      matchesOperatorProcess(item, context) && inOperatorPeriod(operatorTimestamp(item), context));
     if (!items.length) {
       return empty('Aucune alerte active.',
         'Une alerte que le dernier cycle ne revoit plus a cessé d’être vraie et sort de cette liste.',
@@ -1279,8 +1319,12 @@ export async function alerts() {
 
 export async function audit() {
   const query = (params().get('q') || '').toLowerCase();
+  const context = operatorContext();
   await render($('#audit-table'), () => api(`${BASE}/audit`), (rows) => {
-    const matching = rows.filter((row) => !query || JSON.stringify(row).toLowerCase().includes(query));
+    const matching = rows.filter((row) =>
+      matchesOperatorProcess(row, context)
+      && inOperatorPeriod(row.at, context)
+      && (!query || JSON.stringify(row).toLowerCase().includes(query)));
     if (!matching.length) return empty('Aucune entrée d’audit.', 'Chaque décision et chaque changement y laisse une trace.');
     const table = el('table', 'grid');
     const head = el('thead');
@@ -1306,6 +1350,57 @@ export async function audit() {
     const scroll = el('div', 'scroll-x');
     scroll.append(sortable(table));
     return scroll;
+  });
+}
+
+/* ── Activité opérationnelle ─────────────────────────────────────────── */
+
+export async function activity() {
+  const host = $('#activity-timeline');
+  await render(host, async () => {
+    const [data, auditRows] = await Promise.all([refresh(), api(`${BASE}/audit`).catch(() => [])]);
+    const scoped = contextual(data);
+    const context = operatorContext();
+    return { data: scoped, audit: auditRows.filter((row) =>
+      matchesOperatorProcess(row, context) && inOperatorPeriod(row.at, context)) };
+  }, ({ data, audit: auditRows }) => {
+    const events = [
+      ...(data.alerts || []).map((item) => ({
+        at: item.lastSeenAt || item.firstSeenAt, state: item.severity,
+        title: item.title, detail: `Alerte · ${item.processName || item.processId || 'processus'}`,
+        href: `#/alerts?alerte=${encodeURIComponent(item.id)}`,
+      })),
+      ...(data.pending || []).map((item) => ({
+        at: item.createdAt || item.decidedAt || item.expiresAt, state: 'PENDING',
+        title: item.action || item.objective || 'Décision à valider',
+        detail: `Décision · ${item.processName || item.processId || 'processus'}`,
+        href: `#/decisions?decision=${encodeURIComponent(item.id)}`,
+      })),
+      ...auditRows.map((row) => ({
+        at: row.at, state: row.result === 'FAILED' ? 'ERROR' : 'OK',
+        title: row.action || 'Action opérateur',
+        detail: [row.actor, row.processId, row.result].filter(Boolean).join(' · '),
+        href: '#/audit',
+      })),
+    ].filter((item) => item.at)
+      .sort((a, b) => new Date(b.at) - new Date(a.at))
+      .slice(0, 100);
+
+    if (!events.length) {
+      return empty('Aucune activité dans ce contexte.',
+        'Élargissez la période ou choisissez tous les processus.');
+    }
+    const list = el('ol', 'activity-stream');
+    events.forEach((event) => {
+      const item = el('li', 'activity-event');
+      item.append(stateTag(event.state || 'UNKNOWN'));
+      const copy = el('div', 'activity-event-copy');
+      const link = el('a', 'strong', event.title); link.href = event.href;
+      copy.append(link, el('span', 'muted', event.detail || '—'));
+      item.append(copy, el('time', 'muted', ago(event.at) || stamp(event.at)));
+      list.append(item);
+    });
+    return list;
   });
 }
 

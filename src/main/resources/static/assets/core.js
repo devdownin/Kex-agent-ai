@@ -256,12 +256,29 @@ function relativeDates() {
   }
 }
 
-export const clockTime = (iso) => (iso ? (relativeDates() ? ago(iso) : CLOCK.format(new Date(iso))) : '—');
-export const stamp = (iso) => (iso ? (relativeDates() ? ago(iso) : STAMP.format(new Date(iso))) : '—');
+function safeDate(iso) {
+  if (!iso) return null;
+  const date = new Date(iso);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+export const clockTime = (iso) => {
+  const date = safeDate(iso);
+  if (!date) return '—';
+  return relativeDates() ? (ago(iso) || '—') : CLOCK.format(date);
+};
+
+export const stamp = (iso) => {
+  const date = safeDate(iso);
+  if (!date) return '—';
+  return relativeDates() ? (ago(iso) || '—') : STAMP.format(date);
+};
 
 export function ago(iso) {
   if (!iso) return null;
-  const seconds = Math.round((new Date(iso).getTime() - Date.now()) / 1000);
+  const instant = new Date(iso).getTime();
+  if (!Number.isFinite(instant)) return null;
+  const seconds = Math.round((instant - Date.now()) / 1000);
   const units = [
     [60, 'second'],
     [3600, 'minute'],
@@ -421,6 +438,32 @@ export function circuitBreakersValue(circuitBreakers) {
     wrap.append(circuitStateTag(breaker.state, `${breaker.name} : ${breaker.state}`));
   });
   return wrap;
+}
+
+/* ── Contexte opérateur global ─────────────────────────────────────────── */
+
+const OPERATOR_CONTEXT_KEY = 'kex.agent.operator-context';
+
+export function operatorContext() {
+  try {
+    return { process: '', period: '1h', ...(JSON.parse(localStorage.getItem(OPERATOR_CONTEXT_KEY)) || {}) };
+  } catch {
+    return { process: '', period: '1h' };
+  }
+}
+
+export function setOperatorContext(changes) {
+  const next = { ...operatorContext(), ...changes };
+  try { localStorage.setItem(OPERATOR_CONTEXT_KEY, JSON.stringify(next)); } catch { /* préférence locale */ }
+  dispatchEvent(new CustomEvent('kex:operator-context', { detail: next }));
+  return next;
+}
+
+export function inOperatorPeriod(iso, context = operatorContext()) {
+  if (!iso || context.period === 'all') return true;
+  const windows = { '15m': 15 * 60_000, '1h': 60 * 60_000, '24h': 24 * 60 * 60_000, '7d': 7 * 24 * 60 * 60_000 };
+  const window = windows[context.period];
+  return !window || Date.now() - new Date(iso).getTime() <= window;
 }
 
 /* ── Paramètres d'écran dans l'URL ─────────────────────────────────────── */
