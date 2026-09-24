@@ -224,7 +224,23 @@ body {
   text-align: center;
 }
 
-.rail-foot { margin-top: auto; display: flex; gap: 8px; }
+.rail-foot { margin-top: auto; display: flex; gap: 8px; align-items: center; }
+.rail-caption { min-width: 0; color: var(--rail-muted); font-size: 11px; }
+.rail-toggle { margin-left: auto; flex: none !important; display: inline-flex; align-items: center; gap: 6px; }
+
+:root[data-rail="collapsed"] { --rail: 72px; }
+:root[data-rail="collapsed"] .brand { justify-content: center; }
+:root[data-rail="collapsed"] .brand-text,
+:root[data-rail="collapsed"] .nav-section,
+:root[data-rail="collapsed"] .rail nav hr,
+:root[data-rail="collapsed"] .nav-item > :not(.nav-ico):not(.badge),
+:root[data-rail="collapsed"] .rail-caption,
+:root[data-rail="collapsed"] .rail-toggle-label { display: none; }
+:root[data-rail="collapsed"] .rail { padding-inline: 10px; }
+:root[data-rail="collapsed"] .nav-item { justify-content: center; padding-inline: 10px; position: relative; }
+:root[data-rail="collapsed"] .nav-item .badge { position: absolute; top: 3px; right: 2px; min-width: 17px; padding-inline: 4px; }
+:root[data-rail="collapsed"] .rail-foot { justify-content: center; }
+:root[data-rail="collapsed"] .rail-toggle { margin-left: 0; }
 .rail-foot > * { flex: 1; text-align: center; text-decoration: none; }
 .rail-foot .ghost { color: #cbd5e1; background: var(--rail-surface); border-color: rgb(255 255 255 / 10%); }
 
@@ -1539,6 +1555,7 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   .rail nav hr, .nav-section { display: none; }
   .nav-item { white-space: nowrap; }
   .brand, .rail-foot { display: none; }
+  :root[data-rail="collapsed"] { --rail: 0px; }
   .topbar { position: sticky; top: 0; }
   .topbar-right { width: 100%; }
   .topbar-right .status { order: -1; }
