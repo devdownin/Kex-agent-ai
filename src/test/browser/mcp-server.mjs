@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 import assert from 'node:assert/strict';
-import { chromium } from process.env.PLAYWRIGHT_MODULE;
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE);
 const BASE = process.env.KEX_AGENT_URL || 'http://localhost:8081';
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
