@@ -256,12 +256,28 @@ function relativeDates() {
   }
 }
 
-export const clockTime = (iso) => (iso ? (relativeDates() ? ago(iso) : CLOCK.format(new Date(iso))) : '—');
-export const stamp = (iso) => (iso ? (relativeDates() ? ago(iso) : STAMP.format(new Date(iso))) : '—');
+function validDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+export const clockTime = (iso) => {
+  const date = validDate(iso);
+  if (!date) return '—';
+  return relativeDates() ? ago(date) : CLOCK.format(date);
+};
+export const stamp = (iso) => {
+  const date = validDate(iso);
+  if (!date) return '—';
+  return relativeDates() ? ago(date) : STAMP.format(date);
+};
 
 export function ago(iso) {
-  if (!iso) return null;
-  const seconds = Math.round((new Date(iso).getTime() - Date.now()) / 1000);
+  const date = iso instanceof Date ? iso : validDate(iso);
+  if (!date) return null;
+  const seconds = Math.round((date.getTime() - Date.now()) / 1000);
+  if (!Number.isFinite(seconds)) return null;
   const units = [
     [60, 'second'],
     [3600, 'minute'],
@@ -287,7 +303,7 @@ export function freshnessTag(at = new Date().toISOString(), label = 'Actualisé'
 
 export function refreshFreshnessTag(node) {
   const at = node?.dataset?.at;
-  if (!at) return;
+  if (!validDate(at)) { node.textContent = `${node?.dataset?.label || 'Actualisé'} —`; node.dataset.state = 'stale'; return; }
   const label = node.dataset.label || 'Actualisé';
   node.textContent = `${label} ${ago(at) || 'à l’instant'}`;
   node.title = stamp(at);

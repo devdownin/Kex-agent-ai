@@ -157,19 +157,24 @@ await check('le contexte global filtre la supervision et persiste', async () => 
         coverage: { complete: true, stopReason: 'EXHAUSTED' } },
     ],
   });
-  await page.route('**/api/agent/supervision/overview', (route) => route.fulfill({
+  const pattern = '**/api/agent/supervision/overview';
+  await page.route(pattern, (route) => route.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify(data),
   }));
-  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#context-process option[value="order-integration"]');
-  await page.selectOption('#context-process', 'order-integration');
-  await page.waitForFunction(() => document.querySelectorAll('#overview-processes tbody tr').length === 1);
-  assert.match(await page.$eval('#overview-processes', (node) => node.innerText), /Order Integration/);
-  assert.doesNotMatch(await page.$eval('#overview-processes', (node) => node.innerText), /Billing/);
-  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('kex.agent.global-context')).process),
-    'order-integration');
-  await page.click('#context-reset');
-  await page.unroute('**/api/agent/supervision/overview');
+  try {
+    await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => [...document.querySelectorAll('#context-process option')]
+      .some((option) => option.value === 'order-integration'));
+    await page.selectOption('#context-process', 'order-integration');
+    await page.waitForFunction(() => document.querySelectorAll('#overview-processes tbody tr').length === 1);
+    assert.match(await page.$eval('#overview-processes', (node) => node.innerText), /Order Integration/);
+    assert.doesNotMatch(await page.$eval('#overview-processes', (node) => node.innerText), /Billing/);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('kex.agent.global-context')).process),
+      'order-integration');
+    await page.click('#context-reset');
+  } finally {
+    await page.unroute(pattern);
+  }
 });
 
 await check('le tableau de bord se personnalise et mémorise les blocs', async () => {
@@ -203,15 +208,30 @@ await check('la vue Activité agrège cycle, alertes, décisions et audit', asyn
     body: JSON.stringify([{ at: now, actor: 'operator', action: 'Validation manuelle',
       processId: 'order-integration', reason: 'test', policyVersion: 'p1', result: 'OK', correlationId: 'corr' }]),
   }));
-  await page.goto(`${BASE}/#/activity`, { waitUntil: 'domcontentloaded' });
+  try {
+    await page.goto(`${BASE}/#/activity`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#activity-timeline .activity-event');
   const text = await page.$eval('#activity-timeline', (node) => node.innerText);
   assert.match(text, /Analyse Kafka/);
   assert.match(text, /Lag élevé/);
   assert.match(text, /Redémarrer activity-decision/);
   assert.match(text, /Validation manuelle/);
-  await page.unroute('**/api/agent/supervision/overview');
-  await page.unroute('**/api/agent/supervision/audit');
+  } finally {
+    await page.unroute('**/api/agent/supervision/overview');
+    await page.unroute('**/api/agent/supervision/audit');
+  }
+});
+
+await check('la palette de commandes regroupe navigation, actions et MCP', async () => {
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.click('#open-command');
+  await page.fill('#command-query', 'mcp');
+  await page.waitForSelector('#command-results .command-result');
+  const text = await page.$eval('#command-results', (node) => node.innerText);
+  assert.match(text, /MCP/);
+  assert.match(text, /Connexions MCP/);
+  assert.match(text, /Serveur MCP Kex/);
+  await page.keyboard.press('Escape');
 });
 
 await check('la navigation latérale se replie, reste découvrable et mémorise son état', async () => {
@@ -220,7 +240,7 @@ await check('la navigation latérale se replie, reste découvrable et mémorise 
   await page.reload({ waitUntil: 'domcontentloaded' });
 
   assert.equal(await page.$eval('html', (node) => node.dataset.rail), 'expanded');
-  const labels = await page.$eval('.nav-item', (nodes) => nodes.map((node) => ({
+  const labels = await page.$$eval('.nav-item', (nodes) => nodes.map((node) => ({
     aria: node.getAttribute('aria-label'), title: node.getAttribute('title'),
   })));
   assert.ok(labels.every((item) => item.aria && item.title === item.aria),
@@ -302,6 +322,9 @@ await check('un panneau de supervision se rouvre depuis son adresse', async () =
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#drawer:not([hidden])', { timeout: 10000 });
   assert.match(await page.$eval('#drawer-title', (node) => node.textContent), /Order Integration/);
+  const contextualActions = await page.$eval('#drawer .context-actions-standard button',
+    (buttons) => buttons.map((button) => button.textContent.trim()));
+  assert.deepEqual(contextualActions.slice(-3), ['Interroger l’agent', 'Voir l’audit', 'Copier le lien']);
 
   await page.keyboard.press('Escape');
   // `state: 'attached'` : un élément porteur de `hidden` n'est jamais « visible », et l'attente
