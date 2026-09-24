@@ -72,7 +72,8 @@ function renderServers(list) {
     return query
       ? empty('Aucun serveur ni outil ne correspond à la recherche.')
       : empty('Aucune connexion MCP configurée.',
-        'Sans outil, l’agent ne peut qu’observer ce qu’on lui raconte.');
+        'Sans outil, l’agent ne peut qu’observer ce qu’on lui raconte.',
+        { label: 'Ajouter une connexion', onClick: () => openEditor() });
   }
   const grid = el('div', 'servers-grid');
   filtered.forEach((server) => grid.append(card(server)));
