@@ -5,7 +5,9 @@ tools, explains what it sees, and asks a named human before it acts — every de
 confidence, its evidence and an audit trail.
 
 Built on Spring Boot 4 / Spring AI 2, Java 25. Ships with a browser console (the **Control Center**)
-served by the agent itself, no build step and no CDN.
+served by the agent itself, no build step and no CDN. The console manages MCP connections at runtime,
+shows session activity and lifecycle, and includes a Playground for tools, resources and parameterized
+resource templates.
 
 - **Source, issues and full documentation:** https://github.com/devdownin/Kex-agent-ai
 - **Licence:** GPL-3.0-or-later
@@ -53,6 +55,18 @@ The whole stack — Kafka 4.3 (KRaft), Explorer with its MCP server on, and this
 is one `docker compose up` away from
 [the repository](https://github.com/devdownin/Kex-agent-ai#-quick-start).
 
+## MCP from the browser
+
+Under **Technical → MCP servers**, connections can be tested before they are added, enabled or disabled,
+restricted per tool, diagnosed, and imported/exported. HTTP, SSE and stdio transports are supported.
+The same workspace exposes active/idle MCP sessions and recent activity. Its Playground lets you call
+tools, browse/read resources and select resource templates; template fields are generated immediately
+from the selected template instead of requiring a URI to be assembled manually.
+
+Runtime connections can be encrypted and persisted with `KEX_MCP_STORAGE_KEY`. For stdio servers,
+executables remain opt-in through `KEX_MCP_STDIO_ALLOWED_COMMANDS`. MCP sessions expire after 30 minutes
+of inactivity by default.
+
 ## Configuration
 
 | Variable | Role |
@@ -62,6 +76,8 @@ is one `docker compose up` away from
 | `KAFKA_EXPLORER_URL` | Base URL of the Kafka SQL Explorer MCP server |
 | `EXPLORER_MCP_AUTH_TOKEN` | Bearer for that MCP server, when it requires one |
 | `KEX_AGENT_LLM_PROVIDER` | `anthropic` (default) or `openai` — the latter also covers OpenRouter-compatible gateways |
+| `KEX_MCP_STORAGE_KEY` | Encrypt and persist MCP connections created from the Control Center |
+| `KEX_MCP_STDIO_ALLOWED_COMMANDS` | Explicit allowlist of executables accepted for stdio MCP servers |
 
 An unreachable MCP server never blocks startup: the agent boots, says so, and keeps serving what it
 still can. [Every setting, with its reasons](https://github.com/devdownin/Kex-agent-ai/blob/main/docs/CONFIGURATION.md).
