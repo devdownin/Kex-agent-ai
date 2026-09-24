@@ -180,10 +180,15 @@ export function empty(message, detail, action) {
   node.setAttribute('data-empty-state', 'true');
   node.append(el('p', null, message));
   if (detail) node.append(el('p', 'hint', detail));
-  if (action?.href && action?.label) {
-    const link = el('a', 'ghost empty-action', action.label);
-    link.href = action.href;
-    node.append(link);
+  if (action?.label && (action?.href || action?.run)) {
+    const control = action.run ? el('button', 'ghost empty-action', action.label) : el('a', 'ghost empty-action', action.label);
+    if (action.run) {
+      control.type = 'button';
+      control.addEventListener('click', action.run);
+    } else {
+      control.href = action.href;
+    }
+    node.append(control);
   }
   return node;
 }
