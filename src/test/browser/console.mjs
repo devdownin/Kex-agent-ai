@@ -113,11 +113,11 @@ function overviewStub(overrides = {}) {
   };
 }
 
-await page.goto(`${BASE}/#/settings`, { waitUntil: 'networkidle' });
+await page.goto(`${BASE}/#/settings`, { waitUntil: 'domcontentloaded' });
 // Seed the session token directly: the browser suite tests authenticated console behavior, not
 // native <dialog> rendering, which varies in headless Chromium depending on viewport/menu state.
 await page.evaluate((token) => sessionStorage.setItem('kex.agent.api-key', token), TOKEN);
-await page.reload({ waitUntil: 'networkidle' });
+await page.reload({ waitUntil: 'domcontentloaded' });
 await page.fill('#api-key', TOKEN, { force: true });
 // Submit through the DOM as the credentials dialog is intentionally not part of this test's contract.
 await page.locator('#credentials-form').evaluate((form) => form.requestSubmit());
