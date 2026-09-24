@@ -671,7 +671,7 @@ const TICK_MS = 1_000;
 // Les écrans qui portent un formulaire ne se rafraîchissent pas : un rendu par-dessus effacerait
 // ce que quelqu'un est en train de saisir. Le chat non plus, pour la même raison.
 const SELF_REFRESHING = new Set([
-  'overview', 'attention', 'processes', 'decisions', 'alerts', 'incidents', 'audit',
+  'overview', 'attention', 'processes', 'decisions', 'alerts', 'incidents', 'activity', 'audit',
   'integrations', 'knowledge', 'system',
 ]);
 
@@ -718,8 +718,6 @@ function syncConnectivity() {
 
 addEventListener('online', () => {
   syncConnectivity();
-renderDashboardCustomizer();
-applyDashboardState();
   backgroundRefresh();
 });
 addEventListener('offline', syncConnectivity);
@@ -809,6 +807,8 @@ syncThemeButton();
 syncDensityButton();
 applyPreferences();
 syncConnectivity();
+renderDashboardCustomizer();
+applyDashboardState();
 $('#credential-label').textContent = credentials.get() ? 'Jeton actif' : 'Jeton absent';
 // Une ligne directe, pas onCredentialChange : ce jeton vient de sessionStorage, il ne passe
 // jamais par credentials.set() ici, donc l'écouteur ne se déclencherait pas de lui-même.
