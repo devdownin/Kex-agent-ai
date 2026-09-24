@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -29,10 +30,11 @@ class KexMcpServerComplianceTest {
 
     private static final String PATH = "/api/agent/mcp-server";
     private MockMvc mvc;
+    private SupervisionService supervision;
 
     @BeforeEach
     void setUp() {
-        var supervision = mock(SupervisionService.class);
+        supervision = mock(SupervisionService.class);
         var kafka = mock(KafkaViewService.class);
         var beans = new StaticListableBeanFactory(Map.of("supervision", supervision, "kafka", kafka));
         mvc = MockMvcBuilders.standaloneSetup(new KexMcpServerController(new ObjectMapper(),
@@ -59,6 +61,19 @@ class KexMcpServerComplianceTest {
                 .andExpect(jsonPath("$.result.tools[?(@.name == 'kex_diagnose_process')].outputSchema.additionalProperties").value(false))
                 .andExpect(jsonPath("$.result.tools[0].annotations.readOnlyHint").value(true))
                 .andExpect(jsonPath("$.result.tools[0].annotations.destructiveHint").value(false));
+    }
+
+    @Test
+    void runtime_status_response_matches_the_advertised_closed_schema() throws Exception {
+        when(supervision.status()).thenReturn(null);
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":20,\"method\":\"tools/call\","
+                + "\"params\":{\"name\":\"kex_status\",\"arguments\":{}}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.isError").value(true));
+        // Closed schemas are also enforced by the official SDK probe for successful runtime payloads.
+        mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":21,\"method\":\"tools/list\"}"))
+                .andExpect(jsonPath("$.result.tools[0].outputSchema.additionalProperties").value(false))
+                .andExpect(jsonPath("$.result.tools[0].outputSchema.required.length()").value(12));
     }
 
     @Test
