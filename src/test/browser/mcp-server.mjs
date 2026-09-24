@@ -13,19 +13,26 @@ async function check(name, fn) {
 }
 await check('le serveur MCP expose ses onglets et exécute un tool dans le playground', async () => {
   let nextId = 0;
+  let lastToolArguments = null;
   await page.route('**/api/agent/mcp-server', async (route) => {
     const request = route.request();
     const rpc = JSON.parse(request.postData() || '{}');
     nextId = rpc.id || nextId + 1;
     const results = {
       initialize: { protocolVersion: '2025-06-18', serverInfo: { name: 'kex-agent-ai', version: 'test' }, capabilities: {} },
-      'tools/list': { tools: [{ name: 'kex_status', description: 'Current status', inputSchema: { type: 'object' }, outputSchema: { type: 'object' } }] },
+      'tools/list': { tools: [{ name: 'kex_status', description: 'Current status', inputSchema: {
+        type: 'object', required: ['scope'], properties: {
+          scope: { type: 'string', description: 'Périmètre à inspecter' },
+          verbose: { type: 'boolean', description: 'Inclure les détails' },
+        },
+      }, outputSchema: { type: 'object' } }] },
       'resources/list': { resources: [{ uri: 'kex://supervision/status', name: 'Status' }] },
       'resources/templates/list': { resourceTemplates: [{ uriTemplate: 'kex://supervision/processes/{processId}', name: 'Process' }] },
       'prompts/list': { prompts: [{ name: 'kex_supervision_triage', description: 'Triage' }] },
       'tools/call': { content: [{ type: 'text', text: 'ok' }], structuredContent: { state: 'OK' }, isError: false },
       'resources/read': { contents: [{ uri: rpc.params?.uri, text: '{"state":"OK"}' }] },
     };
+    if (rpc.method === 'tools/call') lastToolArguments = rpc.params?.arguments;
     await route.fulfill({
       status: 200, contentType: 'application/json',
       headers: { 'Mcp-Session-Id': 'browser-test-session' },
@@ -53,6 +60,9 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
   await page.click('[data-mcp-tab="playground"]');
   await page.selectOption('#mcp-playground-operation', 'tool');
   await page.selectOption('#mcp-playground-target', 'kex_status');
+  await page.waitForSelector('#mcp-schema-fields [data-schema-name="scope"]');
+  await page.fill('#mcp-schema-fields [data-schema-name="scope"]', 'supervision');
+  await page.selectOption('#mcp-schema-fields [data-schema-name="verbose"]', 'true');
   await page.fill('#mcp-playground-arguments', '{}');
   await page.click('#mcp-playground-form button[type="submit"]');
   await page.waitForFunction(() => document.querySelector('#mcp-playground-structured')?.textContent.includes('"state": "OK"'));
@@ -60,6 +70,7 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
   assert.match(await page.textContent('#mcp-playground-text'), /ok/);
   assert.match(await page.textContent('#mcp-playground-result'), /"structuredContent"/);
   assert.match(await page.textContent('#mcp-playground-result'), /"isError": false/);
+  assert.deepEqual(lastToolArguments, { scope: 'supervision', verbose: true });
 
   await page.selectOption('#mcp-playground-operation', 'template');
   // Switching operation must immediately render fields for the newly selected first template.
