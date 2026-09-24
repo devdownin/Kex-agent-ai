@@ -1777,3 +1777,48 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   .definition-list dt { padding-bottom: 2px; border-bottom: 0; }
   .definition-list dd { padding-top: 2px; }
 }
+
+
+/* ── Navigation repliable ─────────────────────────────────────────────── */
+.rail-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.rail-toggle svg { width: 17px; height: 17px; flex: none; transition: transform .16s ease; }
+
+@media (min-width: 861px) {
+  :root[data-rail="collapsed"] { --rail: 72px; }
+  :root[data-rail="collapsed"] .rail { gap: 12px; padding-left: 9px; padding-right: 9px; }
+  :root[data-rail="collapsed"] .brand { justify-content: center; }
+  :root[data-rail="collapsed"] .brand-text,
+  :root[data-rail="collapsed"] .nav-section,
+  :root[data-rail="collapsed"] .rail-toggle-label { display: none; }
+  :root[data-rail="collapsed"] .rail nav hr { margin: 8px 4px; }
+  :root[data-rail="collapsed"] .nav-item {
+    position: relative;
+    justify-content: center;
+    gap: 0;
+    min-height: 40px;
+    padding: 9px;
+    font-size: 0;
+  }
+  :root[data-rail="collapsed"] .nav-ico { width: 20px; height: 20px; opacity: 1; }
+  :root[data-rail="collapsed"] .nav-item .badge {
+    position: absolute;
+    top: 2px;
+    right: 1px;
+    min-width: 17px;
+    padding: 0 4px;
+    font-size: 9px;
+    line-height: 16px;
+  }
+  :root[data-rail="collapsed"] .rail-foot { justify-content: center; }
+  :root[data-rail="collapsed"] .rail-foot > * { flex: none; width: 42px; }
+  :root[data-rail="collapsed"] .rail-toggle svg { transform: rotate(180deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-toggle svg { transition: none; }
+}

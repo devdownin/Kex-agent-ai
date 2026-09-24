@@ -42,7 +42,8 @@ async function list() {
     }
     if (!data.rows.length) {
       return empty('Aucune automatisation créée.',
-        'Un prompt planifié se relance seul, sans qu’un opérateur n’ait à revenir le déclencher.');
+        'Un prompt planifié se relance seul, sans qu’un opérateur n’ait à revenir le déclencher.',
+        { label: 'Créer une automatisation', onClick: () => openForm(null) });
     }
 
     const table = el('table', 'grid');

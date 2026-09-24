@@ -14,11 +14,13 @@ export async function list() {
   await render($('#summaries-list'), load, (data) => {
     if (data.disabled) {
       return empty('Résumés durables désactivés.',
-        'kex.agent.memory.enabled vaut false : aucun échange ne survit à sa conversation.');
+        'kex.agent.memory.enabled vaut false : aucun échange ne survit à sa conversation.',
+        { href: '#/settings', label: 'Voir la configuration' });
     }
     if (!data.rows.length) {
       return empty('Aucun résumé conservé.',
-        'Aucun échange terminé normalement n’a encore été résumé pour ce locataire.');
+        'Aucun échange terminé normalement n’a encore été résumé pour ce locataire.',
+        { href: '#/chat', label: 'Démarrer une conversation' });
     }
 
     const stack = el('div', 'stack');

@@ -180,10 +180,14 @@ export function empty(message, detail, action) {
   node.setAttribute('data-empty-state', 'true');
   node.append(el('p', null, message));
   if (detail) node.append(el('p', 'hint', detail));
-  if (action?.href && action?.label) {
-    const link = el('a', 'ghost empty-action', action.label);
-    link.href = action.href;
-    node.append(link);
+  if (action?.label && (action.href || action.onClick)) {
+    const control = el(action.href ? 'a' : 'button', 'ghost empty-action', action.label);
+    if (action.href) control.href = action.href;
+    else {
+      control.type = 'button';
+      control.addEventListener('click', action.onClick);
+    }
+    node.append(control);
   }
   return node;
 }
@@ -270,6 +274,27 @@ export function ago(iso) {
     }
   }
   return RELATIVE.format(Math.round(seconds / 86400), 'day');
+}
+
+export function freshnessTag(at = new Date().toISOString(), label = 'Actualisé', staleAfterMillis = null) {
+  const node = el('span', 'data-freshness');
+  node.dataset.at = at;
+  node.dataset.label = label;
+  if (staleAfterMillis != null) node.dataset.staleAfter = String(staleAfterMillis);
+  refreshFreshnessTag(node);
+  return node;
+}
+
+export function refreshFreshnessTag(node) {
+  const at = node?.dataset?.at;
+  if (!at) return;
+  const label = node.dataset.label || 'Actualisé';
+  node.textContent = `${label} ${ago(at) || 'à l’instant'}`;
+  node.title = stamp(at);
+  const staleAfter = Number(node.dataset.staleAfter);
+  const stale = Number.isFinite(staleAfter) && staleAfter > 0
+    && Date.now() - new Date(at).getTime() > staleAfter;
+  node.dataset.state = stale ? 'stale' : 'fresh';
 }
 
 export function duration(millis) {

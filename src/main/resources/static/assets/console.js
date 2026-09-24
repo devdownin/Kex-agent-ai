@@ -6,8 +6,8 @@
 // chaînes pour une poignée de fichiers statiques.
 
 import {
-  $, ago, api, confirmAction, credentials, drawerOpen, el, onCredentialChange, onUnauthorized, report,
-  restoreDrawerFromUrl, stamp, toast, viewName,
+  $, ago, api, confirmAction, credentials, drawerOpen, el, onCredentialChange, onUnauthorized, refreshFreshnessTag,
+  report, restoreDrawerFromUrl, stamp, toast, viewName,
 } from './core.js';
 import * as automations from './automations.js';
 import * as channels from './channels.js';
@@ -285,6 +285,36 @@ onCredentialChange((value) => {
   if (value) skills.whoami();
   else $('#whoami-label').hidden = true;
 });
+
+/* ── Navigation latérale ─────────────────────────────────────────────── */
+
+const railToggle = $('#rail-toggle');
+try {
+  const storedRail = localStorage.getItem('kex.agent.rail');
+  const compactViewport = matchMedia('(min-width: 861px) and (max-width: 1100px)').matches;
+  document.documentElement.dataset.rail = storedRail || (compactViewport ? 'collapsed' : 'expanded');
+} catch {
+  document.documentElement.dataset.rail = 'expanded';
+}
+
+function syncRailButton() {
+  if (!railToggle) return;
+  const collapsed = document.documentElement.dataset.rail === 'collapsed';
+  railToggle.setAttribute('aria-pressed', String(collapsed));
+  railToggle.setAttribute('aria-label', collapsed ? 'Déplier la navigation' : 'Replier la navigation');
+  railToggle.title = collapsed ? 'Déplier la navigation' : 'Replier la navigation';
+  const label = railToggle.querySelector('.rail-toggle-label');
+  if (label) label.textContent = collapsed ? 'Déplier' : 'Replier';
+}
+
+railToggle?.addEventListener('click', () => {
+  const next = document.documentElement.dataset.rail === 'collapsed' ? 'expanded' : 'collapsed';
+  document.documentElement.dataset.rail = next;
+  try { localStorage.setItem('kex.agent.rail', next); } catch { /* préférence locale facultative */ }
+  syncRailButton();
+});
+
+syncRailButton();
 
 /* ── Thème ─────────────────────────────────────────────────────────────── */
 
@@ -581,7 +611,9 @@ async function backgroundRefresh() {
 // Le libellé de fraîcheur vieillit tout seul, sans requête : c'est lui qui doit dire la vérité
 // entre deux sondages.
 function tick() {
-  if (!document.hidden && status) renderStatus(status);
+  if (document.hidden) return;
+  if (status) renderStatus(status);
+  document.querySelectorAll('.data-freshness[data-at]').forEach((node) => refreshFreshnessTag(node));
 }
 
 setInterval(backgroundRefresh, REFRESH_MS);
