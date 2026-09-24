@@ -208,11 +208,7 @@ function card(server) {
         button.append(el('span', 'muted', label));
       }
       button.addEventListener('click', () => invoke(null, server.connection, tool));
-      const detail = el('button', 'ghost compact', 'Détails');
-      detail.type = 'button';
-      detail.setAttribute('aria-label', `Détails de l’outil ${tool.name}`);
-      detail.addEventListener('click', () => openToolDrawer(server, tool));
-      item.append(button, detail);
+      item.append(button);
       list.append(item);
     });
     node.append(list);
@@ -380,7 +376,7 @@ function openServerDrawer(server, updateUrl = true) {
       button.type = 'button';
       button.append(el('strong', null, tool.name));
       if (tool.description) button.append(el('span', 'muted', tool.description));
-      button.addEventListener('click', () => invoke(null, server.connection, tool));
+      button.addEventListener('click', () => openToolDrawer(server, tool));
       list.append(button);
     });
     body.append(list);
