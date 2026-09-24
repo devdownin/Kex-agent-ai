@@ -63,6 +63,7 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
   await page.waitForSelector('#mcp-schema-fields [data-schema-name="scope"]');
   await page.fill('#mcp-schema-fields [data-schema-name="scope"]', 'supervision');
   await page.selectOption('#mcp-schema-fields [data-schema-name="verbose"]', 'true');
+  await page.click('.mcp-json-mode > summary');
   await page.fill('#mcp-playground-arguments', '{}');
   await page.click('#mcp-playground-form button[type="submit"]');
   await page.waitForFunction(() => document.querySelector('#mcp-playground-structured')?.textContent.includes('"state": "OK"'));
