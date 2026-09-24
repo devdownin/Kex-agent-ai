@@ -272,6 +272,18 @@ export function ago(iso) {
   return RELATIVE.format(Math.round(seconds / 86400), 'day');
 }
 
+export function freshnessStamp(iso, staleAfterMs = 5 * 60 * 1000, prefix = 'Mesuré') {
+  if (!iso) return el('span', 'freshness-tag unknown', 'Non mesuré');
+  const at = new Date(iso);
+  const age = Date.now() - at.getTime();
+  const stale = Number.isFinite(age) && age > staleAfterMs;
+  const node = el('span', `freshness-tag ${stale ? 'stale' : 'fresh'}`,
+    `${stale ? '⚠ ' : ''}${prefix} ${ago(iso) || 'à l’instant'}`);
+  node.dataset.stale = String(stale);
+  node.title = STAMP.format(at);
+  return node;
+}
+
 export function duration(millis) {
   if (millis == null) return '—';
   const seconds = Math.round(millis / 1000);
