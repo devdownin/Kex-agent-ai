@@ -286,6 +286,37 @@ onCredentialChange((value) => {
   else $('#whoami-label').hidden = true;
 });
 
+/* ── Navigation repliable ─────────────────────────────────────────────── */
+
+const railToggle = $('#rail-toggle');
+try {
+  if (localStorage.getItem('kex.agent.rail') === 'collapsed') document.documentElement.dataset.rail = 'collapsed';
+} catch {
+  /* sans stockage, la navigation reste développée */
+}
+
+function syncRailButton() {
+  if (!railToggle) return;
+  const collapsed = document.documentElement.dataset.rail === 'collapsed';
+  railToggle.setAttribute('aria-pressed', String(collapsed));
+  railToggle.setAttribute('aria-label', collapsed ? 'Développer la navigation' : 'Réduire la navigation');
+  railToggle.title = collapsed ? 'Développer la navigation' : 'Réduire la navigation';
+  railToggle.querySelector('[aria-hidden="true"]').textContent = collapsed ? '»' : '«';
+  railToggle.querySelector('.rail-toggle-label').textContent = collapsed ? 'Développer' : 'Réduire';
+}
+
+railToggle?.addEventListener('click', () => {
+  const collapsed = document.documentElement.dataset.rail !== 'collapsed';
+  if (collapsed) document.documentElement.dataset.rail = 'collapsed';
+  else delete document.documentElement.dataset.rail;
+  try {
+    localStorage.setItem('kex.agent.rail', collapsed ? 'collapsed' : 'expanded');
+  } catch {
+    /* le choix reste valable pour la durée de la page */
+  }
+  syncRailButton();
+});
+
 /* ── Thème ─────────────────────────────────────────────────────────────── */
 
 const themeToggle = $('#theme-toggle');
@@ -687,6 +718,7 @@ $('#forget-key').addEventListener('click', () => {
 mcpServer.bind();
 addEventListener('hashchange', route);
 
+syncRailButton();
 syncThemeButton();
 syncDensityButton();
 applyPreferences();
