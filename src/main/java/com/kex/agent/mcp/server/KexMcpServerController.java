@@ -129,8 +129,17 @@ public class KexMcpServerController {
     @GetMapping
     ResponseEntity<Object> stream(@RequestHeader HttpHeaders headers, Authentication authentication) {
         ResponseEntity<Object> rejected = authorize(headers, authentication);
-        return rejected != null ? rejected : ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
-                .allow(HttpMethod.POST).build();
+        if (rejected != null) return rejected;
+        if ("summary".equals(headers.getFirst("X-Kex-Mcp-View"))) {
+            return ResponseEntity.ok(Map.of(
+                    "state", "UP",
+                    "sessions", sessions.snapshot(),
+                    "activeSessions", sessions.snapshot().size(),
+                    "serverVersion", serverVersion(),
+                    "protocol", PROTOCOL,
+                    "readOnly", true));
+        }
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).allow(HttpMethod.POST).build();
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -190,6 +199,7 @@ public class KexMcpServerController {
                     : ResponseEntity.badRequest().build();
         }
         JsonNode params = request.path("params");
+        sessions.touch(headers.getFirst(SESSION_HEADER));
         Timer.Sample sample = Timer.start(meters);
         long auditStarted = System.nanoTime();
         ResponseEntity<Object> response = switch (method) {
