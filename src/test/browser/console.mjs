@@ -768,7 +768,13 @@ await check('la sélection groupée approuve chaque décision cochée, sans nouv
     for (const box of await page.$$('#decisions-list .bulk-select')) await box.check();
     await page.waitForSelector('#decisions-bulk-bar:not([hidden])');
     await page.click('#decisions-bulk-approve');
+    await page.waitForSelector('dialog#confirm[open]');
+    const approvals = Promise.all([
+      page.waitForResponse((response) => response.url().endsWith('/decisions/d1/approve')),
+      page.waitForResponse((response) => response.url().endsWith('/decisions/d2/approve')),
+    ]);
     await page.click('#confirm-accept');
+    await approvals;
     await page.waitForSelector('#toasts .toast');
     assert.equal(approved.length, 2, `attendu 2 approbations, vu ${approved.length}`);
     await page.unroute('**/api/agent/supervision/decisions');
