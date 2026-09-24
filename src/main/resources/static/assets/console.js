@@ -553,39 +553,66 @@ const commandQuery = $('#command-query');
 function commandItems() {
   const snapshot = supervision.current();
   const commands = [
-    ['Vue d’ensemble', 'Navigation', '#/overview'],
-    ['À traiter', 'Navigation', '#/attention'],
-    ['Conversation', 'Navigation', '#/chat'],
-    ['Processus', 'Navigation', '#/processes'],
-    ['Décisions', 'Navigation', '#/decisions'],
-    ['Configuration', 'Navigation', '#/settings'],
-    ['Ouvrir les notifications', 'Action', null],
-    ['Activer le mode présentation', 'Action', null],
-  ].map(([label, kind, href]) => ({ label, kind, href }));
-  commands[6].action = () => $('#notifications').showModal();
-  commands[7].action = togglePresentation;
+    { label: 'Vue d’ensemble', group: 'Navigation', kind: 'Navigation', href: '#/overview', keywords: 'accueil dashboard' },
+    { label: 'À traiter', group: 'Navigation', kind: 'Navigation', href: '#/attention', keywords: 'priorités actions' },
+    { label: 'Activité', group: 'Navigation', kind: 'Navigation', href: '#/activity', keywords: 'timeline historique événements' },
+    { label: 'Incidents', group: 'Navigation', kind: 'Navigation', href: '#/incidents', keywords: 'investigation' },
+    { label: 'Processus', group: 'Navigation', kind: 'Navigation', href: '#/processes', keywords: 'supervision' },
+    { label: 'Décisions', group: 'Navigation', kind: 'Navigation', href: '#/decisions', keywords: 'approbation validation' },
+    { label: 'Conversation', group: 'Navigation', kind: 'Navigation', href: '#/chat', keywords: 'agent chat' },
+    { label: 'Connexions MCP', group: 'MCP', kind: 'Intégrations', href: '#/integrations', keywords: 'serveur outils externe' },
+    { label: 'Serveur MCP Kex', group: 'MCP', kind: 'Configuration', href: '#/settings', keywords: 'sessions catalogue playground' },
+    { label: 'Exécuter une analyse maintenant', group: 'Actions', kind: 'Action', action: runCycle, keywords: 'cycle lancer run' },
+    { label: 'Nouvelle automatisation', group: 'Actions', kind: 'Action', href: '#/agent', keywords: 'planifier schedule cron' },
+    { label: 'Afficher les alertes critiques', group: 'Actions', kind: 'Filtre', href: '#/alerts', keywords: 'erreur critique error' },
+    { label: 'Afficher les processus en erreur', group: 'Actions', kind: 'Filtre', href: '#/processes?etat=ERROR', keywords: 'critique panne' },
+    { label: 'Réinitialiser le contexte global', group: 'Actions', kind: 'Action', action: () => $('#context-reset')?.click(), keywords: 'filtres environnement processus période' },
+    { label: 'Ouvrir les notifications', group: 'Actions', kind: 'Action', action: () => $('#notifications').showModal(), keywords: 'activité alertes' },
+    { label: 'Activer le mode présentation', group: 'Actions', kind: 'Action', action: togglePresentation, keywords: 'plein écran' },
+  ];
   for (const process of snapshot?.processes || []) {
-    commands.push({ label: process.name, kind: `Processus · ${process.state}`,
-      href: `#/processes?processus=${encodeURIComponent(process.processId)}` });
+    commands.push({ label: process.name, group: 'Processus', kind: `Processus · ${process.state}`,
+      href: `#/processes?processus=${encodeURIComponent(process.processId)}`,
+      keywords: [process.processId, process.environment, process.env, process.stage].filter(Boolean).join(' ') });
   }
   for (const alert of snapshot?.alerts || []) {
-    commands.push({ label: alert.title, kind: `Alerte · ${alert.processName}`,
-      href: `#/alerts?alerte=${encodeURIComponent(alert.id)}` });
+    commands.push({ label: alert.title, group: 'Alertes', kind: `Alerte · ${alert.processName}`,
+      href: `#/alerts?alerte=${encodeURIComponent(alert.id)}`,
+      keywords: `${alert.severity || ''} ${alert.processName || ''}` });
   }
   for (const decision of snapshot?.pending || []) {
-    commands.push({ label: decision.action, kind: `Décision · ${decision.processName}`,
-      href: `#/decisions?decision=${encodeURIComponent(decision.id)}` });
+    commands.push({ label: decision.action, group: 'Décisions', kind: `Décision · ${decision.processName}`,
+      href: `#/decisions?decision=${encodeURIComponent(decision.id)}`,
+      keywords: `${decision.objective || ''} ${decision.processName || ''}` });
   }
-  commands.unshift({ label: 'Exécuter une analyse maintenant', kind: 'Action', action: runCycle });
+  const savedViews = readJson('kex.agent.process-views', []);
+  savedViews.forEach((view) => commands.push({
+    label: view.name, group: 'Vues enregistrées', kind: 'Vue Processus',
+    href: `#/processes?${new URLSearchParams({
+      ...(view.state && view.state !== 'ALL' ? { etat: view.state } : {}),
+      ...(view.query ? { q: view.query } : {}),
+    }).toString()}`,
+    keywords: 'vue enregistrée favoris',
+  }));
   return commands;
 }
 
 function renderCommands() {
   const query = commandQuery.value.trim().toLowerCase();
   const matches = commandItems().filter((item) => !query
-    || `${item.label} ${item.kind}`.toLowerCase().includes(query)).slice(0, 12);
+    || `${item.label} ${item.kind} ${item.group} ${item.keywords || ''}`.toLowerCase().includes(query)).slice(0, 18);
   const results = $('#command-results');
-  results.replaceChildren(...matches.map((item, index) => {
+  if (!matches.length) {
+    results.replaceChildren(el('p', 'command-empty', 'Aucun résultat.'));
+    return;
+  }
+  const nodes = [];
+  let group = null;
+  matches.forEach((item, index) => {
+    if (item.group !== group) {
+      group = item.group;
+      nodes.push(el('div', 'command-group', group));
+    }
     const button = el('button', 'command-result');
     button.type = 'button';
     button.dataset.index = String(index);
@@ -595,8 +622,9 @@ function renderCommands() {
       if (item.href) location.hash = item.href;
       else item.action?.();
     });
-    return button;
-  }));
+    nodes.push(button);
+  });
+  results.replaceChildren(...nodes);
   results.querySelector('button')?.classList.add('selected');
 }
 
