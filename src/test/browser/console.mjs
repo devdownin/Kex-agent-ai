@@ -1188,8 +1188,8 @@ await check('un canal actif se distingue d’un canal inactif', async () => {
 
 await check('le tableau de bord se personnalise et conserve la visibilité des blocs', async () => {
   await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#dashboard-customizer-panel');
   await page.click('#dashboard-customizer > summary');
+  await page.waitForSelector('#dashboard-customizer-panel');
   const briefChoice = page.locator('#dashboard-customizer-panel label', { hasText: 'Synthèse de l’agent' }).locator('input');
   await briefChoice.uncheck();
   await page.waitForFunction(() => document.querySelector('.agent-brief-panel')?.classList.contains('dashboard-user-hidden'));
