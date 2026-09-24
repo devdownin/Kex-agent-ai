@@ -178,16 +178,19 @@ async function renderOnboarding(data) {
   const host = $('#onboarding');
   if (!host || !data) return;
 
-  const [mcpConnections, automationsState] = await Promise.all([
+  const [mcpConnections, automationsState, kafkaState] = await Promise.all([
     api('/api/agent/mcp/servers').catch(() => []),
     api('/api/agent/automations').then((rows) => ({ enabled: true, rows })).catch((error) =>
       error.status === 404 ? { enabled: false, rows: [] } : { enabled: true, rows: [] }),
+    api('/api/agent/kafka/topics').then((value) => ({ available: !value?.unavailable }))
+      .catch(() => ({ available: false })),
   ]);
 
   const steps = [
     { missing: !credentials.get(), label: 'Jeton API non connecté', detail: 'Authentifiez la console pour agir au nom de votre compte.', action: openCredentials },
     { missing: !(data.processesMonitored > 0), label: 'Aucun processus surveillé', detail: 'Déclarez au moins un processus pour obtenir un diagnostic.', href: '#/settings' },
     { missing: !(mcpConnections?.length > 0), label: 'Aucune connexion MCP externe', detail: 'Ajoutez une intégration pour étendre les capacités de l’agent.', href: '#/integrations' },
+    { missing: !kafkaState.available, label: 'Kafka non configuré ou indisponible', detail: 'Vérifiez la connexion Kafka avant de vous fier aux mesures de lag.', href: '#/integrations' },
     { missing: automationsState.enabled && !automationsState.rows.length, label: 'Aucune automatisation', detail: 'Planifiez les contrôles récurrents utiles à votre exploitation.', href: '#/agent' },
     { missing: !data.agent?.lastCycleAt, label: 'Aucune analyse exécutée', detail: 'Lancez un premier cycle pour établir l’état de référence.', action: runCycle },
   ].filter((step) => step.missing);
