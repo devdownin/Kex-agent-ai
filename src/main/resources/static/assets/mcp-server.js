@@ -290,9 +290,9 @@ export async function view() {
           state.append(el('strong', null, healthLabels[summary.state] || summary.state || '—'));
           row.append(state,
             el('td', null, String(summary.activeSessions ?? 0)),
-            el('td', null, String(summary.idleSessions ?? 0)),
+            el('td', null, String((summary.totalSessions ?? 0) - (summary.activeSessions ?? 0))),
             el('td', null, String(summary.requestCount ?? 0)),
-            el('td', null, summary.p95LatencyMs == null ? '—' : `${Math.round(summary.p95LatencyMs)} ms`));
+            el('td', null, summary.p95Millis == null ? '—' : `${Math.round(summary.p95Millis)} ms`));
           body.append(row); table.append(head, body);
           ops.replaceChildren(table);
         }
