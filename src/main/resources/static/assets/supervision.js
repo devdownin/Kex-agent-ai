@@ -117,9 +117,14 @@ function itemTime(item) {
 
 function contextMatches(item, context = globalContext()) {
   if (!item) return true;
-  const processId = item.processId || item.id;
-  const processName = item.processName || item.name;
-  if (context.process !== 'ALL' && context.process !== processId && context.process !== processName) return false;
+  const processId = item.processId;
+  const processName = item.processName || (item.processId ? item.name : null);
+  if (context.process !== 'ALL') {
+    const selected = (snapshot?.processes || []).find((process) =>
+      (process.processId || process.name) === context.process);
+    const selectedName = selected?.name;
+    if (context.process !== processId && context.process !== processName && selectedName !== processName) return false;
+  }
   const environment = item.environment || item.env || item.stage;
   if (context.environment !== 'ALL' && environment && environment !== context.environment) return false;
   if (context.environment !== 'ALL' && !environment) return false;
