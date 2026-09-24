@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Tracks MCP client sessions for audit and read-only operational visibility. */
@@ -19,6 +20,7 @@ public class McpClientSessionRegistry {
     private final Duration ttl;
     private final Duration idleAfter;
 
+    @Autowired
     public McpClientSessionRegistry(KexMcpServerProperties properties) {
         this(Clock.systemUTC(), properties.sessionTtl(), properties.sessionIdleAfter());
     }
