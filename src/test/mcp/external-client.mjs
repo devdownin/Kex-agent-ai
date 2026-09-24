@@ -25,11 +25,29 @@ try {
   const prompts = await client.listPrompts();
   assert.ok(prompts.prompts.some((prompt) => prompt.name === 'kex_supervision_triage'));
 
-  const status = await client.callTool({ name: 'kex_status', arguments: {} });
-  assert.equal(status.isError, false);
-  assert.ok(status.structuredContent);
+  const safeTools = ['kex_status', 'kex_overview', 'kex_alerts', 'kex_incidents', 'kex_pending_decisions'];
+  for (const name of safeTools) {
+    const result = await client.callTool({ name, arguments: {} });
+    assert.equal(result.isError, false, name);
+    assert.ok(result.structuredContent, name);
+  }
 
-  console.log('✓ official MCP SDK completed initialize → initialized → discovery → tools/call');
+  for (const uri of [
+    'kex://supervision/processes/order-integration',
+    'kex://kafka/topics/orders',
+    'kex://kafka/topics/orders/consumer-groups',
+    'kex://kafka/topics/orders/lag',
+  ]) {
+    try {
+      const result = await client.readResource({ uri });
+      assert.ok(result.contents?.length, uri);
+    } catch (error) {
+      // The transport/template contract is what this probe verifies. Domain data may be unavailable in CI.
+      assert.ok(!String(error).includes('Method not found'), uri);
+    }
+  }
+
+  console.log('✓ official MCP SDK completed discovery, typed tool calls and all resource templates');
 } finally {
   await client.close();
 }

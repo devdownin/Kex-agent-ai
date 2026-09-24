@@ -229,7 +229,9 @@ public class KexMcpServerController {
                     .header(SESSION_HEADER, sessionId).body(response.getBody());
         }
         String outcome = metricOutcome(response);
-        sample.stop(meters.timer("kex.mcp.server.request", "method", metricMethod(method), "outcome", outcome));
+        String operation = metricOperation(method, params);
+        sample.stop(meters.timer("kex.mcp.server.request", "method", metricMethod(method), "operation", operation, "outcome", outcome));
+        meters.counter("kex.mcp.server.requests", "method", metricMethod(method), "operation", operation, "outcome", outcome).increment();
         publishAudit(authentication, headers, method, params, outcome, System.nanoTime() - auditStarted);
         return response;
     }
@@ -508,6 +510,16 @@ public class KexMcpServerController {
         if (body instanceof Map<?, ?> envelope && envelope.get("result") instanceof Map<?, ?> result
                 && Boolean.TRUE.equals(result.get("isError"))) return "rpc_error";
         return "success";
+    }
+
+    private static String metricOperation(String method, JsonNode params) {
+        if ("tools/call".equals(method)) {
+            String name = params.path("name").asText("unknown");
+            return TOOLS.stream().anyMatch(tool -> tool.get("name").equals(name)) ? name : "unknown";
+        }
+        if ("resources/read".equals(method)) return "resource";
+        if ("prompts/get".equals(method)) return "prompt";
+        return "none";
     }
 
     private static String metricMethod(String method) {
