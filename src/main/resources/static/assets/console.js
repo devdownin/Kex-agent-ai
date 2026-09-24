@@ -314,6 +314,10 @@ railToggle?.addEventListener('click', () => {
   syncRailButton();
 });
 
+document.querySelectorAll('.nav-item[aria-label]').forEach((item) => {
+  if (!item.title) item.title = item.getAttribute('aria-label');
+});
+
 syncRailButton();
 
 /* ── Thème ─────────────────────────────────────────────────────────────── */
