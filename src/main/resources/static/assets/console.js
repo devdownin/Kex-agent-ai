@@ -6,8 +6,8 @@
 // chaînes pour une poignée de fichiers statiques.
 
 import {
-  $, ago, api, confirmAction, credentials, drawerOpen, el, onCredentialChange, onUnauthorized, report,
-  restoreDrawerFromUrl, stamp, toast, viewName,
+  $, ago, api, confirmAction, credentials, drawerOpen, el, onCredentialChange, onUnauthorized, refreshFreshnessTag,
+  report, restoreDrawerFromUrl, stamp, toast, viewName,
 } from './core.js';
 import * as automations from './automations.js';
 import * as channels from './channels.js';
@@ -611,7 +611,9 @@ async function backgroundRefresh() {
 // Le libellé de fraîcheur vieillit tout seul, sans requête : c'est lui qui doit dire la vérité
 // entre deux sondages.
 function tick() {
-  if (!document.hidden && status) renderStatus(status);
+  if (document.hidden) return;
+  if (status) renderStatus(status);
+  document.querySelectorAll('.data-freshness[data-at]').forEach((node) => refreshFreshnessTag(node));
 }
 
 setInterval(backgroundRefresh, REFRESH_MS);
