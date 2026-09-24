@@ -423,6 +423,32 @@ export function circuitBreakersValue(circuitBreakers) {
   return wrap;
 }
 
+/* ── Contexte opérateur global ─────────────────────────────────────────── */
+
+const OPERATOR_CONTEXT_KEY = 'kex.agent.operator-context';
+
+export function operatorContext() {
+  try {
+    return { process: '', period: '1h', ...(JSON.parse(localStorage.getItem(OPERATOR_CONTEXT_KEY)) || {}) };
+  } catch {
+    return { process: '', period: '1h' };
+  }
+}
+
+export function setOperatorContext(changes) {
+  const next = { ...operatorContext(), ...changes };
+  try { localStorage.setItem(OPERATOR_CONTEXT_KEY, JSON.stringify(next)); } catch { /* préférence locale */ }
+  dispatchEvent(new CustomEvent('kex:operator-context', { detail: next }));
+  return next;
+}
+
+export function inOperatorPeriod(iso, context = operatorContext()) {
+  if (!iso || context.period === 'all') return true;
+  const windows = { '15m': 15 * 60_000, '1h': 60 * 60_000, '24h': 24 * 60 * 60_000, '7d': 7 * 24 * 60 * 60_000 };
+  const window = windows[context.period];
+  return !window || Date.now() - new Date(iso).getTime() <= window;
+}
+
 /* ── Paramètres d'écran dans l'URL ─────────────────────────────────────── */
 
 // L'état d'un écran voyage dans son adresse : « regarde ce que l'agent a fait entre 14 h et 15 h »
