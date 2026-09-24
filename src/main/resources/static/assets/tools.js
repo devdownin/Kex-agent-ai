@@ -5,7 +5,7 @@
 // bord métier n'en soit pas saturé — les signaux bruts sont au second niveau, jamais au premier.
 
 import {
-  $, api, busy, circuitStateTag, confirmAction, el, empty, exampleFromSchema, params, render, report,
+  $, api, busy, circuitStateTag, confirmAction, el, empty, exampleFromSchema, freshnessStamp, openDrawer, params, render, report,
   schemaErrors, setParams, stateTag, toast,
 } from './core.js';
 import * as kafka from './kafka.js';
@@ -72,7 +72,8 @@ function renderServers(list) {
     return query
       ? empty('Aucun serveur ni outil ne correspond à la recherche.')
       : empty('Aucune connexion MCP configurée.',
-        'Sans outil, l’agent ne peut qu’observer ce qu’on lui raconte.');
+        'Sans outil, l’agent ne peut qu’observer ce qu’on lui raconte.',
+        { label: 'Ajouter une connexion MCP', run: () => openEditor() });
   }
   const grid = el('div', 'servers-grid');
   filtered.forEach((server) => grid.append(card(server)));
@@ -87,6 +88,43 @@ function matchesQuery(server, query) {
 
 function metricFor(connection, tool) {
   return lastMetrics.find((candidate) => candidate.connection === connection && candidate.tool === tool);
+}
+
+function openServerDetails(server, managed) {
+  const body = el('div', 'stack');
+  body.append(el('span', 'panel-kicker', 'Connexion MCP'));
+  body.append(el('h3', null, server.connection));
+  body.append(stateTag(managed && !managed.enabled ? 'UNKNOWN' : (server.initialized ? 'OK' : 'UNKNOWN'),
+    managed && !managed.enabled ? 'Désactivé' : (server.initialized ? 'Initialisé' : 'Pas de handshake')));
+  const meta = [server.serverName, server.version, server.protocolVersion].filter(Boolean).join(' · ');
+  body.append(el('p', 'muted', meta || 'Aucun handshake abouti pour l’instant'));
+  if (managed?.transport) body.append(el('p', null, `Transport : ${managed.transport}`));
+  body.append(el('p', null, `${(server.tools || []).length} outil(s) exposé(s)`));
+  if (server.circuitBreakerState) body.append(circuitStateTag(server.circuitBreakerState,
+    `Disjoncteur : ${server.circuitBreakerState}`));
+  body.append(freshnessStamp(new Date().toISOString(), 60_000, 'Vérifié'));
+  openDrawer(`Connexion MCP · ${server.connection}`, body);
+}
+
+function openToolDetails(server, tool) {
+  const body = el('div', 'stack');
+  body.append(el('span', 'panel-kicker', `Outil de ${server.connection}`));
+  body.append(el('h3', null, tool.name));
+  if (tool.description) body.append(el('p', null, tool.description));
+  const schema = tool.inputSchema || tool.schema;
+  if (schema) {
+    body.append(el('h4', null, 'Arguments'));
+    const pre = el('pre', 'dump');
+    pre.textContent = JSON.stringify(schema, null, 2);
+    body.append(pre);
+  }
+  const metric = metricFor(server.connection, tool.name);
+  if (metric) {
+    body.append(el('p', 'muted', metric.averageDurationMs == null
+      ? `${metric.callCount} appel(s)`
+      : `${metric.callCount} appel(s) · ${Math.round(metric.averageDurationMs)} ms en moyenne`));
+  }
+  openDrawer(`Outil MCP · ${tool.name}`, body);
 }
 
 function card(server) {
@@ -107,6 +145,7 @@ function card(server) {
 
   const meta = [server.serverName, server.version, server.protocolVersion].filter(Boolean).join(' · ');
   node.append(el('p', 'muted', meta || 'Aucun handshake abouti pour l’instant'));
+  node.append(freshnessStamp(new Date().toISOString(), 60_000, 'Vérifié'));
 
   if (managed) {
     const flags = el('div', 'server-flags');
@@ -135,7 +174,11 @@ function card(server) {
         button.append(el('span', 'muted', label));
       }
       button.addEventListener('click', () => invoke(node, server.connection, tool));
-      item.append(button);
+      const details = el('button', 'ghost compact', 'Détails');
+      details.type = 'button';
+      details.setAttribute('aria-label', `Détails de l’outil ${tool.name}`);
+      details.addEventListener('click', () => openToolDetails(server, tool));
+      item.append(button, details);
       list.append(item);
     });
     node.append(list);
@@ -144,6 +187,10 @@ function card(server) {
   }
 
   const actions = el('div', 'server-actions');
+  const overview = el('button', 'ghost', 'Détails');
+  overview.type = 'button';
+  overview.addEventListener('click', () => openServerDetails(server, managed));
+  actions.append(overview);
   const resources = el('button', 'ghost', 'Ressources');
   resources.type = 'button';
   resources.disabled = Boolean(managed && !managed.enabled);
