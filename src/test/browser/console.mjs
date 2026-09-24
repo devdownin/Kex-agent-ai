@@ -243,8 +243,8 @@ await check('un panneau de supervision se rouvre depuis son adresse', async () =
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#drawer:not([hidden])', { timeout: 10000 });
   assert.match(await page.$eval('#drawer-title', (node) => node.textContent), /Order Integration/);
-  const contextualActions = await page.$eval('#drawer .context-actions-standard button',
-    (buttons) => buttons.map((button) => button.textContent.trim()));
+  const contextualActions = (await page.locator('#drawer .context-actions-standard button').allTextContents())
+    .map((text) => text.trim());
   assert.deepEqual(contextualActions.slice(-3), ['Interroger l’agent', 'Voir l’audit', 'Copier le lien']);
 
   await page.keyboard.press('Escape');
