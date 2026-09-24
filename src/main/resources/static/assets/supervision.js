@@ -5,7 +5,7 @@
 
 import {
   $, ago, api, busy, circuitBreakersValue, clockTime, confirmAction, definition, dismissDrawer,
-  downloadCsv, drawerOpen, duration, el, empty, errorState, frag, loading, openDrawer, params,
+  downloadCsv, drawerOpen, duration, el, empty, errorState, frag, freshnessStamp, loading, openDrawer, params,
   percent, registerDrawer, render, report, setParams, skeleton, sortable, sparkline, stamp, stateMark,
   stateTag, toast,
 } from './core.js';
@@ -712,7 +712,7 @@ function openProcess(row) {
   const maintenance = (data?.maintenance || []).find((window) => window.processId === row.processId);
   const body = frag(
     definition('État', stateTag(row.state)),
-    definition('Dernière exécution', el('span', null, stamp(row.lastRun))),
+    definition('Dernière exécution', frag(el('span', null, stamp(row.lastRun)), freshnessStamp(row.lastRun, 5 * 60 * 1000, 'Mesuré'))),
     definition('Durée', el('span', null, duration(row.durationMillis))),
     definition('Retard', el('span', null, duration(row.delayMillis))),
     definition('Relevé', el('span', null, row.note || '—')),
@@ -903,6 +903,7 @@ function openAnomaly(anomaly) {
   // Le titre est déjà celui du panneau : la pastille n'y ajoute que la gravité, en français.
   body.append(stateTag(anomaly.severity));
   body.append(el('p', 'muted', anomaly.processName));
+  body.append(freshnessStamp(anomaly.lastSeenAt || anomaly.firstSeenAt, 5 * 60 * 1000, 'Observée'));
   const actions = el('div', 'context-actions');
   const ask = contextChatButton('Poursuivre avec l’agent', `Alerte · ${anomaly.title}`,
     alertContext(anomaly), `alert:${anomaly.id}`, 'primary');
@@ -1149,6 +1150,7 @@ async function openDecision(id) {
     meta.append(stateTag(DECISION_STATES[decision.status], DECISION_LABELS[decision.status] || decision.status));
     meta.append(el('span', null, decision.processName));
     meta.append(el('span', null, stamp(decision.decidedAt)));
+    meta.append(freshnessStamp(decision.decidedAt, 30 * 60 * 1000, 'Décidée'));
     hero.append(meta, el('h3', null, decision.objective || decision.action));
     if (decision.context) hero.append(el('p', null, decision.context));
     body.append(hero);
