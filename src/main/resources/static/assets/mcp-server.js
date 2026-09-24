@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 
-import { $, credentials, el, openDrawer, registerDrawer, report, setDrawerParam } from './core.js';
+import { $, credentials, el, empty, freshnessTag, openDrawer, registerDrawer, report, setDrawerParam } from './core.js';
 
 const ENDPOINT = '/api/agent/mcp-server';
 const PROTOCOL = '2025-06-18';
@@ -281,9 +281,9 @@ export async function view() {
         const sessions = summary.sessions || [];
         observedSessions = sessions;
         if (!sessions.length) {
-          host.replaceChildren(el('div', 'mcp-empty-action',
-            el('strong', null, 'Aucun client MCP connecté'),
-            el('span', 'muted', 'Le serveur Kex est disponible mais aucune session cliente n’est actuellement observée.')));
+          host.replaceChildren(empty('Aucun client MCP connecté.',
+            'Le serveur Kex est disponible mais aucune session cliente n’est actuellement observée.',
+            { label: 'Inspecter le catalogue', onClick: () => document.querySelector('[data-mcp-tab="catalog"]')?.click() }));
         } else {
           const table = el('table', 'mcp-session-table');
           const head = document.createElement('thead');
@@ -323,6 +323,8 @@ export async function view() {
           table.append(head, body);
           host.replaceChildren(table);
         }
+        $('#mcp-server-freshness')?.replaceChildren(
+          freshnessTag(new Date().toISOString(), 'Serveur vérifié', 45_000));
       }
     } catch (error) { report(error); }
     setStatus(true, 'Opérationnel · lecture seule');
