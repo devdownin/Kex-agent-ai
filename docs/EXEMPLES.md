@@ -116,6 +116,67 @@ change le comportement de tous les échanges à venir, pas seulement du prochain
 Un échange en échec ou interrompu ne propose rien : une procédure tirée d'une tentative ratée
 apprendrait le mauvais geste.
 
+## Charte, curation et interopérabilité MCP
+
+Les versions récentes ajoutent trois démonstrations importantes au-delà du chat.
+
+**Charte d'exploitation.** La charte donne au locataire un contexte d'exploitation versionné :
+règles locales, conventions et principes durables. Une modification exige un motif et passe dans
+l'audit. `GET /api/agent/charter/versions` montre ensuite qui a fait évoluer le cadre et pourquoi.
+
+**Curation des compétences.** `GET /api/agent/skills/review-queue` présente ce qui attend une
+décision humaine ; `GET /api/agent/skills/curation` distingue les procédures actives, dormantes ou
+répétitives. Le curateur peut signaler une compétence devenue inutile, mais seul un humain peut la
+retirer, avec un motif. Une procédure écrite ou importée suit le même circuit d'approbation qu'une
+procédure apprise.
+
+**Kex comme serveur MCP.** Avec `kex.mcp.server.enabled=true`, un client MCP peut se connecter à
+`/api/agent/mcp-server`. Kex expose volontairement une surface d'observation bornée : état de
+supervision, vue d'ensemble, alertes, incidents, décisions en attente et diagnostics de
+topic/processus. Une décision en attente peut être lue, jamais approuvée par MCP.
+
+Exemples depuis un client MCP connecté à Kex :
+
+```
+Donne-moi l'état de supervision Kex et les alertes actives.
+```
+
+```
+Diagnostique le processus billing et corrèle son état, ses alertes et ses décisions en attente.
+```
+
+```
+Quelles décisions attendent un humain ? Résume leur objectif et leur niveau de confiance,
+sans en approuver aucune.
+```
+
+Le serveur publie aussi le prompt `kex_supervision_triage` pour guider une investigation en lecture
+seule. Sa vue de synthèse expose notamment la version du protocole, les requêtes, la latence et les
+sessions clientes actives ou inactives.
+
+## Playground MCP et Resource Templates
+
+Dans **Technique → MCP**, le Playground permet d'exercer directement un serveur sans passer par le
+modèle. On peut ainsi vérifier d'abord que le serveur répond et que sa capacité produit les bonnes
+données, puis seulement tester si le modèle choisit correctement cette capacité.
+
+Le Playground permet d'appeler les outils, parcourir et lire les resources et utiliser les
+**resource templates**. Lorsqu'un template paramétré est sélectionné, ses champs sont générés
+immédiatement : l'opérateur renseigne les paramètres sans construire l'URI à la main.
+
+Le même espace rend visibles les sessions et leur activité. La démonstration devient donc très
+concrète : **connexion → découverte → appel → résultat → trace**.
+
+## Slack, Teams et e-mail
+
+Les alertes et demandes d'approbation peuvent sortir de la console. Kex sait notifier Slack, Teams
+et e-mail ; `GET /api/agent/channels/status` indique ce qui est effectivement configuré sans exposer
+les secrets.
+
+Un bon scénario consiste à provoquer une décision `SUPERVISED` puis à montrer qu'elle conserve son
+identité, son contexte et son audit lorsqu'elle est relayée hors de Kex. Les intégrations entrantes
+activées traitent les réponses supportées sans transformer le canal de messagerie en passe-droit.
+
 ## Tâches planifiées
 
 Une question posée à heure fixe, dont le résultat part dans le journal d'audit.
@@ -177,6 +238,25 @@ gouvernance, les permissions ou les approbations.
 
 Ce n'est pas un oubli : donner au modèle un outil capable d'approuver ses propres décisions
 supprimerait la validation humaine qu'il est censé demander.
+
+## Une démonstration de huit minutes
+
+1. **Données réelles** — demander les topics `demo.*`, puis tracer `ORD-1042`.
+2. **Mémoire durable** — retenir une convention, changer de conversation, la retrouver.
+3. **Apprentissage gouverné** — lancer un diagnostic multi-outils, ouvrir la file de revue,
+   approuver la compétence puis afficher sa curation.
+4. **Charte** — montrer une règle d'exploitation et son historique versionné.
+5. **Playground MCP** — découvrir outils/resources, sélectionner un resource template et exécuter
+   un appel sans modèle.
+6. **Kex devient serveur MCP** — depuis un client externe, lire les alertes ou diagnostiquer un
+   processus via les outils Kex, puis montrer la session dans la console.
+7. **Décision supervisée** — la retrouver dans la console et, si configuré, dans Slack, Teams ou
+   e-mail.
+8. **Audit** — retrouver les appels, la décision humaine, la politique et les motifs.
+
+Le fil conducteur reste **observer → comprendre → décider → faire valider → tracer**. Les fonctions
+MCP montrent que cette gouvernance reste visible aussi bien quand Kex consomme des outils externes
+que lorsqu'il devient lui-même un outil pour un autre agent.
 
 ## Une démonstration de cinq minutes
 
