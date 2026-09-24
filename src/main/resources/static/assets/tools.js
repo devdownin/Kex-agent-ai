@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 
-// Vue technique : les serveurs MCP et la santé de l'instance. Elle existe pour que le tableau de
+// Espaces plateforme : connexions MCP/Kafka, connaissance et santé système. Elle existe pour que le tableau de
 // bord métier n'en soit pas saturé — les signaux bruts sont au second niveau, jamais au premier.
 
 import {
@@ -265,7 +265,7 @@ function catalogEntryCard(entry) {
 function openInstallCatalogDialog(entry) {
   catalogInstallTarget = entry.id;
   $('#install-catalog-label').textContent =
-    `${entry.name} — la connexion est créée désactivée, à activer ensuite dans « Serveurs MCP » `
+    `${entry.name} — la connexion est créée désactivée, à activer ensuite dans « Connexions MCP » `
       + 'une fois vérifiée.';
   $('#install-catalog-form').reset();
   $('#install-catalog-connection').value = entry.id;
@@ -352,7 +352,7 @@ function openInstallDialog(sourceId, candidate) {
   installTarget = { sourceId, candidateId: candidate.id };
   $('#install-discovered-label').textContent =
     `${candidate.title || candidate.name} (${sourceId}) — la connexion est créée désactivée, `
-      + "à activer ensuite dans « Serveurs MCP » une fois vérifiée.";
+      + "à activer ensuite dans « Connexions MCP » une fois vérifiée.";
   $('#install-discovered-form').reset();
   $('#install-discovered-connection').value = candidate.name.replace(/[^a-zA-Z0-9._-]/g, '-').slice(0, 64);
   $('#install-discovered').showModal();
