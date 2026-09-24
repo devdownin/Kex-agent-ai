@@ -5,8 +5,8 @@
 // bord métier n'en soit pas saturé — les signaux bruts sont au second niveau, jamais au premier.
 
 import {
-  $, api, busy, circuitStateTag, confirmAction, definition, el, empty, exampleFromSchema, freshnessTag,
-  openDrawer, params, registerDrawer, render, report, schemaErrors, setDrawerParam, setParams, stateTag, toast,
+  $, ago, api, busy, circuitStateTag, confirmAction, definition, el, empty, exampleFromSchema, freshnessTag,
+  openDrawer, params, registerDrawer, render, report, schemaErrors, setDrawerParam, setParams, stamp, stateTag, toast,
 } from './core.js';
 import * as kafka from './kafka.js';
 import * as knowledge from './knowledge.js';
