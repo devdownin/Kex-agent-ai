@@ -14,11 +14,13 @@ export async function list() {
   await render($('#memory-list'), load, (data) => {
     if (data.disabled) {
       return empty('Mémoire long-terme désactivée.',
-        'kex.agent.memory.enabled vaut false : le modèle ne retient rien au-delà d’une conversation.');
+        'kex.agent.memory.enabled vaut false : le modèle ne retient rien au-delà d’une conversation.',
+        { href: '#/settings', label: 'Voir la configuration' });
     }
     if (!data.rows.length) {
       return empty('Aucun souvenir retenu.',
-        'Le modèle n’a rien jugé utile de retenir au-delà des conversations.');
+        'Le modèle n’a rien jugé utile de retenir au-delà des conversations.',
+        { href: '#/chat', label: 'Ouvrir une conversation' });
     }
 
     const table = el('table', 'grid');

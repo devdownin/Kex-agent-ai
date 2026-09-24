@@ -6,8 +6,8 @@
 // chaînes pour une poignée de fichiers statiques.
 
 import {
-  $, ago, api, confirmAction, credentials, drawerOpen, el, onCredentialChange, onUnauthorized, report,
-  restoreDrawerFromUrl, stamp, toast, viewName,
+  $, ago, api, confirmAction, credentials, drawerOpen, el, onCredentialChange, onUnauthorized, refreshFreshnessTag,
+  report, restoreDrawerFromUrl, stamp, toast, viewName,
 } from './core.js';
 import * as automations from './automations.js';
 import * as channels from './channels.js';
@@ -286,40 +286,35 @@ onCredentialChange((value) => {
   else $('#whoami-label').hidden = true;
 });
 
-/* ── Navigation repliable ─────────────────────────────────────────────── */
+/* ── Navigation latérale ─────────────────────────────────────────────── */
 
 const railToggle = $('#rail-toggle');
 try {
-  if (localStorage.getItem('kex.agent.rail') === 'collapsed') document.documentElement.dataset.rail = 'collapsed';
+  const storedRail = localStorage.getItem('kex.agent.rail');
+  const compactViewport = matchMedia('(min-width: 861px) and (max-width: 1100px)').matches;
+  document.documentElement.dataset.rail = storedRail || (compactViewport ? 'collapsed' : 'expanded');
 } catch {
-  /* sans stockage, la navigation reste développée */
+  document.documentElement.dataset.rail = 'expanded';
 }
 
 function syncRailButton() {
   if (!railToggle) return;
   const collapsed = document.documentElement.dataset.rail === 'collapsed';
   railToggle.setAttribute('aria-pressed', String(collapsed));
-  railToggle.setAttribute('aria-label', collapsed ? 'Développer la navigation' : 'Réduire la navigation');
-  railToggle.title = collapsed ? 'Développer la navigation' : 'Réduire la navigation';
-  railToggle.querySelector('[aria-hidden="true"]').textContent = collapsed ? '»' : '«';
-  railToggle.querySelector('.rail-toggle-label').textContent = collapsed ? 'Développer' : 'Réduire';
-  document.querySelectorAll('.rail .nav-item').forEach((item) => {
-    if (collapsed) item.title = item.getAttribute('aria-label') || item.textContent.trim();
-    else item.removeAttribute('title');
-  });
+  railToggle.setAttribute('aria-label', collapsed ? 'Déplier la navigation' : 'Replier la navigation');
+  railToggle.title = collapsed ? 'Déplier la navigation' : 'Replier la navigation';
+  const label = railToggle.querySelector('.rail-toggle-label');
+  if (label) label.textContent = collapsed ? 'Déplier' : 'Replier';
 }
 
 railToggle?.addEventListener('click', () => {
-  const collapsed = document.documentElement.dataset.rail !== 'collapsed';
-  if (collapsed) document.documentElement.dataset.rail = 'collapsed';
-  else delete document.documentElement.dataset.rail;
-  try {
-    localStorage.setItem('kex.agent.rail', collapsed ? 'collapsed' : 'expanded');
-  } catch {
-    /* le choix reste valable pour la durée de la page */
-  }
+  const next = document.documentElement.dataset.rail === 'collapsed' ? 'expanded' : 'collapsed';
+  document.documentElement.dataset.rail = next;
+  try { localStorage.setItem('kex.agent.rail', next); } catch { /* préférence locale facultative */ }
   syncRailButton();
 });
+
+syncRailButton();
 
 /* ── Thème ─────────────────────────────────────────────────────────────── */
 
@@ -616,7 +611,9 @@ async function backgroundRefresh() {
 // Le libellé de fraîcheur vieillit tout seul, sans requête : c'est lui qui doit dire la vérité
 // entre deux sondages.
 function tick() {
-  if (!document.hidden && status) renderStatus(status);
+  if (document.hidden) return;
+  if (status) renderStatus(status);
+  document.querySelectorAll('.data-freshness[data-at]').forEach((node) => refreshFreshnessTag(node));
 }
 
 setInterval(backgroundRefresh, REFRESH_MS);

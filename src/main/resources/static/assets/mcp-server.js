@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 
-import { $, credentials, el, empty, freshnessStamp, openDrawer, report } from './core.js';
+import { $, credentials, el, empty, freshnessTag, openDrawer, registerDrawer, report, setDrawerParam } from './core.js';
 
 const ENDPOINT = '/api/agent/mcp-server';
 const PROTOCOL = '2025-06-18';
 let id = 0;
 let session = null;
 let catalog = { tools: [], resources: [], templates: [], prompts: [] };
+let observedSessions = [];
 
 async function rpc(method, params = {}) {
   const headers = {
@@ -255,8 +256,8 @@ async function executePlayground(event) {
   }
 }
 
-function openSessionDetails(item) {
-  const body = el('div', 'stack');
+function openSessionDetails(item, updateUrl = true) {
+  if (updateUrl) setDrawerParam('session', item.id);
   const list = el('dl', 'definition-list');
   const add = (label, value) => {
     const dt = document.createElement('dt'); dt.textContent = label;
@@ -270,8 +271,7 @@ function openSessionDetails(item) {
   add('Dernière activité', item.lastActivityAt ? new Date(item.lastActivityAt).toLocaleString() : '—');
   add('Appels', String(item.callCount ?? 0));
   add('Identifiant de session', item.id);
-  body.append(list, freshnessStamp(item.lastActivityAt, 5 * 60 * 1000, 'Activité'));
-  openDrawer('Session MCP', body);
+  openDrawer('Session MCP', list);
 }
 
 export async function view() {
@@ -303,10 +303,11 @@ export async function view() {
         healthMetric.append(freshnessStamp(new Date().toISOString(), 60_000, 'Vérifié'));
         const host = $('#mcp-session-list');
         const sessions = summary.sessions || [];
+        observedSessions = sessions;
         if (!sessions.length) {
           host.replaceChildren(empty('Aucun client MCP connecté.',
             'Le serveur Kex est disponible mais aucune session cliente n’est actuellement observée.',
-            { href: '#/settings', label: 'Voir la configuration MCP' }));
+            { label: 'Inspecter le catalogue', onClick: () => document.querySelector('[data-mcp-tab="catalog"]')?.click() }));
         } else {
           const table = el('table', 'mcp-session-table');
           const head = document.createElement('thead');
@@ -347,6 +348,8 @@ export async function view() {
           table.append(head, body);
           host.replaceChildren(table);
         }
+        $('#mcp-server-freshness')?.replaceChildren(
+          freshnessTag(new Date().toISOString(), 'Serveur vérifié', 45_000));
       }
     } catch (error) { report(error); }
     setStatus(true, 'Opérationnel · lecture seule');
@@ -359,6 +362,10 @@ export async function view() {
 }
 
 export function bind() {
+  registerDrawer('session', (id) => {
+    const item = observedSessions.find((session) => session.id === id);
+    if (item) openSessionDetails(item, false);
+  });
   document.querySelectorAll('[data-mcp-tab]').forEach((button) => button.addEventListener('click', () => {
     document.querySelectorAll('[data-mcp-tab]').forEach((item) => item.classList.toggle('active', item === button));
     document.querySelectorAll('[data-mcp-panel]').forEach((panel) => {

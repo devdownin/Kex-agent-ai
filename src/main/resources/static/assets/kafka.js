@@ -4,7 +4,7 @@
 // Vue technique du cluster : topics, puis les groupes qui les lisent et leur retard. Second
 // niveau délibérément — le tableau de bord métier n'a pas à en être saturé.
 
-import { $, ago, api, el, empty, errorState, openDrawer, render, sortable, stateTag } from './core.js';
+import { $, ago, api, el, empty, errorState, freshnessTag, openDrawer, render, sortable, stateTag } from './core.js';
 
 const BASE = '/api/agent/kafka';
 
@@ -77,6 +77,8 @@ export async function topics() {
     }
 
     const wrap = el('div');
+    wrap.append(freshnessTag(data.observedAt || data.measuredAt || new Date().toISOString(),
+      'Relevé Kafka', 45_000));
     const note = coverageNote(data.coverage);
     if (note) wrap.append(note);
     data.warnings?.forEach((warning) => wrap.append(el('p', 'hint', warning)));
@@ -138,6 +140,8 @@ function lagPanel(data) {
   if (data.unavailable) return unavailable(data.unavailable);
 
   const wrap = el('div');
+  wrap.append(freshnessTag(data.observedAt || data.measuredAt || new Date().toISOString(),
+    'Groupes vérifiés', 45_000));
   const note = coverageNote(data.coverage);
   if (note) wrap.append(note);
 

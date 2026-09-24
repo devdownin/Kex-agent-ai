@@ -5,8 +5,8 @@
 // bord métier n'en soit pas saturé — les signaux bruts sont au second niveau, jamais au premier.
 
 import {
-  $, api, busy, circuitStateTag, confirmAction, el, empty, exampleFromSchema, freshnessStamp, openDrawer, params, render, report,
-  schemaErrors, setParams, stateTag, toast,
+  $, api, busy, circuitStateTag, confirmAction, definition, el, empty, exampleFromSchema, freshnessTag,
+  openDrawer, params, registerDrawer, render, report, schemaErrors, setDrawerParam, setParams, stateTag, toast,
 } from './core.js';
 import * as kafka from './kafka.js';
 import * as knowledge from './knowledge.js';
@@ -16,6 +16,7 @@ import * as summaries from './summaries.js';
 // Cache du dernier relevé : la recherche filtre dessus plutôt que de refaire un appel réseau par
 // caractère saisi — l'endpoint n'a pas de paramètre de recherche et n'a pas à en gagner un pour ça.
 let lastServers = [];
+let lastServersAt = null;
 let lastMetrics = [];
 let runtimeServers = new Map();
 let editingConnection = null;
@@ -60,6 +61,7 @@ export async function servers() {
       connection: server.connection, initialized: false, tools: [], disabled: !server.enabled,
     })));
     lastMetrics = metrics;
+    lastServersAt = new Date().toISOString();
     renderStorageStatus(storage);
     return lastServers;
   }, renderServers);
@@ -73,11 +75,14 @@ function renderServers(list) {
       ? empty('Aucun serveur ni outil ne correspond à la recherche.')
       : empty('Aucune connexion MCP configurée.',
         'Sans outil, l’agent ne peut qu’observer ce qu’on lui raconte.',
-        { label: 'Ajouter une connexion MCP', run: () => openEditor() });
+        { label: 'Ajouter une connexion', onClick: () => openEditor() });
   }
+  const wrap = el('div', 'stack');
+  if (lastServersAt) wrap.append(freshnessTag(lastServersAt, 'Connexions vérifiées', 45_000));
   const grid = el('div', 'servers-grid');
   filtered.forEach((server) => grid.append(card(server)));
-  return grid;
+  wrap.append(grid);
+  return wrap;
 }
 
 function matchesQuery(server, query) {
@@ -173,12 +178,8 @@ function card(server) {
           : `${metric.callCount} appel(s) · ${Math.round(metric.averageDurationMs)} ms en moyenne`;
         button.append(el('span', 'muted', label));
       }
-      button.addEventListener('click', () => invoke(node, server.connection, tool));
-      const details = el('button', 'ghost compact', 'Détails');
-      details.type = 'button';
-      details.setAttribute('aria-label', `Détails de l’outil ${tool.name}`);
-      details.addEventListener('click', () => openToolDetails(server, tool));
-      item.append(button, details);
+      button.addEventListener('click', () => invoke(null, server.connection, tool));
+      item.append(button);
       list.append(item);
     });
     node.append(list);
@@ -187,10 +188,11 @@ function card(server) {
   }
 
   const actions = el('div', 'server-actions');
-  const overview = el('button', 'ghost', 'Détails');
-  overview.type = 'button';
-  overview.addEventListener('click', () => openServerDetails(server, managed));
-  actions.append(overview);
+  const details = el('button', 'ghost', 'Détails');
+  details.type = 'button';
+  details.setAttribute('aria-label', `Détails du serveur ${server.connection}`);
+  details.addEventListener('click', () => openServerDrawer(server));
+  actions.append(details);
   const resources = el('button', 'ghost', 'Ressources');
   resources.type = 'button';
   resources.disabled = Boolean(managed && !managed.enabled);
@@ -255,6 +257,69 @@ function card(server) {
   node.append(actions);
   return node;
 }
+
+
+function openServerDrawer(server, updateUrl = true) {
+  const managed = runtimeServers.get(server.connection);
+  if (updateUrl) setDrawerParam('mcp', server.connection);
+  const state = managed && !managed.enabled ? 'UNKNOWN' : (server.initialized ? 'OK' : 'UNKNOWN');
+  const body = el('div', 'stack');
+  body.append(
+    definition('État', stateTag(state,
+      managed && !managed.enabled ? 'Désactivé' : (server.initialized ? 'Initialisé' : 'Pas de handshake'))),
+    definition('Connexion', el('code', 'technical-id', server.connection)),
+    definition('Serveur', el('span', null, server.serverName || 'Non annoncé')),
+    definition('Version', el('span', null, server.version || '—')),
+    definition('Protocole', el('span', null, server.protocolVersion || '—')),
+    definition('Transport', el('span', null, managed?.transport || '—')),
+    definition('Outils', el('span', null, String(server.tools?.length || 0))),
+  );
+  if (server.circuitBreakerState) {
+    body.append(definition('Disjoncteur', circuitStateTag(server.circuitBreakerState,
+      server.circuitBreakerState)));
+  }
+
+  const tools = server.tools || [];
+  body.append(el('h3', 'drawer-sub', 'Outils exposés'));
+  if (!tools.length) {
+    body.append(empty('Aucun outil exposé.',
+      'Le serveur est connu mais son catalogue d’outils est vide ou n’a pas encore été chargé.'));
+  } else {
+    const list = el('div', 'drawer-tool-list');
+    tools.forEach((tool) => {
+      const button = el('button', 'drawer-tool');
+      button.type = 'button';
+      button.append(el('strong', null, tool.name));
+      if (tool.description) button.append(el('span', 'muted', tool.description));
+      button.addEventListener('click', () => invoke(null, server.connection, tool));
+      list.append(button);
+    });
+    body.append(list);
+  }
+
+  if (managed) {
+    const actions = el('div', 'row-end');
+    const edit = el('button', 'ghost', 'Modifier');
+    edit.type = 'button';
+    edit.addEventListener('click', () => openEditor(managed));
+    const diagnostic = el('button', 'ghost', 'Diagnostic');
+    diagnostic.type = 'button';
+    diagnostic.addEventListener('click', async () => {
+      try {
+        const diagnostics = await api(`/api/agent/mcp/servers/${encodeURIComponent(server.connection)}/diagnostics`);
+        const panel = el('div', 'stack');
+        panel.append(el('p', 'muted',
+          `${diagnostics.connected ? 'Connecté' : 'Hors ligne'} · ${diagnostics.toolCount} outil(s)`));
+        if (diagnostics.toolDiff) panel.append(renderToolDiff(diagnostics.toolDiff));
+        openDrawer(`Diagnostic · ${server.connection}`, panel);
+      } catch (error) { report(error); }
+    });
+    actions.append(edit, diagnostic);
+    body.append(actions);
+  }
+  openDrawer(`Serveur MCP · ${server.connection}`, body);
+}
+
 
 function renderStorageStatus(storage) {
   const host = $('#mcp-storage-status');
@@ -475,31 +540,32 @@ function closeButton(panel) {
   return close;
 }
 
-function invoke(host, connection, tool) {
-  host.querySelector('.invoke')?.remove();
-  const panel = el('section', 'invoke');
-  const head = el('header');
-  head.append(el('h4', null, tool.name), closeButton(panel));
-  panel.append(head);
+function invoke(_host, connection, tool, updateUrl = true) {
+  if (updateUrl) setDrawerParam('outil', `${connection}::${tool.name}`);
+  const panel = el('section', 'invoke drawer-invoke');
+  panel.append(el('p', 'muted', `Connexion · ${connection}`));
+
   // Le schéma vient du serveur, jamais réinterprété : il dit ce que l'outil attend, pas ce qu'on
   // devine en tapant "{}" et en lisant l'erreur qui revient.
   if (tool.inputSchema && Object.keys(tool.inputSchema).length) {
-    panel.append(el('pre', 'dump muted schema-hint', JSON.stringify(tool.inputSchema, null, 2)));
+    const schema = document.createElement('details');
+    schema.className = 'advanced';
+    schema.append(el('summary', null, 'Contrat d’entrée'));
+    schema.append(el('pre', 'dump muted schema-hint', JSON.stringify(tool.inputSchema, null, 2)));
+    panel.append(schema);
   }
 
+  const argsLabel = el('label', null, 'Arguments JSON');
   const args = el('textarea');
-  args.rows = 4;
+  args.rows = 6;
   args.spellcheck = false;
-  // Un "{}" nu ne dit rien de ce qu'un outil à paramètres attend : un exemple conforme au schéma
-  // vaut mieux qu'un objet vide à déchiffrer depuis la seule lecture du schéma affiché au-dessus.
   const properties = tool.inputSchema?.properties || {};
   args.value = Object.keys(properties).length
     ? JSON.stringify(exampleFromSchema(tool.inputSchema), null, 2)
     : '{}';
-  // Deux ".dump" dans le même panneau une fois le schéma affiché : "result" les distingue, sans
-  // quoi un sélecteur qui cible l'un des deux tombe sur le premier trouvé, pas forcément le bon.
-  const output = el('pre', 'dump result', '—');
+  argsLabel.append(args);
 
+  const output = el('pre', 'dump result', 'Aucune invocation exécutée.');
   const run = el('button', 'primary', 'Invoquer');
   run.type = 'button';
   run.addEventListener('click', () => {
@@ -510,9 +576,6 @@ function invoke(host, connection, tool) {
       output.textContent = 'Arguments JSON invalides.';
       return;
     }
-    // Un sous-ensemble du schéma, pas une validation complète (voir schemaErrors dans core.js) :
-    // attraper une erreur de frappe ici évite l'aller-retour serveur, sans prétendre remplacer le
-    // serveur MCP comme seule autorité sur ce qu'il accepte réellement.
     if (tool.inputSchema) {
       const errors = schemaErrors(parsed, tool.inputSchema, 'arguments');
       if (errors.length) {
@@ -536,8 +599,8 @@ function invoke(host, connection, tool) {
 
   const row = el('div', 'row-end');
   row.append(run);
-  panel.append(args, row, output);
-  host.append(panel);
+  panel.append(argsLabel, row, el('h3', 'drawer-sub', 'Résultat'), output);
+  openDrawer(`Outil MCP · ${tool.name}`, panel);
   args.focus();
 }
 
@@ -628,6 +691,8 @@ export async function health() {
   } catch {
     /* /actuator/info exige le jeton : son absence ne casse pas la vue */
   }
+  const fresh = $('#system-freshness');
+  if (fresh) fresh.replaceChildren(freshnessTag(new Date().toISOString(), 'Mesures vérifiées', 45_000));
 }
 
 export async function integrationsView() {
@@ -659,6 +724,22 @@ export async function view() {
  * fond qui les rafraîchit déjà tous les uns après les autres.
  */
 export function wire() {
+  registerDrawer('mcp', async (connection) => {
+    if (!lastServers.length) await servers();
+    const server = lastServers.find((item) => item.connection === connection);
+    if (server) openServerDrawer(server, false);
+  });
+  registerDrawer('outil', async (reference) => {
+    if (!lastServers.length) await servers();
+    const separator = reference.indexOf('::');
+    if (separator < 0) return;
+    const connection = reference.slice(0, separator);
+    const name = reference.slice(separator + 2);
+    const server = lastServers.find((item) => item.connection === connection);
+    const tool = server?.tools?.find((item) => item.name === name);
+    if (tool) invoke(null, connection, tool, false);
+  });
+
   $('#refresh-tools').addEventListener('click', view);
   $('#tools-search').addEventListener('input', (event) => {
     setParams({ q: event.target.value.trim() });

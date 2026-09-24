@@ -5,7 +5,7 @@
 
 import {
   $, ago, api, busy, circuitBreakersValue, clockTime, confirmAction, definition, dismissDrawer,
-  downloadCsv, drawerOpen, duration, el, empty, errorState, frag, freshnessStamp, loading, openDrawer, params,
+  downloadCsv, drawerOpen, duration, el, empty, errorState, frag, freshnessTag, loading, openDrawer, params,
   percent, registerDrawer, render, report, setParams, skeleton, sortable, sparkline, stamp, stateMark,
   stateTag, toast,
 } from './core.js';
@@ -712,7 +712,8 @@ function openProcess(row) {
   const maintenance = (data?.maintenance || []).find((window) => window.processId === row.processId);
   const body = frag(
     definition('État', stateTag(row.state)),
-    definition('Dernière exécution', frag(el('span', null, stamp(row.lastRun)), freshnessStamp(row.lastRun, 5 * 60 * 1000, 'Mesuré'))),
+    definition('Dernière exécution', el('span', null, stamp(row.lastRun))),
+    definition('Fraîcheur', freshnessTag(row.lastRun, 'Mesuré')),
     definition('Durée', el('span', null, duration(row.durationMillis))),
     definition('Retard', el('span', null, duration(row.delayMillis))),
     definition('Relevé', el('span', null, row.note || '—')),
