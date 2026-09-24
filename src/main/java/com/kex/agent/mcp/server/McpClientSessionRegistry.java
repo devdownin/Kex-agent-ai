@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.mcp.server;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -12,16 +13,18 @@ import org.springframework.stereotype.Component;
 /** Tracks MCP client sessions for audit and read-only operational visibility. */
 @Component
 public class McpClientSessionRegistry {
+    private static final Duration TTL = Duration.ofMinutes(30);
     private final ConcurrentHashMap<String, Session> sessions = new ConcurrentHashMap<>();
 
-    public String open(String name, String version) {
+    public String open(String name, String version, String protocol) {
         String id = UUID.randomUUID().toString();
         Instant now = Instant.now();
-        sessions.put(id, new Session(id, name, version, now, now, 0));
+        sessions.put(id, new Session(id, name, version, protocol, now, now, 0));
         return id;
     }
 
     public Client client(String sessionId) {
+        purgeExpired();
         Session session = sessionId == null ? null : sessions.get(sessionId);
         return session == null ? null : new Client(session.name(), session.version());
     }
@@ -29,16 +32,31 @@ public class McpClientSessionRegistry {
     public void touch(String sessionId) {
         if (sessionId == null) return;
         sessions.computeIfPresent(sessionId, (id, session) ->
-                new Session(id, session.name(), session.version(), session.createdAt(), Instant.now(), session.callCount() + 1));
+                new Session(id, session.name(), session.version(), session.protocol(), session.createdAt(), Instant.now(), session.callCount() + 1));
     }
 
-    public List<Session> snapshot() {
-        return sessions.values().stream().sorted((a, b) -> b.lastActivityAt().compareTo(a.lastActivityAt())).toList();
+    public List<SessionView> snapshot() {
+        purgeExpired();
+        Instant now = Instant.now();
+        return sessions.values().stream()
+                .sorted((a, b) -> b.lastActivityAt().compareTo(a.lastActivityAt()))
+                .map(session -> new SessionView(session.id(), session.name(), session.version(), session.protocol(),
+                        session.createdAt(), session.lastActivityAt(), session.callCount(),
+                        Duration.between(session.lastActivityAt(), now).compareTo(Duration.ofMinutes(5)) < 0 ? "ACTIVE" : "IDLE"))
+                .toList();
+    }
+
+    private void purgeExpired() {
+        Instant cutoff = Instant.now().minus(TTL);
+        sessions.entrySet().removeIf(entry -> entry.getValue().lastActivityAt().isBefore(cutoff));
     }
 
     public record Client(String name, String version) {
         public String label() { return name + "/" + version; }
     }
 
-    public record Session(String id, String name, String version, Instant createdAt, Instant lastActivityAt, long callCount) {}
+    private record Session(String id, String name, String version, String protocol, Instant createdAt, Instant lastActivityAt, long callCount) {}
+
+    public record SessionView(String id, String name, String version, String protocol, Instant createdAt,
+                              Instant lastActivityAt, long callCount, String state) {}
 }

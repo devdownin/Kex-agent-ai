@@ -101,6 +101,7 @@ function playgroundTargets() {
     option.textContent = item.name || item.uri || item.uriTemplate;
     return option;
   }));
+  renderTemplateFields();
 }
 
 async function executePlayground(event) {
@@ -163,7 +164,7 @@ export async function view() {
         host.replaceChildren(...(summary.sessions || []).map((item) => {
           const row = el('div', 'mcp-session-row');
           row.append(el('strong', '', `${item.name}/${item.version}`),
-            el('span', 'muted', `${item.callCount} appels · ${new Date(item.lastActivityAt).toLocaleString()}`));
+            el('span', 'muted', `${item.state || 'ACTIVE'} · ${item.protocol || '—'} · ${item.callCount} appels · ${new Date(item.lastActivityAt).toLocaleString()}`));
           return row;
         }));
       }
