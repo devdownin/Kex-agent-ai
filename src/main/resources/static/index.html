@@ -436,11 +436,14 @@
             <div class="metric"><strong id="mcp-resources-count">—</strong><span>Resources</span></div>
             <div class="metric"><strong id="mcp-templates-count">—</strong><span>Templates</span></div>
             <div class="metric"><strong id="mcp-prompts-count">—</strong><span>Prompts</span></div>
+            <div class="metric"><strong id="mcp-active-sessions">—</strong><span>Sessions actives</span></div>
+            <div class="metric"><strong id="mcp-health-state">—</strong><span>Santé MCP</span></div>
           </div>
           <div class="mcp-summary-grid">
             <div class="subpanel"><span class="panel-kicker">Contrat</span><h2>Lecture seule</h2><p class="hint">Les mutations gouvernées ne sont pas exposées par le catalogue MCP.</p></div>
             <div class="subpanel"><span class="panel-kicker">Protocole</span><h2 id="mcp-protocol">—</h2><p class="hint" id="mcp-server-version">Version serveur inconnue</p></div>
           </div>
+          <div class="subpanel"><span class="panel-kicker">Clients</span><h2>Sessions MCP</h2><div id="mcp-session-list" class="mcp-session-list"><p class="hint">Aucune session observée.</p></div></div>
         </div>
         <div data-mcp-panel="catalog" hidden>
           <div class="toolbar"><label>Type <select id="mcp-catalog-kind"><option value="tools">Tools</option><option value="resources">Resources</option><option value="templates">Templates</option><option value="prompts">Prompts</option></select></label></div>
@@ -452,6 +455,7 @@
               <span class="panel-kicker">Requête</span><h2>Tester le contrat MCP</h2>
               <label>Opération <select id="mcp-playground-operation"><option value="tool">Appeler un tool</option><option value="resource">Lire une resource</option><option value="template">Instancier un template</option><option value="prompt">Rendre un prompt</option></select></label>
               <label>Cible <select id="mcp-playground-target"></select></label>
+              <div id="mcp-template-fields" class="stack" hidden></div>
               <label>Arguments JSON <textarea id="mcp-playground-arguments" rows="8" spellcheck="false">{}</textarea></label>
               <button type="submit" class="primary">Exécuter</button>
             </form>
