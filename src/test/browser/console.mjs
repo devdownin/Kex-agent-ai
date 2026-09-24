@@ -150,7 +150,7 @@ await check('la navigation latérale se replie, reste découvrable et mémorise 
   await page.reload({ waitUntil: 'domcontentloaded' });
 
   assert.equal(await page.$eval('html', (node) => node.dataset.rail), 'expanded');
-  const labels = await page.$eval('.nav-item', (nodes) => nodes.map((node) => ({
+  const labels = await page.$$eval('.nav-item', (nodes) => nodes.map((node) => ({
     aria: node.getAttribute('aria-label'), title: node.getAttribute('title'),
   })));
   assert.ok(labels.every((item) => item.aria && item.title === item.aria),
