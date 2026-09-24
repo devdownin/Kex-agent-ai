@@ -144,6 +144,17 @@ await check('le titre de la page suit la vue', async () => {
   assert.equal(await page.$eval('#announcer', (node) => node.textContent), 'Configuration');
 });
 
+await check('la palette de commandes regroupe navigation, actions et MCP', async () => {
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.click('#open-command');
+  await page.fill('#command-query', 'mcp');
+  await page.waitForSelector('#command-results .command-result');
+  const text = await page.$eval('#command-results', (node) => node.innerText);
+  assert.match(text, /Connexions MCP/);
+  assert.match(text, /Serveur MCP Kex/);
+  await page.keyboard.press('Escape');
+});
+
 await check('la navigation latérale se replie, reste découvrable et mémorise son état', async () => {
   await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
   await page.evaluate(() => localStorage.removeItem('kex.agent.rail'));
@@ -232,6 +243,9 @@ await check('un panneau de supervision se rouvre depuis son adresse', async () =
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#drawer:not([hidden])', { timeout: 10000 });
   assert.match(await page.$eval('#drawer-title', (node) => node.textContent), /Order Integration/);
+  const contextualActions = await page.$eval('#drawer .context-actions-standard button',
+    (buttons) => buttons.map((button) => button.textContent.trim()));
+  assert.deepEqual(contextualActions.slice(-3), ['Interroger l’agent', 'Voir l’audit', 'Copier le lien']);
 
   await page.keyboard.press('Escape');
   // `state: 'attached'` : un élément porteur de `hidden` n'est jamais « visible », et l'attente
