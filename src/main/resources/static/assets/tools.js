@@ -63,8 +63,58 @@ export async function servers() {
     lastMetrics = metrics;
     lastServersAt = new Date().toISOString();
     renderStorageStatus(storage);
+    renderMcpConnectionsCockpit(lastServers);
     return lastServers;
   }, renderServers);
+}
+
+function renderMcpConnectionsCockpit(list) {
+  const host = $('#mcp-connections-cockpit');
+  if (!host) return;
+  if (!list.length) {
+    host.replaceChildren(empty('Aucune connexion MCP à superviser.',
+      'Ajoutez une connexion pour disposer d’un cockpit d’exploitation.'));
+    return;
+  }
+
+  const operational = list.filter((server) => server.initialized && runtimeServers.get(server.connection)?.enabled !== false).length;
+  const degraded = list.length - operational;
+  const summary = el('div', 'mcp-cockpit-summary');
+  summary.append(el('strong', null, `${list.length} connexion${list.length > 1 ? 's' : ''}`),
+    el('span', 'muted', `${operational} opérationnelle${operational > 1 ? 's' : ''} · ${degraded} à vérifier`));
+
+  const table = el('table', 'grid mcp-cockpit-table');
+  const head = el('thead');
+  const hr = el('tr');
+  ['Connexion', 'État', 'Outils', 'Appels', 'Latence moyenne', 'Transport'].forEach((label) => hr.append(el('th', null, label)));
+  head.append(hr); table.append(head);
+  const body = el('tbody');
+  list.forEach((server) => {
+    const managed = runtimeServers.get(server.connection);
+    const metrics = lastMetrics.filter((metric) => metric.connection === server.connection);
+    const calls = metrics.reduce((sum, metric) => sum + (metric.callCount || 0), 0);
+    const durations = metrics.map((metric) => metric.averageDurationMs).filter((value) => value != null);
+    const avg = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null;
+    const row = el('tr');
+    const name = el('td', 'strong', server.connection);
+    const state = el('td');
+    state.append(stateTag(managed && !managed.enabled ? 'UNKNOWN' : (server.initialized ? 'OK' : 'WARNING'),
+      managed && !managed.enabled ? 'Désactivée' : (server.initialized ? 'Opérationnelle' : 'À vérifier')));
+    row.append(name, state,
+      el('td', null, String((server.tools || []).length)),
+      el('td', null, String(calls)),
+      el('td', null, avg == null ? '—' : `${avg} ms`),
+      el('td', null, managed?.transport || '—'));
+    row.tabIndex = 0;
+    row.classList.add('clickable');
+    row.addEventListener('click', () => openServerDetails(server, managed));
+    row.addEventListener('keydown', (event) => { if (event.key === 'Enter') openServerDetails(server, managed); });
+    body.append(row);
+  });
+  table.append(body);
+  const scroll = el('div', 'scroll-x');
+  scroll.append(table);
+  host.replaceChildren(summary, scroll);
 }
 
 function renderServers(list) {
