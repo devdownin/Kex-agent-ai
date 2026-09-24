@@ -73,7 +73,7 @@ class KexMcpServerComplianceTest {
         // Closed schemas are also enforced by the official SDK probe for successful runtime payloads.
         mvc.perform(rpc("{\"jsonrpc\":\"2.0\",\"id\":21,\"method\":\"tools/list\"}"))
                 .andExpect(jsonPath("$.result.tools[0].outputSchema.additionalProperties").value(false))
-                .andExpect(jsonPath("$.result.tools[0].outputSchema.required.length()").value(12));
+                .andExpect(jsonPath("$.result.tools[0].outputSchema.required.length()").value(11));
     }
 
     @Test
