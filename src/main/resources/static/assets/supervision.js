@@ -1365,7 +1365,7 @@ export async function activity() {
     const auditRows = (await api(`${BASE}/audit`).catch(() => [])).filter(contextMatches);
     const events = [];
 
-    (data.lastCycle?.events || []).forEach((event) => events.push({
+    (data.lastCycle?.events || []).filter(contextMatches).forEach((event) => events.push({
       at: event.at, kind: 'Cycle', title: event.label, detail: event.detail || 'Étape du cycle',
       href: '#/overview',
     }));
