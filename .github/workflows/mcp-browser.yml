@@ -1,0 +1,36 @@
+name: MCP browser
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  mcp-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          java-version: '25'
+          distribution: temurin
+          cache: maven
+      - name: Package agent
+        run: ./mvnw -B --no-transfer-progress -DskipTests package
+      - name: Install Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pw" --no-save --no-package-lock playwright@1.56.1
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Start MCP-enabled agent
+        run: |
+          java -jar target/kex-agent-ai-*.jar --server.port=8081 --kex.agent.api-key=ci-secret --kex.mcp.server.enabled=true --kex.agent.supervision.processes[0].id=order-integration --kex.agent.supervision.processes[0].name='Order Integration' --spring.ai.mcp.client.enabled=false --spring.ai.model.chat=openai --spring.ai.model.embedding=none --spring.ai.openai.api-key=ci-dummy --spring.ai.openai.base-url=http://127.0.0.1:8098 --spring.ai.openai.chat.options.model=c/moyen > "$RUNNER_TEMP/mcp-browser-agent.log" 2>&1 &
+          for i in $(seq 1 60); do if curl -fsS http://localhost:8081/actuator/health >/dev/null; then break; fi; sleep 2; done
+          curl -fsS http://localhost:8081/actuator/health
+      - name: Drive MCP console
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/pw/node_modules/playwright/index.mjs
+          KEX_AGENT_URL: http://localhost:8081
+          KEX_AGENT_API_KEY: ci-secret
+        run: node src/test/browser/mcp-server.mjs
+      - name: Agent logs on failure
+        if: failure()
+        run: cat "$RUNNER_TEMP/mcp-browser-agent.log" || true
