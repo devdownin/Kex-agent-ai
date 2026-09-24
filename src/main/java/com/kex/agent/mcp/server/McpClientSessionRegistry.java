@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.mcp.server;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -13,8 +14,20 @@ import org.springframework.stereotype.Component;
 /** Tracks MCP client sessions for audit and read-only operational visibility. */
 @Component
 public class McpClientSessionRegistry {
-    private static final Duration TTL = Duration.ofMinutes(30);
     private final ConcurrentHashMap<String, Session> sessions = new ConcurrentHashMap<>();
+    private final Clock clock;
+    private final Duration ttl;
+    private final Duration idleAfter;
+
+    public McpClientSessionRegistry(KexMcpServerProperties properties) {
+        this(Clock.systemUTC(), properties.sessionTtl(), properties.sessionIdleAfter());
+    }
+
+    McpClientSessionRegistry(Clock clock, Duration ttl, Duration idleAfter) {
+        this.clock = clock;
+        this.ttl = ttl;
+        this.idleAfter = idleAfter;
+    }
 
     public String open(String name, String version, String protocol) {
         String id = UUID.randomUUID().toString();
@@ -42,7 +55,7 @@ public class McpClientSessionRegistry {
                 .sorted((a, b) -> b.lastActivityAt().compareTo(a.lastActivityAt()))
                 .map(session -> new SessionView(session.id(), session.name(), session.version(), session.protocol(),
                         session.createdAt(), session.lastActivityAt(), session.callCount(),
-                        Duration.between(session.lastActivityAt(), now).compareTo(Duration.ofMinutes(5)) < 0 ? "ACTIVE" : "IDLE"))
+                        Duration.between(session.lastActivityAt(), now).compareTo(idleAfter) < 0 ? "ACTIVE" : "IDLE"))
                 .toList();
     }
 
