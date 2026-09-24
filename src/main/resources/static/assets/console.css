@@ -1822,3 +1822,65 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
 @media (prefers-reduced-motion: reduce) {
   .rail-toggle svg { transition: none; }
 }
+
+
+/* ── Fraîcheur et drawers opérationnels ──────────────────────────────── */
+.freshness-slot {
+  min-height: 20px;
+  margin: -2px 0 12px;
+}
+.data-freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.data-freshness::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.data-freshness[data-state="stale"] {
+  color: var(--warn);
+  font-weight: 650;
+}
+.data-freshness[data-state="stale"]::before { background: var(--warn); }
+
+.drawer-tool-list {
+  display: grid;
+  gap: 8px;
+}
+.drawer-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  text-align: left;
+}
+.drawer-tool:hover,
+.drawer-tool:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: var(--accent-soft);
+}
+.drawer-invoke {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.drawer-invoke label {
+  display: grid;
+  gap: 6px;
+}
+.drawer-invoke textarea {
+  min-height: 120px;
+  font: 12px/1.5 var(--mono);
+}

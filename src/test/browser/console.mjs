@@ -144,6 +144,34 @@ await check('le titre de la page suit la vue', async () => {
   assert.equal(await page.$eval('#announcer', (node) => node.textContent), 'Configuration');
 });
 
+await check('la navigation latérale se replie, reste découvrable et mémorise son état', async () => {
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => localStorage.removeItem('kex.agent.rail'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+
+  assert.equal(await page.$eval('html', (node) => node.dataset.rail), 'expanded');
+  const labels = await page.$eval('.nav-item', (nodes) => nodes.map((node) => ({
+    aria: node.getAttribute('aria-label'), title: node.getAttribute('title'),
+  })));
+  assert.ok(labels.every((item) => item.aria && item.title === item.aria),
+    'chaque icône du rail doit conserver un tooltip lisible quand les libellés sont masqués');
+
+  await page.click('#rail-toggle');
+  assert.equal(await page.$eval('html', (node) => node.dataset.rail), 'collapsed');
+  assert.ok(await page.$eval('.rail', (node) => node.getBoundingClientRect().width) < 90,
+    'le rail replié doit libérer réellement de la largeur');
+  assert.equal(await page.evaluate(() => localStorage.getItem('kex.agent.rail')), 'collapsed');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  assert.equal(await page.$eval('html', (node) => node.dataset.rail), 'collapsed',
+    'le choix doit survivre au rechargement');
+  await page.click('#rail-toggle');
+  assert.equal(await page.$eval('html', (node) => node.dataset.rail), 'expanded');
+
+  await page.goto(`${BASE}/#/settings`, { waitUntil: 'domcontentloaded' });
+  await page.locator('#credentials').evaluate((dialog) => { if (dialog.open) dialog.close(); });
+});
+
 await check('le catalogue de la passerelle se trie, les valeurs absentes restant en bas',
   async () => {
     await page.click('#open-llm-models');
@@ -651,7 +679,7 @@ await check('un outil qui attend des paramètres propose un exemple pré-rempli,
     assert.equal(empty, '{}', 'un outil sans paramètre garde un objet vide, rien à y deviner');
     // Un panneau laissé ouvert suspend désormais le sondage de fond (voir le cas suivant) : le
     // refermer ici évite qu'il ne fige aussi la grille pour la prochaine vérification.
-    await page.click('.invoke header button');
+    await page.click('#drawer-close');
     await page.unroute('**/api/agent/mcp/servers');
   });
 
@@ -700,7 +728,7 @@ await check('un résultat affiché survit au sondage de fond, jusqu’à ce qu�
     assert.match(output, /"ok": true/, 'le résultat doit rester affiché tel quel');
 
     const refreshed = page.waitForResponse((response) => response.url().endsWith('/api/agent/mcp/servers'));
-    await page.click('.invoke header button');
+    await page.click('#drawer-close');
     await page.evaluate(() => dispatchEvent(new Event('online')));
     await refreshed;
     assert.ok(serverFetches > fetchesWithPanelOpen, 'refermer le panneau doit laisser reprendre le sondage');
@@ -738,7 +766,7 @@ await check('les arguments qui ne respectent pas le schéma d’un outil sont re
     const output = await page.$eval('.invoke .dump.result', (node) => node.textContent);
     assert.match(output, /Arguments invalides/);
     assert.equal(called, false, 'la validation locale doit empêcher tout appel réseau');
-    await page.click('.invoke header button');
+    await page.click('#drawer-close');
     await page.unroute('**/api/agent/mcp/servers');
     await page.unroute('**/api/agent/mcp/servers/*/tools/*');
   });
