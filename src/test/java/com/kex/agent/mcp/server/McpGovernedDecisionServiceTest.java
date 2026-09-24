@@ -15,7 +15,7 @@ class McpGovernedDecisionServiceTest {
     void mutations_are_disabled_by_default() {
         var beans = new StaticListableBeanFactory();
         var service = new McpGovernedDecisionService(beans.getBeanProvider(com.kex.agent.supervision.SupervisionService.class),
-                new KexMcpServerProperties(true, Set.of(), 120, false));
+                new KexMcpServerProperties(true, Set.of(), 120, false, java.time.Duration.ofMinutes(30), java.time.Duration.ofMinutes(5)));
 
         assertThatThrownBy(() -> service.approve("decision-1", "operator"))
                 .isInstanceOf(IllegalStateException.class)

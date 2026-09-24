@@ -20,11 +20,14 @@ public class KexMcpServerHealthIndicator implements HealthIndicator {
 
     private final ObjectProvider<SupervisionService> supervision;
     private final ObjectProvider<KafkaViewService> kafka;
+    private final McpClientSessionRegistry sessions;
 
     public KexMcpServerHealthIndicator(ObjectProvider<SupervisionService> supervision,
-                                       ObjectProvider<KafkaViewService> kafka) {
+                                       ObjectProvider<KafkaViewService> kafka,
+                                       McpClientSessionRegistry sessions) {
         this.supervision = supervision;
         this.kafka = kafka;
+        this.sessions = sessions;
     }
 
     @Override
@@ -35,6 +38,9 @@ public class KexMcpServerHealthIndicator implements HealthIndicator {
         details.put("server", "enabled");
         details.put("supervision", supervisionReady ? "ready" : "unavailable");
         details.put("kafkaView", kafkaReady ? "ready" : "unavailable");
+        var snapshot = sessions.snapshot();
+        details.put("sessions", snapshot.size());
+        details.put("activeSessions", snapshot.stream().filter(session -> "ACTIVE".equals(session.state())).count());
         Health.Builder health = supervisionReady ? Health.up() : Health.down();
         if (supervisionReady && !kafkaReady) health.status("DEGRADED").withDetail("reason", "Kafka view unavailable");
         return health.withDetails(details).build();

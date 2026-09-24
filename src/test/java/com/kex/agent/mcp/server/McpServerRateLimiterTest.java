@@ -15,7 +15,7 @@ class McpServerRateLimiterTest {
 
     @Test
     void rejects_requests_after_actor_quota_is_consumed() {
-        var properties = new KexMcpServerProperties(true, Set.of(), 2, false);
+        var properties = new KexMcpServerProperties(true, Set.of(), 2, false, java.time.Duration.ofMinutes(30), java.time.Duration.ofMinutes(5));
         var limiter = new McpServerRateLimiter(properties,
                 Clock.fixed(Instant.parse("2026-09-23T06:00:00Z"), ZoneOffset.UTC));
 

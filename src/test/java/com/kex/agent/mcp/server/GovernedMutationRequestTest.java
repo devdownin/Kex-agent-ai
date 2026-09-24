@@ -12,7 +12,7 @@ class GovernedMutationRequestTest {
 
     @Test
     void mutation_contract_is_reserved_but_disabled_by_default() {
-        var properties = new KexMcpServerProperties(true, Set.of(), 120, false);
+        var properties = new KexMcpServerProperties(true, Set.of(), 120, false, java.time.Duration.ofMinutes(30), java.time.Duration.ofMinutes(5));
 
         assertThat(properties.governedMutationsEnabled()).isFalse();
         assertThat(GovernedMutationRequest.RESERVED_TOOL_NAMES)

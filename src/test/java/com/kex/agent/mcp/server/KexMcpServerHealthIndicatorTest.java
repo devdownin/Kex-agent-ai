@@ -20,7 +20,7 @@ class KexMcpServerHealthIndicatorTest {
         var supervision = mock(SupervisionService.class);
         var beans = new StaticListableBeanFactory(Map.of("supervision", supervision));
         var health = new KexMcpServerHealthIndicator(
-                beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class))
+                beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class), new McpClientSessionRegistry(java.time.Clock.systemUTC(), java.time.Duration.ofMinutes(30), java.time.Duration.ofMinutes(5)))
                 .health();
 
         assertThat(health.getStatus()).isEqualTo(new Status("DEGRADED"));
@@ -32,7 +32,7 @@ class KexMcpServerHealthIndicatorTest {
     void is_down_without_supervision() {
         var beans = new StaticListableBeanFactory();
         var health = new KexMcpServerHealthIndicator(
-                beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class))
+                beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class), new McpClientSessionRegistry(java.time.Clock.systemUTC(), java.time.Duration.ofMinutes(30), java.time.Duration.ofMinutes(5)))
                 .health();
 
         assertThat(health.getStatus()).isEqualTo(Status.DOWN);

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.mcp.server;
 
+import java.time.Duration;
 import java.util.Set;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -12,10 +13,16 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record KexMcpServerProperties(@DefaultValue("false") boolean enabled,
                                      @DefaultValue Set<String> allowedOrigins,
                                      @DefaultValue("120") int requestsPerMinute,
-                                     @DefaultValue("false") boolean governedMutationsEnabled) {
+                                     @DefaultValue("false") boolean governedMutationsEnabled,
+                                     @DefaultValue("30m") Duration sessionTtl,
+                                     @DefaultValue("5m") Duration sessionIdleAfter) {
     public KexMcpServerProperties {
         allowedOrigins = allowedOrigins == null ? Set.of() : Set.copyOf(allowedOrigins);
         if (requestsPerMinute < 1) throw new IllegalArgumentException("MCP server rate limit must be positive");
+        if (sessionTtl == null || sessionTtl.isZero() || sessionTtl.isNegative()) throw new IllegalArgumentException("MCP session TTL must be positive");
+        if (sessionIdleAfter == null || sessionIdleAfter.isZero() || sessionIdleAfter.isNegative() || sessionIdleAfter.compareTo(sessionTtl) >= 0) {
+            throw new IllegalArgumentException("MCP session idle threshold must be positive and shorter than TTL");
+        }
         if (allowedOrigins.contains("*") || allowedOrigins.contains("null")) {
             throw new IllegalArgumentException("MCP server origins must be explicit origins");
         }
