@@ -496,31 +496,32 @@ function closeButton(panel) {
   return close;
 }
 
-function invoke(host, connection, tool) {
-  host.querySelector('.invoke')?.remove();
-  const panel = el('section', 'invoke');
-  const head = el('header');
-  head.append(el('h4', null, tool.name), closeButton(panel));
-  panel.append(head);
+function invoke(_host, connection, tool, updateUrl = true) {
+  if (updateUrl) setDrawerParam('outil', `${connection}::${tool.name}`);
+  const panel = el('section', 'invoke drawer-invoke');
+  panel.append(el('p', 'muted', `Connexion · ${connection}`));
+
   // Le schéma vient du serveur, jamais réinterprété : il dit ce que l'outil attend, pas ce qu'on
   // devine en tapant "{}" et en lisant l'erreur qui revient.
   if (tool.inputSchema && Object.keys(tool.inputSchema).length) {
-    panel.append(el('pre', 'dump muted schema-hint', JSON.stringify(tool.inputSchema, null, 2)));
+    const schema = document.createElement('details');
+    schema.className = 'advanced';
+    schema.append(el('summary', null, 'Contrat d’entrée'));
+    schema.append(el('pre', 'dump muted schema-hint', JSON.stringify(tool.inputSchema, null, 2)));
+    panel.append(schema);
   }
 
+  const argsLabel = el('label', null, 'Arguments JSON');
   const args = el('textarea');
-  args.rows = 4;
+  args.rows = 6;
   args.spellcheck = false;
-  // Un "{}" nu ne dit rien de ce qu'un outil à paramètres attend : un exemple conforme au schéma
-  // vaut mieux qu'un objet vide à déchiffrer depuis la seule lecture du schéma affiché au-dessus.
   const properties = tool.inputSchema?.properties || {};
   args.value = Object.keys(properties).length
     ? JSON.stringify(exampleFromSchema(tool.inputSchema), null, 2)
     : '{}';
-  // Deux ".dump" dans le même panneau une fois le schéma affiché : "result" les distingue, sans
-  // quoi un sélecteur qui cible l'un des deux tombe sur le premier trouvé, pas forcément le bon.
-  const output = el('pre', 'dump result', '—');
+  argsLabel.append(args);
 
+  const output = el('pre', 'dump result', 'Aucune invocation exécutée.');
   const run = el('button', 'primary', 'Invoquer');
   run.type = 'button';
   run.addEventListener('click', () => {
@@ -531,9 +532,6 @@ function invoke(host, connection, tool) {
       output.textContent = 'Arguments JSON invalides.';
       return;
     }
-    // Un sous-ensemble du schéma, pas une validation complète (voir schemaErrors dans core.js) :
-    // attraper une erreur de frappe ici évite l'aller-retour serveur, sans prétendre remplacer le
-    // serveur MCP comme seule autorité sur ce qu'il accepte réellement.
     if (tool.inputSchema) {
       const errors = schemaErrors(parsed, tool.inputSchema, 'arguments');
       if (errors.length) {
@@ -557,8 +555,8 @@ function invoke(host, connection, tool) {
 
   const row = el('div', 'row-end');
   row.append(run);
-  panel.append(args, row, output);
-  host.append(panel);
+  panel.append(argsLabel, row, el('h3', 'drawer-sub', 'Résultat'), output);
+  openDrawer(`Outil MCP · ${tool.name}`, panel);
   args.focus();
 }
 
