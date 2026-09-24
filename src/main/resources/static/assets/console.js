@@ -24,6 +24,7 @@ const VIEWS = {
   overview: { title: 'Vue d’ensemble', load: supervision.overview },
   attention: { title: 'À traiter', load: supervision.attentionView },
   incidents: { title: 'Cockpit incident', load: supervision.incidents },
+  activity: { title: 'Activité', load: supervision.activity },
   // La gouvernance (charte, compétences) est une lecture indépendante de l'état de l'agent :
   // l'une ne doit pas retarder l'autre, comme pour la configuration plus bas.
   agent: { title: 'Agent', load: () => Promise.all([supervision.agent(), skills.governance(),
