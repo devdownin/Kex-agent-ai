@@ -73,11 +73,11 @@ function renderCatalog(kind = $('#mcp-catalog-kind').value) {
 function playgroundTargets() {
   const op = $('#mcp-playground-operation').value;
   const target = $('#mcp-playground-target');
-  const items = op === 'tool' ? catalog.tools : op === 'resource' ? catalog.resources : catalog.prompts;
+  const items = op === 'tool' ? catalog.tools : op === 'resource' ? catalog.resources : op === 'template' ? catalog.templates : catalog.prompts;
   target.replaceChildren(...items.map((item) => {
     const option = document.createElement('option');
-    option.value = item.name || item.uri;
-    option.textContent = item.name || item.uri;
+    option.value = item.name || item.uri || item.uriTemplate;
+    option.textContent = item.name || item.uri || item.uriTemplate;
     return option;
   }));
 }
@@ -93,7 +93,13 @@ async function executePlayground(event) {
     let payload;
     if (op === 'tool') payload = await rpc('tools/call', { name: target, arguments: args });
     else if (op === 'resource') payload = await rpc('resources/read', { uri: target });
-    else payload = await rpc('prompts/get', { name: target, arguments: args });
+    else if (op === 'template') {
+      const template = catalog.templates.find((item) => (item.name || item.uriTemplate) === target);
+      let uri = template?.uriTemplate || target;
+      for (const [key, value] of Object.entries(args)) uri = uri.replaceAll(`{${key}}`, encodeURIComponent(value));
+      if (/\{[^}]+\}/.test(uri)) throw new Error('Renseignez tous les paramètres du template');
+      payload = await rpc('resources/read', { uri });
+    } else payload = await rpc('prompts/get', { name: target, arguments: args });
     const value = payload.result || {};
     $('#mcp-playground-structured').textContent = JSON.stringify(value.structuredContent ?? value, null, 2);
     $('#mcp-playground-text').textContent = (value.content || []).filter((item) => item.type === 'text').map((item) => item.text).join('\n') || '—';

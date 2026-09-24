@@ -24,6 +24,7 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
       'resources/templates/list': { resourceTemplates: [{ uriTemplate: 'kex://supervision/processes/{processId}', name: 'Process' }] },
       'prompts/list': { prompts: [{ name: 'kex_supervision_triage', description: 'Triage' }] },
       'tools/call': { content: [{ type: 'text', text: 'ok' }], structuredContent: { state: 'OK' }, isError: false },
+      'resources/read': { contents: [{ uri: rpc.params?.uri, text: '{"state":"OK"}' }] },
     };
     await route.fulfill({
       status: 200, contentType: 'application/json',
@@ -54,6 +55,13 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
   assert.match(await page.textContent('#mcp-playground-text'), /ok/);
   assert.match(await page.textContent('#mcp-playground-result'), /"structuredContent"/);
   assert.match(await page.textContent('#mcp-playground-result'), /"isError": false/);
+
+  await page.selectOption('#mcp-playground-operation', 'template');
+  await page.selectOption('#mcp-playground-target', 'Process');
+  await page.fill('#mcp-playground-arguments', '{"processId":"order-integration"}');
+  await page.click('#mcp-playground-form button[type="submit"]');
+  await page.waitForFunction(() => document.querySelector('#mcp-playground-result')?.textContent.includes('order-integration'));
+  assert.match(await page.textContent('#mcp-playground-result'), /kex:\/\/supervision\/processes\/order-integration/);
 
   await page.unroute('**/api/agent/mcp-server');
 });
