@@ -70,6 +70,28 @@ function renderCatalog(kind = $('#mcp-catalog-kind').value) {
   host.replaceChildren(...(catalog[kind] || []).map((item) => card(item, kind)));
 }
 
+function templateArguments(item) {
+  return [...(item?.uriTemplate?.matchAll(/\{([^}]+)\}/g) || [])].map((match) => match[1]);
+}
+
+function renderTemplateFields() {
+  const host = $('#mcp-template-fields');
+  if (!host) return;
+  const op = $('#mcp-playground-operation').value;
+  const target = $('#mcp-playground-target').value;
+  const item = catalog.templates.find((entry) => (entry.name || entry.uriTemplate) === target);
+  const names = op === 'template' ? templateArguments(item) : [];
+  host.hidden = names.length === 0;
+  host.replaceChildren(...names.map((name) => {
+    const label = document.createElement('label');
+    label.textContent = name;
+    const input = document.createElement('input');
+    input.name = name; input.required = true; input.placeholder = name;
+    label.append(input); return label;
+  }));
+  renderTemplateFields();
+}
+
 function playgroundTargets() {
   const op = $('#mcp-playground-operation').value;
   const target = $('#mcp-playground-target');
@@ -87,7 +109,10 @@ async function executePlayground(event) {
   const result = $('#mcp-playground-result');
   result.textContent = 'Exécution…';
   try {
-    const args = JSON.parse($('#mcp-playground-arguments').value || '{}');
+    let args = JSON.parse($('#mcp-playground-arguments').value || '{}');
+    if ($('#mcp-playground-operation').value === 'template') {
+      args = Object.fromEntries([...document.querySelectorAll('#mcp-template-fields input')].map((input) => [input.name, input.value]));
+    }
     const op = $('#mcp-playground-operation').value;
     const target = $('#mcp-playground-target').value;
     let payload;
@@ -128,6 +153,22 @@ export async function view() {
     $('#mcp-prompts-count').textContent = catalog.prompts.length;
     $('#mcp-protocol').textContent = init.protocolVersion || PROTOCOL;
     $('#mcp-server-version').textContent = `Kex MCP ${init.serverInfo?.version || '—'}`;
+    try {
+      const headers = { 'X-Kex-Mcp-View': 'summary' };
+      const token = credentials.get(); if (token) headers.Authorization = `Bearer ${token}`;
+      const summary = await fetch(ENDPOINT, { headers }).then((response) => response.ok ? response.json() : null);
+      if (summary) {
+        $('#mcp-active-sessions').textContent = summary.activeSessions ?? '0';
+        $('#mcp-health-state').textContent = summary.state || '—';
+        const host = $('#mcp-session-list');
+        host.replaceChildren(...(summary.sessions || []).map((item) => {
+          const row = el('div', 'mcp-session-row');
+          row.append(el('strong', '', `${item.name}/${item.version}`),
+            el('span', 'muted', `${item.callCount} appels · ${new Date(item.lastActivityAt).toLocaleString()}`));
+          return row;
+        }));
+      }
+    } catch (error) { report(error); }
     setStatus(true, 'Opérationnel · lecture seule');
     renderCatalog();
     playgroundTargets();
@@ -146,6 +187,7 @@ export function bind() {
   }));
   $('#mcp-catalog-kind')?.addEventListener('change', () => renderCatalog());
   $('#mcp-playground-operation')?.addEventListener('change', playgroundTargets);
+  $('#mcp-playground-target')?.addEventListener('change', renderTemplateFields);
   $('#mcp-playground-form')?.addEventListener('submit', executePlayground);
   $('#mcp-playground-copy')?.addEventListener('click', async () => {
     await navigator.clipboard.writeText($('#mcp-playground-result').textContent);
