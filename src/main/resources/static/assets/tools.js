@@ -208,7 +208,11 @@ function card(server) {
         button.append(el('span', 'muted', label));
       }
       button.addEventListener('click', () => invoke(null, server.connection, tool));
-      item.append(button);
+      const detail = el('button', 'ghost compact', 'Détails');
+      detail.type = 'button';
+      detail.setAttribute('aria-label', `Détails de l’outil ${tool.name}`);
+      detail.addEventListener('click', () => openToolDrawer(server, tool));
+      item.append(button, detail);
       list.append(item);
     });
     node.append(list);
@@ -293,6 +297,15 @@ function openServerDrawer(server, updateUrl = true) {
   if (updateUrl) setDrawerParam('mcp', server.connection);
   const state = managed && !managed.enabled ? 'UNKNOWN' : (server.initialized ? 'OK' : 'UNKNOWN');
   const body = el('div', 'stack');
+  const context = [
+    `Connexion MCP : ${server.connection}`,
+    `Serveur : ${server.serverName || 'Non annoncé'}`,
+    `Version : ${server.version || '—'}`,
+    `Protocole : ${server.protocolVersion || '—'}`,
+    `Transport : ${managed?.transport || '—'}`,
+    `Outils : ${server.tools?.length || 0}`,
+  ].join('\n');
+  body.append(platformContextActions(`Serveur MCP · ${server.connection}`, context, server.connection));
   body.append(
     definition('État', stateTag(state,
       managed && !managed.enabled ? 'Désactivé' : (server.initialized ? 'Initialisé' : 'Pas de handshake'))),
