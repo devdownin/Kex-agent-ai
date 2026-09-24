@@ -327,6 +327,7 @@ await check('le bandeau hors ligne apparaît puis disparaît', async () => {
 await check('la vue technique n’a qu’un bouton de rafraîchissement', async () => {
   // Défaut : chaque panneau ajouté à cette vue arrivait avec le sien — trois pour un même geste,
   // au-dessus d'un sondage de fond qui les rafraîchit déjà tous. Les autres vues n'en ont qu'un.
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
   await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
   const refreshers = await page.$$eval('#view-tools button',
     (nodes) => nodes.filter((node) => node.textContent.trim() === 'Rafraîchir').length);
@@ -396,6 +397,7 @@ await check('la carte d’un serveur MCP unique occupe toute la largeur du panne
       tools: [{ name: 'kex_list_topics', description: 'Liste les topics.' }],
     }]),
   }));
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
   await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#servers .server');
 
@@ -441,6 +443,7 @@ await check('le diagnostic MCP distingue ajout, suppression et changement de sch
     });
   });
 
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
   await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#servers .server');
   await page.locator('#servers .server').getByRole('button', { name: 'Diagnostic', exact: true }).click();
@@ -538,6 +541,7 @@ await check('les résumés durables s’affichent et se retirent depuis leur car
     return route.fallback();
   });
 
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
   await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#summaries-list .card');
   assert.match(await page.$eval('#summaries-list', (node) => node.textContent), /Purger les topics de test/);
@@ -627,7 +631,8 @@ await check('un outil qui attend des paramètres propose un exemple pré-rempli,
         }],
       }]),
     }));
-    await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
     // Un nom d'outil propre à ce cas, jamais réutilisé ailleurs dans la suite : `page.goto` vers un
     // hash déjà courant ne redéclenche pas le routage (pas de `hashchange` sur un fragment inchangé),
     // et sans ce repère la grille encore affichée par le cas précédent — pas la donnée qu'on vient de
@@ -672,7 +677,8 @@ await check('un résultat affiché survit au sondage de fond, jusqu’à ce qu�
       status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }),
     }));
 
-    await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
     // Nom propre à ce cas — voir le commentaire du cas précédent sur `page.goto` vers un hash déjà
     // courant.
     await page.waitForSelector('.tool-list .name:has-text("kex_ping_bgrefresh")');
@@ -718,7 +724,8 @@ await check('les arguments qui ne respectent pas le schéma d’un outil sont re
       called = true;
       route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
-    await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
     // Nom propre à ce cas — voir le commentaire plus haut sur `page.goto` vers un hash déjà courant.
     await page.waitForSelector('.tool-list .name:has-text("kex_topics_reject")');
     await page.click('#servers .server ul.tool-list button');
