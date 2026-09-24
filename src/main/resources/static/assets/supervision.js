@@ -184,13 +184,41 @@ export function liveCycle(progress) {
 
 export async function attentionView() {
   await render($('#attention-workspace'), refresh, (data) => {
+    const severity = { ERROR: 0, WARNING: 1, UNKNOWN: 2, OK: 3 };
+    const pending = [...(data.pending || [])].sort((a, b) => {
+      const left = a.expiresAt ? new Date(a.expiresAt).getTime() : Number.MAX_SAFE_INTEGER;
+      const right = b.expiresAt ? new Date(b.expiresAt).getTime() : Number.MAX_SAFE_INTEGER;
+      return left - right || (b.confidence || 0) - (a.confidence || 0);
+    });
+    const alerts = [...(data.alerts || [])].sort((a, b) =>
+      (severity[a.severity] ?? 9) - (severity[b.severity] ?? 9)
+      || new Date(a.firstSeenAt || a.lastSeenAt || 0) - new Date(b.firstSeenAt || b.lastSeenAt || 0));
+    const degraded = (data.processes || [])
+      .filter((process) => ['WARNING', 'ERROR', 'UNKNOWN'].includes(process.state))
+      .sort((a, b) => (severity[a.state] ?? 9) - (severity[b.state] ?? 9)
+        || new Date(a.lastRun || 0) - new Date(b.lastRun || 0));
+
+    const total = pending.length + alerts.length + degraded.length;
+    const critical = alerts.filter((item) => item.severity === 'ERROR').length
+      + degraded.filter((item) => item.state === 'ERROR').length;
     const workspace = el('div', 'attention-grid');
-    workspace.append(attentionGroup('Décisions à valider', data.pending || [], (decision) =>
-      approvalCard(decision), 'Aucune validation en attente.', '#/decisions', 'Voir les décisions'));
-    workspace.append(attentionGroup('Alertes actives', data.alerts || [], (alert) =>
-      alertCard(alert), 'Aucune alerte active.', '#/alerts', 'Voir les alertes'));
-    const degraded = (data.processes || []).filter((process) =>
-      process.state === 'WARNING' || process.state === 'ERROR' || process.state === 'UNKNOWN');
+    const summary = el('section', 'attention-summary');
+    const copy = el('div', 'attention-summary-copy');
+    copy.append(el('strong', null, `${total} élément${total === 1 ? '' : 's'} à traiter`),
+      el('span', 'muted', 'Triés par impact, urgence puis ancienneté.'));
+    const metrics = el('div', 'attention-summary-metrics');
+    metrics.append(
+      el('span', critical ? 'attention-pill critical' : 'attention-pill', `${critical} critique${critical === 1 ? '' : 's'}`),
+      el('span', 'attention-pill', `${pending.length} décision${pending.length === 1 ? '' : 's'}`),
+      el('span', 'attention-pill', `${alerts.length} alerte${alerts.length === 1 ? '' : 's'}`),
+      el('span', 'attention-pill', `${degraded.length} processus`),
+    );
+    summary.append(copy, metrics);
+    workspace.append(summary);
+    workspace.append(attentionGroup('Décisions à valider', pending, approvalCard,
+      'Aucune validation en attente.', '#/decisions', 'Voir les décisions'));
+    workspace.append(attentionGroup('Alertes actives', alerts, alertCard,
+      'Aucune alerte active.', '#/alerts', 'Voir les alertes'));
     workspace.append(attentionGroup('Processus dégradés', degraded, processAttentionCard,
       'Tous les processus mesurés sont opérationnels.', '#/processes', 'Voir les processus'));
     return workspace;
