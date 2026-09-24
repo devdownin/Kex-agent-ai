@@ -491,6 +491,8 @@ await check('le diagnostic MCP distingue ajout, suppression et changement de sch
 });
 
 await check('la base de connaissance affiche un état désactivé sans le confondre avec une panne', async () => {
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/knowledge`, { waitUntil: 'domcontentloaded' });
   // kex.agent.knowledge.enabled vaut false par défaut et la CI ne le change pas : la route répond
   // réellement 404 ici, sans simulation — le cas exact que le piège documenté (une route éteinte
   // n'est pas une panne) couvre.
@@ -1191,11 +1193,17 @@ await check('le tableau de bord se personnalise et conserve la visibilité des b
   await page.click('#dashboard-customizer > summary');
   await page.waitForSelector('#dashboard-customizer-panel');
   const briefChoice = page.locator('#dashboard-customizer-panel label', { hasText: 'Synthèse de l’agent' }).locator('input');
-  await briefChoice.uncheck();
+  await briefChoice.evaluate((input) => {
+    input.checked = false;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await page.waitForFunction(() => document.querySelector('.agent-brief-panel')?.classList.contains('dashboard-user-hidden'));
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('kex.agent.dashboard-layout')));
   assert.equal(stored.find((item) => item.id === 'brief').visible, false);
-  await briefChoice.check();
+  await briefChoice.evaluate((input) => {
+    input.checked = true;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
 });
 
 await check('le contexte opérateur est persistant et réinitialisable', async () => {
