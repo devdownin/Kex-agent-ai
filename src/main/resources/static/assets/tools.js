@@ -5,8 +5,8 @@
 // bord métier n'en soit pas saturé — les signaux bruts sont au second niveau, jamais au premier.
 
 import {
-  $, api, busy, circuitStateTag, confirmAction, definition, el, empty, exampleFromSchema, openDrawer,
-  params, registerDrawer, render, report, schemaErrors, setDrawerParam, setParams, stateTag, toast,
+  $, api, busy, circuitStateTag, confirmAction, definition, el, empty, exampleFromSchema, freshnessTag,
+  openDrawer, params, registerDrawer, render, report, schemaErrors, setDrawerParam, setParams, stateTag, toast,
 } from './core.js';
 import * as kafka from './kafka.js';
 import * as knowledge from './knowledge.js';
@@ -16,6 +16,7 @@ import * as summaries from './summaries.js';
 // Cache du dernier relevé : la recherche filtre dessus plutôt que de refaire un appel réseau par
 // caractère saisi — l'endpoint n'a pas de paramètre de recherche et n'a pas à en gagner un pour ça.
 let lastServers = [];
+let lastServersAt = null;
 let lastMetrics = [];
 let runtimeServers = new Map();
 let editingConnection = null;
@@ -60,6 +61,7 @@ export async function servers() {
       connection: server.connection, initialized: false, tools: [], disabled: !server.enabled,
     })));
     lastMetrics = metrics;
+    lastServersAt = new Date().toISOString();
     renderStorageStatus(storage);
     return lastServers;
   }, renderServers);
@@ -75,9 +77,12 @@ function renderServers(list) {
         'Sans outil, l’agent ne peut qu’observer ce qu’on lui raconte.',
         { label: 'Ajouter une connexion', onClick: () => openEditor() });
   }
+  const wrap = el('div', 'stack');
+  if (lastServersAt) wrap.append(freshnessTag(lastServersAt, 'Connexions vérifiées', 45_000));
   const grid = el('div', 'servers-grid');
   filtered.forEach((server) => grid.append(card(server)));
-  return grid;
+  wrap.append(grid);
+  return wrap;
 }
 
 function matchesQuery(server, query) {
@@ -648,6 +653,8 @@ export async function health() {
   } catch {
     /* /actuator/info exige le jeton : son absence ne casse pas la vue */
   }
+  const fresh = $('#system-freshness');
+  if (fresh) fresh.replaceChildren(freshnessTag(new Date().toISOString(), 'Mesures vérifiées', 45_000));
 }
 
 export async function integrationsView() {
