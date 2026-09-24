@@ -277,6 +277,25 @@ export async function view() {
         $('#mcp-active-sessions').textContent = summary.activeSessions ?? '0';
         const healthLabels = { UP: 'Opérationnel', DEGRADED: 'Dégradé', DOWN: 'Indisponible' };
         $('#mcp-health-state').textContent = healthLabels[summary.state] || summary.state || '—';
+        const ops = $('#mcp-ops-summary');
+        if (ops) {
+          const table = el('table', 'grid mcp-ops-table');
+          const head = el('thead');
+          const hr = el('tr');
+          ['État', 'Sessions actives', 'Sessions inactives', 'Requêtes', 'p95'].forEach((label) => hr.append(el('th', null, label)));
+          head.append(hr);
+          const body = el('tbody');
+          const row = el('tr');
+          const state = el('td');
+          state.append(el('strong', null, healthLabels[summary.state] || summary.state || '—'));
+          row.append(state,
+            el('td', null, String(summary.activeSessions ?? 0)),
+            el('td', null, String(summary.idleSessions ?? 0)),
+            el('td', null, String(summary.requestCount ?? 0)),
+            el('td', null, summary.p95LatencyMs == null ? '—' : `${Math.round(summary.p95LatencyMs)} ms`));
+          body.append(row); table.append(head, body);
+          ops.replaceChildren(table);
+        }
         const host = $('#mcp-session-list');
         const sessions = summary.sessions || [];
         observedSessions = sessions;
