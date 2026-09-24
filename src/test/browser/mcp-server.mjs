@@ -63,7 +63,7 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
 
   await page.selectOption('#mcp-playground-operation', 'template');
   await page.selectOption('#mcp-playground-target', 'Process');
-  await page.fill('#mcp-playground-arguments', '{"processId":"order-integration"}');
+  await page.locator('#mcp-template-fields input[name="processId"]').fill('order-integration');
   await page.click('#mcp-playground-form button[type="submit"]');
   await page.waitForFunction(() => document.querySelector('#mcp-playground-result')?.textContent.includes('order-integration'));
   assert.match(await page.textContent('#mcp-playground-result'), /kex:\/\/supervision\/processes\/order-integration/);
