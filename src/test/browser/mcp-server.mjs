@@ -34,7 +34,8 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
   });
 
   await page.goto(`${BASE}/#/settings`, { waitUntil: 'domcontentloaded' });
-  await page.click('[data-settings-target="settings-mcp-server"]');
+  const mcpSettings = page.locator('[data-settings-target="settings-mcp-server"]');
+  await mcpSettings.evaluate((button) => button.click());
   await page.waitForFunction(() => document.querySelector('#mcp-tools-count')?.textContent === '1');
   assert.equal(await page.textContent('#mcp-server-status-label'), 'Opérationnel · lecture seule');
   assert.equal(await page.textContent('#mcp-resources-count'), '1');
