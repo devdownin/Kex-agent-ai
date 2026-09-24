@@ -261,7 +261,9 @@ export const stamp = (iso) => (iso ? (relativeDates() ? ago(iso) : STAMP.format(
 
 export function ago(iso) {
   if (!iso) return null;
-  const seconds = Math.round((new Date(iso).getTime() - Date.now()) / 1000);
+  const instant = new Date(iso).getTime();
+  if (!Number.isFinite(instant)) return null;
+  const seconds = Math.round((instant - Date.now()) / 1000);
   const units = [
     [60, 'second'],
     [3600, 'minute'],
