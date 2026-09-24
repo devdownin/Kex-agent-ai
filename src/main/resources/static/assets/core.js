@@ -256,8 +256,23 @@ function relativeDates() {
   }
 }
 
-export const clockTime = (iso) => (iso ? (relativeDates() ? ago(iso) : CLOCK.format(new Date(iso))) : '—');
-export const stamp = (iso) => (iso ? (relativeDates() ? ago(iso) : STAMP.format(new Date(iso))) : '—');
+function safeDate(iso) {
+  if (!iso) return null;
+  const date = new Date(iso);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+export const clockTime = (iso) => {
+  const date = safeDate(iso);
+  if (!date) return '—';
+  return relativeDates() ? (ago(iso) || '—') : CLOCK.format(date);
+};
+
+export const stamp = (iso) => {
+  const date = safeDate(iso);
+  if (!date) return '—';
+  return relativeDates() ? (ago(iso) || '—') : STAMP.format(date);
+};
 
 export function ago(iso) {
   if (!iso) return null;
