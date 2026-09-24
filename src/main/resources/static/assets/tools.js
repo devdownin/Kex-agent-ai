@@ -583,16 +583,27 @@ export async function health() {
   }
 }
 
-export async function view() {
-  // Jamais réinterrogée ici : une source de découverte n'est appelée qu'au clic sur son propre
-  // bouton (voir discover()). Ce placeholder ne s'affiche qu'au tout premier rendu, pour ne pas
-  // effacer un relevé déjà obtenu à chaque passage du sondage de fond — même règle que render().
+export async function integrationsView() {
+  // Une source de découverte n'est appelée qu'au clic sur son propre bouton : l'ouverture de
+  // l'espace Intégrations reste locale et déterministe.
   if (!$('#mcp-discovery').firstChild) {
     $('#mcp-discovery').append(empty('Aucune source interrogée pour l’instant.',
       'Interroger les sources contacte un service tiers : ce n’est jamais automatique.'));
   }
-  knowledge.panel();
-  await Promise.all([servers(), catalog(), kafka.topics(), memory.list(), summaries.list(), health()]);
+  await Promise.all([servers(), catalog(), kafka.topics()]);
+}
+
+export async function knowledgeView() {
+  await Promise.all([knowledge.panel(), memory.list(), summaries.list()]);
+}
+
+export async function systemView() {
+  await health();
+}
+
+// Conservé pour les appels internes ou signets anciens qui rafraîchissaient l'ancien écran Technique.
+export async function view() {
+  await Promise.all([integrationsView(), knowledgeView(), systemView()]);
 }
 
 /**
