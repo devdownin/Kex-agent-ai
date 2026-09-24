@@ -184,7 +184,7 @@ await check('le bouton Retour referme le panneau', async () => {
 await check('l’état d’écran voyage dans l’URL et survit au rechargement', async () => {
   await page.goto(`${BASE}/#/processes?etat=UNKNOWN&q=order`);
   await page.waitForSelector('#processes-table table.grid tbody tr');
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#processes-table table.grid tbody tr');
   assert.match(page.url(), /#\/processes\?etat=UNKNOWN&q=order/);
   const rows = await page.$$eval('#processes-table table.grid tbody tr', (list) => list.length);
@@ -198,7 +198,7 @@ await check('un panneau de supervision se rouvre depuis son adresse', async () =
   await page.waitForSelector('#drawer:not([hidden])');
   assert.match(page.url(), /processus=order-integration/);
 
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#drawer:not([hidden])', { timeout: 10000 });
   assert.match(await page.$eval('#drawer-title', (node) => node.textContent), /Order Integration/);
 
@@ -255,7 +255,7 @@ await check('le cockpit relie incident, preuves et chat contextuel sans changer 
     });
   });
 
-  await page.goto(`${BASE}/#/incidents`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/#/incidents`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#incident-workspace .incident-detail');
   const sectionTitles = await page.$$eval('.incident-section > h3', (nodes) => nodes.map((node) => node.textContent));
   assert.deepEqual(sectionTitles, ['Symptômes actifs', 'Explorateur de preuves', 'Décisions liées', 'Chronologie']);
@@ -327,7 +327,7 @@ await check('le bandeau hors ligne apparaît puis disparaît', async () => {
 await check('la vue technique n’a qu’un bouton de rafraîchissement', async () => {
   // Défaut : chaque panneau ajouté à cette vue arrivait avec le sien — trois pour un même geste,
   // au-dessus d'un sondage de fond qui les rafraîchit déjà tous. Les autres vues n'en ont qu'un.
-  await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
   const refreshers = await page.$$eval('#view-tools button',
     (nodes) => nodes.filter((node) => node.textContent.trim() === 'Rafraîchir').length);
 
@@ -396,7 +396,7 @@ await check('la carte d’un serveur MCP unique occupe toute la largeur du panne
       tools: [{ name: 'kex_list_topics', description: 'Liste les topics.' }],
     }]),
   }));
-  await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#servers .server');
 
   const widths = await page.evaluate(() => ({
@@ -441,7 +441,7 @@ await check('le diagnostic MCP distingue ajout, suppression et changement de sch
     });
   });
 
-  await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#servers .server');
   await page.locator('#servers .server').getByRole('button', { name: 'Diagnostic', exact: true }).click();
   await page.waitForSelector('.mcp-diagnostics');
@@ -558,7 +558,7 @@ await check('un tableau déjà rendu ne clignote pas au sondage de fond', async 
   // l'impression que le bloc n'occupait plus toute la largeur disponible. Vérifié ici sur
   // Processus plutôt que sur la vue Technique : ce job démarre l'agent avec
   // `spring.ai.mcp.client.enabled=false`, sans serveur MCP à lister.
-  await page.goto(`${BASE}/#/processes`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/#/processes`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#processes-table table.grid tbody tr');
   const widthBefore = await page.$eval('#processes-table', (node) => node.getBoundingClientRect().width);
 
@@ -592,7 +592,7 @@ await check('le tableau compact de la vue d’ensemble signale qu’il défile',
   // bord du panneau plutôt que défilable. `scrollbar-width: thin` restitue l'indice là où le
   // navigateur l'honore ; l'ombre peinte avec le contenu (assertée ici par sa seule présence,
   // indépendante du rendu du chrome) tient partout ailleurs, Safari compris.
-  await page.goto(`${BASE}/#/overview`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#overview-processes .scroll-x table.grid tbody tr');
   // Le bascule hors-ligne juste avant ce cas déclenche son propre rechargement de fond en
   // reprenant la connexion : attendre le débordement plutôt que le lire une fois évite une course
@@ -627,7 +627,7 @@ await check('un outil qui attend des paramètres propose un exemple pré-rempli,
         }],
       }]),
     }));
-    await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
     // Un nom d'outil propre à ce cas, jamais réutilisé ailleurs dans la suite : `page.goto` vers un
     // hash déjà courant ne redéclenche pas le routage (pas de `hashchange` sur un fragment inchangé),
     // et sans ce repère la grille encore affichée par le cas précédent — pas la donnée qu'on vient de
@@ -672,7 +672,7 @@ await check('un résultat affiché survit au sondage de fond, jusqu’à ce qu�
       status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }),
     }));
 
-    await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
     // Nom propre à ce cas — voir le commentaire du cas précédent sur `page.goto` vers un hash déjà
     // courant.
     await page.waitForSelector('.tool-list .name:has-text("kex_ping_bgrefresh")');
@@ -718,7 +718,7 @@ await check('les arguments qui ne respectent pas le schéma d’un outil sont re
       called = true;
       route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
-    await page.goto(`${BASE}/#/tools`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
     // Nom propre à ce cas — voir le commentaire plus haut sur `page.goto` vers un hash déjà courant.
     await page.waitForSelector('.tool-list .name:has-text("kex_topics_reject")');
     await page.click('#servers .server ul.tool-list button');
@@ -734,7 +734,7 @@ await check('les arguments qui ne respectent pas le schéma d’un outil sont re
   });
 
 await check('l’export CSV de l’audit déclenche un téléchargement', async () => {
-  await page.goto(`${BASE}/#/audit`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/#/audit`, { waitUntil: 'domcontentloaded' });
   const [download] = await Promise.all([
     page.waitForEvent('download'),
     page.click('#export-audit'),
@@ -756,7 +756,7 @@ await check('la sélection groupée approuve chaque décision cochée, sans nouv
         body: JSON.stringify({ ...decisionStub('d1'), status: 'EXECUTED' }),
       });
     });
-    await page.goto(`${BASE}/#/decisions`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/#/decisions`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#decisions-list .bulk-select');
     for (const box of await page.$$('#decisions-list .bulk-select')) await box.check();
     await page.waitForSelector('#decisions-bulk-bar:not([hidden])');
@@ -773,14 +773,14 @@ await check('la tendance des cycles se trace dès que deux cycles sont connus', 
     status: 200, contentType: 'application/json',
     body: JSON.stringify([cycleStub('c2', 3), cycleStub('c1', 1)]),
   }));
-  await page.goto(`${BASE}/#/agent`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/#/agent`, { waitUntil: 'domcontentloaded' });
   await page.click('[data-agent-tab="performance"]');
   await page.waitForSelector('#performance svg.sparkline');
   await page.unroute('**/api/agent/supervision/cycles');
 });
 
 await check('la mise à jour de politique montre un diff avant/après, pas seulement l’état visé', async () => {
-  await page.goto(`${BASE}/#/agent`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/#/agent`, { waitUntil: 'domcontentloaded' });
   await page.click('[data-agent-tab="general"]');
   await page.waitForSelector('#agent-form');
   const before = await page.$eval('input[name="mode"]:checked', (node) => node.value);
@@ -805,7 +805,7 @@ await check('un échange retrouvé dans l’historique se réaffiche sans rejoue
         finishReason: 'end_turn', usage: null,
       }),
     }));
-    await page.goto(`${BASE}/#/chat`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/#/chat`, { waitUntil: 'domcontentloaded' });
     await page.uncheck('#stream-mode');
     await page.fill('#prompt', 'Question de test pour l’historique');
     await page.click('#send');
@@ -833,7 +833,7 @@ await check('plusieurs processus en anomalie au même cycle affichent un inciden
       }],
     })),
   }));
-  await page.goto(`${BASE}/#/overview`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#incident-banner .banner');
   const text = await page.$eval('#incident-banner .banner', (node) => node.textContent);
   assert.match(text, /Incident probable/);
@@ -867,7 +867,7 @@ await check('un processus se met en maintenance, et une fenêtre active propose 
       });
     });
 
-    await page.goto(`${BASE}/#/overview`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
     await page.click('#overview-processes table.grid tbody tr');
     await page.waitForSelector('#drawer:not([hidden])');
     const declaration = page.waitForResponse((response) => response.url()
@@ -878,7 +878,7 @@ await check('un processus se met en maintenance, et une fenêtre active propose 
     await page.waitForSelector('#drawer', { state: 'hidden' });
 
     // Un second passage, avec la fenêtre désormais active, doit proposer de la lever.
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.click('#overview-processes table.grid tbody tr');
     await page.waitForSelector('#drawer:not([hidden])');
     const buttons = await page.$$eval('#drawer-body button', (nodes) => nodes.map((n) => n.textContent));
@@ -892,7 +892,7 @@ await check('un processus se met en maintenance, et une fenêtre active propose 
 /* ── Gouvernance : charte, file de revue, curation ────────────────────── */
 
 await check('l’onglet Gouvernance bascule ses trois sections ensemble', async () => {
-  await page.goto(`${BASE}/#/agent`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/#/agent`, { waitUntil: 'domcontentloaded' });
   await page.click('[data-agent-tab="governance"]');
   await page.waitForSelector('[data-agent-section="governance"]:not([hidden])');
   const hiddenCount = await page.$$eval('[data-agent-section="governance"]',
@@ -938,7 +938,7 @@ assert.equal(proposal.status(), 201, 'la proposition de compétence a échoué e
 const proposed = await proposal.json();
 
 await check('la file de revue affiche la compétence proposée, tous propriétaires confondus', async () => {
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.click('[data-agent-tab="governance"]');
   await page.waitForSelector('#skills-review-queue article.card');
   assert.match(await page.$eval('#skills-review-queue', (node) => node.textContent),
@@ -1026,7 +1026,7 @@ await check('l’onglet Automatisations affiche un état désactivé sans le con
   // kex.agent.automation.enabled et le profil shared-memory ne sont pas actifs en CI : la route
   // répond réellement 404 ici, sans simulation — même piège documenté que pour la mémoire durable
   // et la base de connaissance.
-  await page.goto(`${BASE}/#/agent`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/#/agent`, { waitUntil: 'domcontentloaded' });
   await page.click('[data-agent-tab="automations"]');
   await page.waitForSelector('[data-agent-section="automations"]:not([hidden])');
   await page.waitForFunction(() =>
