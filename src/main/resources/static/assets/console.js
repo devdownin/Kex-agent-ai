@@ -101,6 +101,7 @@ function renderBadges(data) {
   renderOnboarding(data);
   renderNotifications(data);
   renderComparison(data);
+  applyDashboardState();
 }
 
 /* ── Notifications et comparaison de cycles ──────────────────────────── */
@@ -173,33 +174,111 @@ function comparisonMetric(label, value, state) {
   return node;
 }
 
-function renderOnboarding(data) {
+async function renderOnboarding(data) {
   const host = $('#onboarding');
   if (!host || !data) return;
+
+  const [mcpConnections, automationsState] = await Promise.all([
+    api('/api/agent/mcp/servers').catch(() => []),
+    api('/api/agent/automations').then((rows) => ({ enabled: true, rows })).catch((error) =>
+      error.status === 404 ? { enabled: false, rows: [] } : { enabled: true, rows: [] }),
+  ]);
+
   const steps = [
-    { done: Boolean(credentials.get()), label: 'Connecter le jeton API', href: null, action: openCredentials },
-    { done: data.processesMonitored > 0, label: 'Déclarer les processus surveillés', href: '#/settings' },
-    { done: Boolean(data.agent?.lastCycleAt), label: 'Exécuter le premier cycle', action: runCycle },
-  ];
-  const complete = steps.filter((step) => step.done).length;
-  host.hidden = complete === steps.length;
+    { missing: !credentials.get(), label: 'Jeton API non connecté', detail: 'Authentifiez la console pour agir au nom de votre compte.', action: openCredentials },
+    { missing: !(data.processesMonitored > 0), label: 'Aucun processus surveillé', detail: 'Déclarez au moins un processus pour obtenir un diagnostic.', href: '#/settings' },
+    { missing: !(mcpConnections?.length > 0), label: 'Aucune connexion MCP externe', detail: 'Ajoutez une intégration pour étendre les capacités de l’agent.', href: '#/integrations' },
+    { missing: automationsState.enabled && !automationsState.rows.length, label: 'Aucune automatisation', detail: 'Planifiez les contrôles récurrents utiles à votre exploitation.', href: '#/agent' },
+    { missing: !data.agent?.lastCycleAt, label: 'Aucune analyse exécutée', detail: 'Lancez un premier cycle pour établir l’état de référence.', action: runCycle },
+  ].filter((step) => step.missing);
+
+  host.hidden = steps.length === 0;
   if (host.hidden) return;
-  $('#onboarding-progress').textContent = `${complete}/${steps.length}`;
+  $('#onboarding-progress').textContent = `${steps.length} à configurer`;
   const list = $('#onboarding-steps');
-  list.replaceChildren(...steps.map((step, index) => {
-    const item = el('div', step.done ? 'onboarding-step done' : 'onboarding-step');
-    item.append(el('span', 'onboarding-mark', step.done ? '✓' : String(index + 1)));
-    item.append(el('span', 'strong', step.label));
-    if (!step.done) {
-      const action = el(step.href ? 'a' : 'button', 'ghost', 'Configurer');
-      if (step.href) action.href = step.href;
-      else {
-        action.type = 'button';
-        action.addEventListener('click', step.action);
-      }
-      item.append(action);
+  list.replaceChildren(...steps.map((step) => {
+    const item = el('div', 'onboarding-step');
+    item.append(el('span', 'onboarding-mark', '!'));
+    const copy = el('div', 'onboarding-copy');
+    copy.append(el('strong', null, step.label), el('span', 'hint', step.detail));
+    item.append(copy);
+    const action = el(step.href ? 'a' : 'button', 'ghost', 'Configurer');
+    if (step.href) action.href = step.href;
+    else {
+      action.type = 'button';
+      action.addEventListener('click', step.action);
     }
+    item.append(action);
     return item;
+  }));
+}
+
+const DASHBOARD_STORAGE = 'kex.agent.dashboard';
+const DASHBOARD_BLOCKS = {
+  onboarding: 'Onboarding',
+  incidents: 'Incidents',
+  comparison: 'Comparaison de cycles',
+  brief: 'Synthèse de l’agent',
+  operations: 'Processus et décisions',
+  timeline: 'Déroulé du cycle',
+};
+
+function dashboardState() {
+  const fallback = Object.keys(DASHBOARD_BLOCKS).map((id) => ({ id, visible: true }));
+  const saved = readJson(DASHBOARD_STORAGE, null);
+  if (!Array.isArray(saved)) return fallback;
+  const known = new Map(saved.map((item) => [item.id, item]));
+  return fallback.map((item) => ({ ...item, ...(known.get(item.id) || {}) }))
+    .sort((a, b) => (saved.findIndex((item) => item.id === a.id) + 1 || 999)
+      - (saved.findIndex((item) => item.id === b.id) + 1 || 999));
+}
+
+function applyDashboardState() {
+  const state = dashboardState();
+  const overview = $('#view-overview');
+  const toolbar = overview?.querySelector('.overview-toolbar');
+  let anchor = toolbar;
+  state.forEach((item) => {
+    const block = overview?.querySelector(`[data-dashboard-block="${item.id}"]`);
+    if (!block) return;
+    block.dataset.userHidden = String(!item.visible);
+    if (!item.visible) block.hidden = true;
+    else if (item.id !== 'onboarding' && item.id !== 'comparison') block.hidden = false;
+    if (anchor && block.previousElementSibling !== anchor) anchor.after(block);
+    anchor = block;
+  });
+}
+
+function renderDashboardCustomizer() {
+  const host = $('#dashboard-customizer-list');
+  if (!host) return;
+  const state = dashboardState();
+  host.replaceChildren(...state.map((item, index) => {
+    const row = el('div', 'dashboard-customizer-row');
+    const toggle = el('input');
+    toggle.type = 'checkbox';
+    toggle.checked = item.visible;
+    toggle.setAttribute('aria-label', `Afficher ${DASHBOARD_BLOCKS[item.id]}`);
+    toggle.addEventListener('change', () => {
+      item.visible = toggle.checked;
+      writeJson(DASHBOARD_STORAGE, state);
+      applyDashboardState();
+    });
+    row.append(toggle, el('span', null, DASHBOARD_BLOCKS[item.id]));
+    const up = el('button', 'ghost compact', '↑');
+    up.type = 'button'; up.disabled = index === 0; up.setAttribute('aria-label', `Monter ${DASHBOARD_BLOCKS[item.id]}`);
+    up.addEventListener('click', () => {
+      [state[index - 1], state[index]] = [state[index], state[index - 1]];
+      writeJson(DASHBOARD_STORAGE, state); renderDashboardCustomizer(); applyDashboardState();
+    });
+    const down = el('button', 'ghost compact', '↓');
+    down.type = 'button'; down.disabled = index === state.length - 1; down.setAttribute('aria-label', `Descendre ${DASHBOARD_BLOCKS[item.id]}`);
+    down.addEventListener('click', () => {
+      [state[index + 1], state[index]] = [state[index], state[index + 1]];
+      writeJson(DASHBOARD_STORAGE, state); renderDashboardCustomizer(); applyDashboardState();
+    });
+    row.append(up, down);
+    return row;
   }));
 }
 
@@ -639,6 +718,8 @@ function syncConnectivity() {
 
 addEventListener('online', () => {
   syncConnectivity();
+renderDashboardCustomizer();
+applyDashboardState();
   backgroundRefresh();
 });
 addEventListener('offline', syncConnectivity);
