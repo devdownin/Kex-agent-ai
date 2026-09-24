@@ -690,6 +690,8 @@ await check('un outil qui attend des paramètres propose un exemple pré-rempli,
     await page.click('#servers .server ul.tool-list li:nth-child(1) button');
     const prefilled = await page.$eval('.invoke textarea', (node) => JSON.parse(node.value));
     assert.deepEqual(prefilled, { topic: 'exemple', limit: 50 }, 'l’exemple doit couvrir chaque paramètre déclaré');
+    await page.click('#drawer-close');
+    await page.waitForSelector('#drawer[hidden]', { state: 'attached' });
     await page.click('#servers .server ul.tool-list li:nth-child(2) button');
     const empty = await page.$eval('.invoke textarea', (node) => node.value);
     assert.equal(empty, '{}', 'un outil sans paramètre garde un objet vide, rien à y deviner');
