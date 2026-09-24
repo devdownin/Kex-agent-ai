@@ -439,6 +439,7 @@
           <span class="status" id="mcp-server-status" data-state="unknown"><span class="status-mark" aria-hidden="true">●</span><span id="mcp-server-status-label">Vérification…</span></span>
         </div>
         <p class="hint">Inspecter ce que Kex expose en tant que serveur aux clients MCP. Cet espace est distinct des connexions MCP externes utilisées par l’agent.</p>
+        <div id="mcp-server-freshness" class="freshness-slot" aria-live="polite"></div>
         <nav class="local-nav mcp-tabs" aria-label="Vues du serveur MCP">
           <button type="button" class="active" data-mcp-tab="overview">Vue d’ensemble</button>
           <button type="button" data-mcp-tab="catalog">Catalogue</button>
@@ -678,6 +679,7 @@
       </section>
       <section class="panel">
         <div class="panel-head"><h2>Santé de l'instance</h2></div>
+        <div id="system-freshness" class="freshness-slot" aria-live="polite"></div>
         <div class="tiles" id="metric-tiles"></div>
         <pre class="dump" id="health-dump">—</pre>
       </section>
