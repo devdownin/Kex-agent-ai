@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 import assert from 'node:assert/strict';
-import { chromium } from process.env.PLAYWRIGHT_MODULE;
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE);
 const BASE = process.env.KEX_AGENT_URL || 'http://localhost:8081';
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
@@ -34,8 +34,13 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
   });
 
   await page.goto(`${BASE}/#/settings`, { waitUntil: 'domcontentloaded' });
-  await page.click('[data-settings-target="settings-mcp-server"]');
+  const mcpSettings = page.locator('[data-settings-target="settings-mcp-server"]');
+  await mcpSettings.evaluate((button) => button.click());
+  await page.waitForTimeout(500);
+  const diagnostics = await page.evaluate(() => ({ hash: location.hash, tools: document.querySelector('#mcp-tools-count')?.textContent, status: document.querySelector('#mcp-server-status-label')?.textContent, panelHidden: document.querySelector('#settings-mcp-server')?.hidden }));
+  console.log('MCP UI diagnostics', JSON.stringify(diagnostics));
   await page.waitForFunction(() => document.querySelector('#mcp-tools-count')?.textContent === '1');
+  await page.locator('#credentials').evaluate((dialog) => { if (dialog.open) dialog.close(); });
   assert.equal(await page.textContent('#mcp-server-status-label'), 'Opérationnel · lecture seule');
   assert.equal(await page.textContent('#mcp-resources-count'), '1');
   assert.equal(await page.textContent('#mcp-templates-count'), '1');
@@ -58,7 +63,7 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
 
   await page.selectOption('#mcp-playground-operation', 'template');
   await page.selectOption('#mcp-playground-target', 'Process');
-  await page.fill('#mcp-playground-arguments', '{"processId":"order-integration"}');
+  await page.locator('#mcp-template-fields input[name="processId"]').fill('order-integration');
   await page.click('#mcp-playground-form button[type="submit"]');
   await page.waitForFunction(() => document.querySelector('#mcp-playground-result')?.textContent.includes('order-integration'));
   assert.match(await page.textContent('#mcp-playground-result'), /kex:\/\/supervision\/processes\/order-integration/);
