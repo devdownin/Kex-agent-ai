@@ -214,6 +214,7 @@ async function renderOnboarding(data) {
     item.append(action);
     return item;
   }));
+  applyDashboardState();
 }
 
 const DASHBOARD_STORAGE = 'kex.agent.dashboard';
