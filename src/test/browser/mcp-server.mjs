@@ -40,6 +40,7 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
   const diagnostics = await page.evaluate(() => ({ hash: location.hash, tools: document.querySelector('#mcp-tools-count')?.textContent, status: document.querySelector('#mcp-server-status-label')?.textContent, panelHidden: document.querySelector('#settings-mcp-server')?.hidden }));
   console.log('MCP UI diagnostics', JSON.stringify(diagnostics));
   await page.waitForFunction(() => document.querySelector('#mcp-tools-count')?.textContent === '1');
+  await page.locator('#credentials').evaluate((dialog) => { if (dialog.open) dialog.close(); });
   assert.equal(await page.textContent('#mcp-server-status-label'), 'Opérationnel · lecture seule');
   assert.equal(await page.textContent('#mcp-resources-count'), '1');
   assert.equal(await page.textContent('#mcp-templates-count'), '1');
