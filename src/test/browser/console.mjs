@@ -123,6 +123,8 @@ await page.reload({ waitUntil: 'domcontentloaded' });
 await page.fill('#api-key', TOKEN, { force: true });
 // Submit through the DOM as the credentials dialog is intentionally not part of this test's contract.
 await page.locator('#credentials-form').evaluate((form) => form.requestSubmit());
+// Native dialog behavior is outside this suite; keep it from intercepting the application controls.
+await page.locator('#credentials').evaluate((dialog) => { if (dialog.open) dialog.close(); });
 
 await check('l’écran courant se recharge après la saisie du jeton', async () => {
   // Défaut : route() ne rechargeait pas la vue inchangée, et Configuration — exclue du sondage de
