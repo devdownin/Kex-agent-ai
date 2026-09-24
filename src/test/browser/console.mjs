@@ -144,6 +144,76 @@ await check('le titre de la page suit la vue', async () => {
   assert.equal(await page.$eval('#announcer', (node) => node.textContent), 'Configuration');
 });
 
+await check('le contexte global filtre la supervision et persiste', async () => {
+  const now = new Date().toISOString();
+  const data = overviewStub({
+    processesMonitored: 2,
+    processes: [
+      { processId: 'order-integration', name: 'Order Integration', environment: 'prod', state: 'WARNING',
+        lastRun: now, durationMillis: 1200, delayMillis: 90000, note: 'Retard',
+        coverage: { complete: true, stopReason: 'EXHAUSTED' } },
+      { processId: 'billing', name: 'Billing', environment: 'preprod', state: 'OK',
+        lastRun: now, durationMillis: 800, delayMillis: 0, note: 'OK',
+        coverage: { complete: true, stopReason: 'EXHAUSTED' } },
+    ],
+  });
+  await page.route('**/api/agent/supervision/overview', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify(data),
+  }));
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#context-process option[value="order-integration"]');
+  await page.selectOption('#context-process', 'order-integration');
+  await page.waitForFunction(() => document.querySelectorAll('#overview-processes tbody tr').length === 1);
+  assert.match(await page.$eval('#overview-processes', (node) => node.innerText), /Order Integration/);
+  assert.doesNotMatch(await page.$eval('#overview-processes', (node) => node.innerText), /Billing/);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('kex.agent.global-context')).process),
+    'order-integration');
+  await page.click('#context-reset');
+  await page.unroute('**/api/agent/supervision/overview');
+});
+
+await check('le tableau de bord se personnalise et mémorise les blocs', async () => {
+  await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  await page.click('.dashboard-customizer > summary');
+  const row = page.locator('.dashboard-customizer-row').filter({ hasText: 'Déroulé du cycle' });
+  const checkbox = row.locator('input[type="checkbox"]');
+  await checkbox.uncheck();
+  assert.equal(await page.$eval('[data-dashboard-block="timeline"]', (node) => getComputedStyle(node).display), 'none');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('kex.agent.dashboard')));
+  assert.equal(saved.find((item) => item.id === 'timeline').visible, false);
+  await checkbox.check();
+});
+
+await check('la vue Activité agrège cycle, alertes, décisions et audit', async () => {
+  const now = new Date().toISOString();
+  const decision = decisionStub('activity-decision');
+  const alert = {
+    id: 'activity-alert', processId: 'order-integration', processName: 'Order Integration',
+    title: 'Lag élevé', severity: 'WARNING', firstSeenAt: now, lastSeenAt: now,
+  };
+  const data = overviewStub({
+    alerts: [alert], pending: [decision],
+    lastCycle: { ...cycleStub('activity-cycle', 1), events: [{ at: now, label: 'Analyse Kafka', detail: 'Lag inspecté' }] },
+  });
+  await page.route('**/api/agent/supervision/overview', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify(data),
+  }));
+  await page.route('**/api/agent/supervision/audit', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify([{ at: now, actor: 'operator', action: 'Validation manuelle',
+      processId: 'order-integration', reason: 'test', policyVersion: 'p1', result: 'OK', correlationId: 'corr' }]),
+  }));
+  await page.goto(`${BASE}/#/activity`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#activity-timeline .activity-event');
+  const text = await page.$eval('#activity-timeline', (node) => node.innerText);
+  assert.match(text, /Analyse Kafka/);
+  assert.match(text, /Lag élevé/);
+  assert.match(text, /Redémarrer activity-decision/);
+  assert.match(text, /Validation manuelle/);
+  await page.unroute('**/api/agent/supervision/overview');
+  await page.unroute('**/api/agent/supervision/audit');
+});
+
 await check('la navigation latérale se replie, reste découvrable et mémorise son état', async () => {
   await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
   await page.evaluate(() => localStorage.removeItem('kex.agent.rail'));
