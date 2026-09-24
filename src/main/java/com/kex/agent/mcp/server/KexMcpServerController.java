@@ -133,13 +133,29 @@ public class KexMcpServerController {
         ResponseEntity<Object> rejected = authorize(headers, authentication);
         if (rejected != null) return rejected;
         if ("summary".equals(headers.getFirst("X-Kex-Mcp-View"))) {
-            return ResponseEntity.ok(Map.of(
-                    "state", "UP",
-                    "sessions", sessions.snapshot(),
-                    "activeSessions", sessions.snapshot().size(),
-                    "serverVersion", serverVersion(),
-                    "protocol", PROTOCOL,
-                    "readOnly", true));
+            List<McpClientSessionRegistry.SessionView> sessionSnapshot = sessions.snapshot();
+            long activeSessions = sessionSnapshot.stream().filter(session -> "ACTIVE".equals(session.state())).count();
+            Timer timer = meters.find("kex.mcp.server.request").timer();
+            double p95Millis = timer == null ? 0.0 : timer.takeSnapshot().percentileValues().length == 0
+                    ? timer.mean(java.util.concurrent.TimeUnit.MILLISECONDS)
+                    : java.util.Arrays.stream(timer.takeSnapshot().percentileValues())
+                            .min(java.util.Comparator.comparingDouble(value -> Math.abs(value.percentile() - 0.95)))
+                            .map(value -> value.value(java.util.concurrent.TimeUnit.MILLISECONDS)).orElse(0.0);
+            boolean supervisionReady = supervision.getIfAvailable() != null;
+            boolean kafkaReady = kafka.getIfAvailable() != null;
+            String state = !supervisionReady ? "DOWN" : kafkaReady ? "UP" : "DEGRADED";
+            return ResponseEntity.ok(Map.ofEntries(
+                    Map.entry("state", state),
+                    Map.entry("supervision", supervisionReady ? "UP" : "DOWN"),
+                    Map.entry("kafka", kafkaReady ? "UP" : "DOWN"),
+                    Map.entry("sessions", sessionSnapshot),
+                    Map.entry("activeSessions", activeSessions),
+                    Map.entry("totalSessions", sessionSnapshot.size()),
+                    Map.entry("requestCount", timer == null ? 0L : timer.count()),
+                    Map.entry("p95Millis", p95Millis),
+                    Map.entry("serverVersion", serverVersion()),
+                    Map.entry("protocol", PROTOCOL),
+                    Map.entry("readOnly", true)));
         }
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).allow(HttpMethod.POST).build();
     }
@@ -233,7 +249,9 @@ public class KexMcpServerController {
         }
         String outcome = metricOutcome(response);
         String operation = metricOperation(method, params);
-        sample.stop(meters.timer("kex.mcp.server.request", "method", metricMethod(method), "operation", operation, "outcome", outcome));
+        sample.stop(Timer.builder("kex.mcp.server.request")
+                .tag("method", metricMethod(method)).tag("operation", operation).tag("outcome", outcome)
+                .publishPercentileHistogram().publishPercentiles(0.95).register(meters));
         meters.counter("kex.mcp.server.requests", "method", metricMethod(method), "operation", operation, "outcome", outcome).increment();
         publishAudit(authentication, headers, method, params, outcome, System.nanoTime() - auditStarted);
         return response;
