@@ -127,6 +127,11 @@ function schemaInput(name, schema, required) {
     [['true', 'Oui'], ['false', 'Non']].forEach(([value, text]) => {
       const option = document.createElement('option'); option.value = value; option.textContent = text; input.append(option);
     });
+  } else if (['object', 'array'].includes(schema.type)) {
+    input = document.createElement('textarea');
+    input.rows = 4;
+    input.spellcheck = false;
+    input.placeholder = schema.type === 'array' ? '[]' : '{}';
   } else {
     input = document.createElement('input');
     input.type = ['integer', 'number'].includes(schema.type) ? 'number' : 'text';
@@ -174,6 +179,7 @@ function schemaArguments() {
     if (type === 'boolean') value = value === 'true';
     else if (type === 'integer') value = Number.parseInt(value, 10);
     else if (type === 'number') value = Number.parseFloat(value);
+    else if (type === 'object' || type === 'array') value = JSON.parse(value);
     values[input.dataset.schemaName] = value;
   });
   return values;
@@ -272,7 +278,8 @@ export async function view() {
       const summary = await fetch(ENDPOINT, { headers }).then((response) => response.ok ? response.json() : null);
       if (summary) {
         $('#mcp-active-sessions').textContent = summary.activeSessions ?? '0';
-        $('#mcp-health-state').textContent = summary.state || '—';
+        const healthLabels = { UP: 'Opérationnel', DEGRADED: 'Dégradé', DOWN: 'Indisponible' };
+        $('#mcp-health-state').textContent = healthLabels[summary.state] || summary.state || '—';
         const host = $('#mcp-session-list');
         const sessions = summary.sessions || [];
         if (!sessions.length) {
@@ -288,6 +295,16 @@ export async function view() {
           const body = document.createElement('tbody');
           sessions.forEach((item) => {
             const row = document.createElement('tr');
+            row.className = 'clickable-row';
+            row.tabIndex = 0;
+            row.setAttribute('aria-label', `Détails de la session ${item.name}/${item.version}`);
+            row.addEventListener('click', () => openSessionDetails(item));
+            row.addEventListener('keydown', (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openSessionDetails(item);
+              }
+            });
             const client = el('td', null, `${item.name}/${item.version}`);
             const state = el('td', null, item.state === 'IDLE' ? '○ Inactif' : '● Actif');
             state.dataset.state = item.state === 'IDLE' ? 'idle' : 'active';
@@ -297,7 +314,10 @@ export async function view() {
             const actionCell = document.createElement('td');
             const details = el('button', 'ghost compact', 'Détails');
             details.type = 'button';
-            details.addEventListener('click', () => openSessionDetails(item));
+            details.addEventListener('click', (event) => {
+              event.stopPropagation();
+              openSessionDetails(item);
+            });
             actionCell.append(details);
             row.append(client, state, activity, calls, protocol, actionCell);
             body.append(row);
