@@ -47,6 +47,8 @@ async function check(name, body) {
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
 const page = await context.newPage();
+page.setDefaultTimeout(10000);
+page.setDefaultNavigationTimeout(10000);
 
 // Une exception non rattrapée ne casse rien de visible : l'écran reste affiché, figé sur des
 // données périmées. C'est exactement le mensonge que le reste de la console s'attache à éviter.
