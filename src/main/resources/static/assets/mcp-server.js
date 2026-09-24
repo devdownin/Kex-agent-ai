@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 
-import { $, credentials, el, report } from './core.js';
+import { $, credentials, el, empty, freshnessStamp, openDrawer, report } from './core.js';
 
 const ENDPOINT = '/api/agent/mcp-server';
 const PROTOCOL = '2025-06-18';
@@ -48,6 +48,23 @@ function setStatus(ok, label) {
   $('#mcp-server-status-label').textContent = label;
 }
 
+function openCatalogDetails(item, kind) {
+  const body = el('div', 'stack');
+  body.append(el('span', 'panel-kicker', kind === 'tools' ? 'Outil MCP' : kind.slice(0, -1)));
+  body.append(el('h3', null, item.name || item.uri || item.uriTemplate || 'Sans nom'));
+  if (item.description) body.append(el('p', null, item.description));
+  const identity = item.uri || item.uriTemplate;
+  if (identity) body.append(el('code', 'technical-id', identity));
+  const schema = item.inputSchema || item.outputSchema;
+  if (schema) {
+    body.append(el('h4', null, 'Contrat JSON'));
+    const pre = el('pre', 'dump');
+    pre.textContent = JSON.stringify(schema, null, 2);
+    body.append(pre);
+  }
+  openDrawer(item.name || item.uri || item.uriTemplate || 'Détail MCP', body);
+}
+
 function card(item, kind) {
   const node = el('article', 'mcp-catalog-card');
   const title = el('strong', 'mcp-catalog-name', item.name || item.uri || item.uriTemplate || 'Sans nom');
@@ -56,6 +73,10 @@ function card(item, kind) {
   const head = el('div', 'mcp-catalog-head'); head.append(title, badge);
   node.append(head);
   if (item.description) node.append(el('p', 'hint', item.description));
+  const detail = el('button', 'ghost compact', 'Détails');
+  detail.type = 'button';
+  detail.addEventListener('click', () => openCatalogDetails(item, kind));
+  node.append(detail);
   const schema = item.inputSchema || item.outputSchema;
   if (schema) {
     const details = document.createElement('details');
@@ -235,9 +256,7 @@ async function executePlayground(event) {
 }
 
 function openSessionDetails(item) {
-  const drawer = $('#drawer');
-  $('#drawer-title').textContent = 'Session MCP';
-  const body = $('#drawer-body');
+  const body = el('div', 'stack');
   const list = el('dl', 'definition-list');
   const add = (label, value) => {
     const dt = document.createElement('dt'); dt.textContent = label;
@@ -251,9 +270,8 @@ function openSessionDetails(item) {
   add('Dernière activité', item.lastActivityAt ? new Date(item.lastActivityAt).toLocaleString() : '—');
   add('Appels', String(item.callCount ?? 0));
   add('Identifiant de session', item.id);
-  body.replaceChildren(list);
-  drawer.hidden = false;
-  $('#drawer-close').focus();
+  body.append(list, freshnessStamp(item.lastActivityAt, 5 * 60 * 1000, 'Activité'));
+  openDrawer('Session MCP', body);
 }
 
 export async function view() {
@@ -280,12 +298,15 @@ export async function view() {
         $('#mcp-active-sessions').textContent = summary.activeSessions ?? '0';
         const healthLabels = { UP: 'Opérationnel', DEGRADED: 'Dégradé', DOWN: 'Indisponible' };
         $('#mcp-health-state').textContent = healthLabels[summary.state] || summary.state || '—';
+        const healthMetric = $('#mcp-health-state').parentElement;
+        healthMetric.querySelector('.freshness-tag')?.remove();
+        healthMetric.append(freshnessStamp(new Date().toISOString(), 60_000, 'Vérifié'));
         const host = $('#mcp-session-list');
         const sessions = summary.sessions || [];
         if (!sessions.length) {
-          host.replaceChildren(el('div', 'mcp-empty-action',
-            el('strong', null, 'Aucun client MCP connecté'),
-            el('span', 'muted', 'Le serveur Kex est disponible mais aucune session cliente n’est actuellement observée.')));
+          host.replaceChildren(empty('Aucun client MCP connecté.',
+            'Le serveur Kex est disponible mais aucune session cliente n’est actuellement observée.',
+            { href: '#/settings', label: 'Voir la configuration MCP' }));
         } else {
           const table = el('table', 'mcp-session-table');
           const head = document.createElement('thead');
@@ -308,7 +329,8 @@ export async function view() {
             const client = el('td', null, `${item.name}/${item.version}`);
             const state = el('td', null, item.state === 'IDLE' ? '○ Inactif' : '● Actif');
             state.dataset.state = item.state === 'IDLE' ? 'idle' : 'active';
-            const activity = el('td', 'muted', new Date(item.lastActivityAt).toLocaleString());
+            const activity = document.createElement('td');
+            activity.append(freshnessStamp(item.lastActivityAt, 5 * 60 * 1000, 'Activité'));
             const calls = el('td', 'technical-id', String(item.callCount ?? 0));
             const protocol = el('td', 'technical-id', item.protocol || '—');
             const actionCell = document.createElement('td');
