@@ -41,6 +41,9 @@
       <a class="nav-item" href="#/incidents" data-view="incidents" aria-label="Incidents">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 5h14v14H5z"/><path d="M8 9h8M8 12h5M8 15h7"/></svg>
         Incidents</a>
+      <a class="nav-item" href="#/activity" data-view="activity" aria-label="Activité">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 18V9M10 18V5M15 18v-6M20 18V8"/></svg>
+        Activité</a>
       <a class="nav-item" href="#/processes" data-view="processes" aria-label="Processus">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 10.5h16M4 15h16"/></svg>
         Processus</a>
@@ -147,6 +150,13 @@
     </p>
 
 
+    <section class="global-context" id="global-context" aria-label="Contexte global">
+      <div class="context-field"><span>Environnement</span><select id="context-environment"><option value="ALL">Tous</option></select></div>
+      <div class="context-field"><span>Processus</span><select id="context-process"><option value="ALL">Tous</option></select></div>
+      <div class="context-field"><span>Période</span><select id="context-period"><option value="ALL">Toutes</option><option value="3600000">1 h</option><option value="21600000">6 h</option><option value="86400000">24 h</option><option value="604800000">7 j</option></select></div>
+      <button type="button" class="ghost compact" id="context-reset">Réinitialiser</button>
+    </section>
+
     <!-- ══ Vue d'ensemble ══ -->
     <section class="view" id="view-overview" hidden>
       <section class="overview-hero" aria-labelledby="overview-title">
@@ -163,20 +173,26 @@
           </span>
         </div>
       </section>
-      <div class="kpis" id="kpis"></div>
-      <section class="panel onboarding" id="onboarding" hidden>
+      <div class="overview-toolbar">
+        <div class="kpis" id="kpis"></div>
+        <details class="dashboard-customizer">
+          <summary class="ghost">Personnaliser</summary>
+          <div id="dashboard-customizer-list" class="dashboard-customizer-list"></div>
+        </details>
+      </div>
+      <section class="panel onboarding" id="onboarding" data-dashboard-block="onboarding" hidden>
         <div class="panel-head">
           <div><span class="panel-kicker">Premiers pas</span><h2>Configurer votre centre de contrôle</h2></div>
           <span class="onboarding-progress" id="onboarding-progress"></span>
         </div>
         <div class="onboarding-steps" id="onboarding-steps"></div>
       </section>
-      <div id="incident-banner"></div>
-      <section class="panel cycle-comparison" id="cycle-comparison" hidden>
+      <div id="incident-banner" data-dashboard-block="incidents"></div>
+      <section class="panel cycle-comparison" id="cycle-comparison" data-dashboard-block="comparison" hidden>
         <div class="panel-head"><h2>Depuis le cycle précédent</h2><span class="muted" id="comparison-time"></span></div>
         <div class="comparison-grid" id="comparison-grid"></div>
       </section>
-      <section class="panel agent-brief-panel">
+      <section class="panel agent-brief-panel" data-dashboard-block="brief">
         <div class="panel-head">
           <div>
             <span class="panel-kicker">Synthèse de l’agent</span>
@@ -186,7 +202,7 @@
         </div>
         <div id="agent-brief"></div>
       </section>
-      <div class="split">
+      <div class="split" data-dashboard-block="operations">
         <section class="panel">
           <div class="panel-head">
             <h1>Processus surveillés</h1>
@@ -199,7 +215,7 @@
           <div id="overview-attention" data-skeleton="list"></div>
         </section>
       </div>
-      <section class="panel">
+      <section class="panel" data-dashboard-block="timeline">
         <div class="panel-head"><h2>Déroulé du dernier cycle</h2></div>
         <div class="cycle-live" id="cycle-live" role="status" aria-live="polite" hidden></div>
         <div id="overview-timeline"></div>
@@ -458,6 +474,10 @@
             <div class="subpanel"><span class="panel-kicker">Contrat</span><h2>Lecture seule</h2><p class="hint">Les mutations gouvernées ne sont pas exposées par le catalogue MCP.</p></div>
             <div class="subpanel"><span class="panel-kicker">Protocole</span><h2 id="mcp-protocol">—</h2><p class="hint" id="mcp-server-version">Version serveur inconnue</p></div>
           </div>
+          <div class="subpanel">
+            <span class="panel-kicker">Cockpit</span><h2>Exploitation MCP</h2>
+            <div id="mcp-ops-summary" class="mcp-ops-summary"></div>
+          </div>
           <div class="subpanel"><span class="panel-kicker">Clients</span><h2>Sessions MCP</h2><div id="mcp-session-list" class="mcp-session-list"><p class="hint">Aucun client MCP connecté.</p></div></div>
         </div>
         <div data-mcp-panel="catalog" hidden>
@@ -560,6 +580,17 @@
           </details>
         </section>
       </div>
+    </section>
+
+    <!-- ══ Activité ══ -->
+    <section class="view" id="view-activity" hidden>
+      <section class="workspace-heading">
+        <div><span class="panel-kicker">Pilotage</span><h1>Activité</h1><p>Chronologie unifiée des cycles, alertes, décisions et actions auditées.</p></div>
+        <button type="button" class="ghost" id="refresh-activity">Rafraîchir</button>
+      </section>
+      <section class="panel">
+        <div id="activity-timeline" data-skeleton="list"></div>
+      </section>
     </section>
 
     <!-- ══ Alertes ══ -->
