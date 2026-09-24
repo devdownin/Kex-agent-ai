@@ -16,6 +16,13 @@ public record KexMcpServerProperties(@DefaultValue("false") boolean enabled,
                                      @DefaultValue("false") boolean governedMutationsEnabled,
                                      @DefaultValue("30m") Duration sessionTtl,
                                      @DefaultValue("5m") Duration sessionIdleAfter) {
+    /** Source-compatible constructor for tests and integrations using the pre-session-lifecycle shape. */
+    public KexMcpServerProperties(boolean enabled, Set<String> allowedOrigins, int requestsPerMinute,
+                                  boolean governedMutationsEnabled) {
+        this(enabled, allowedOrigins, requestsPerMinute, governedMutationsEnabled,
+                Duration.ofMinutes(30), Duration.ofMinutes(5));
+    }
+
     public KexMcpServerProperties {
         allowedOrigins = allowedOrigins == null ? Set.of() : Set.copyOf(allowedOrigins);
         if (requestsPerMinute < 1) throw new IllegalArgumentException("MCP server rate limit must be positive");
