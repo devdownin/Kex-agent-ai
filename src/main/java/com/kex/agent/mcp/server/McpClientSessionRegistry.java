@@ -31,7 +31,7 @@ public class McpClientSessionRegistry {
 
     public String open(String name, String version, String protocol) {
         String id = UUID.randomUUID().toString();
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         sessions.put(id, new Session(id, name, version, protocol, now, now, 0));
         return id;
     }
@@ -45,12 +45,12 @@ public class McpClientSessionRegistry {
     public void touch(String sessionId) {
         if (sessionId == null) return;
         sessions.computeIfPresent(sessionId, (id, session) ->
-                new Session(id, session.name(), session.version(), session.protocol(), session.createdAt(), Instant.now(), session.callCount() + 1));
+                new Session(id, session.name(), session.version(), session.protocol(), session.createdAt(), clock.instant(), session.callCount() + 1));
     }
 
     public List<SessionView> snapshot() {
         purgeExpired();
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         return sessions.values().stream()
                 .sorted((a, b) -> b.lastActivityAt().compareTo(a.lastActivityAt()))
                 .map(session -> new SessionView(session.id(), session.name(), session.version(), session.protocol(),
@@ -60,7 +60,7 @@ public class McpClientSessionRegistry {
     }
 
     private void purgeExpired() {
-        Instant cutoff = Instant.now().minus(TTL);
+        Instant cutoff = clock.instant().minus(ttl);
         sessions.entrySet().removeIf(entry -> entry.getValue().lastActivityAt().isBefore(cutoff));
     }
 
