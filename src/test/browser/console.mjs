@@ -71,7 +71,10 @@ function expected(message) {
   return message.text().includes('401')
     || (message.text().includes('404') && message.location().url.includes('/actuator/metrics/'))
     || (message.text().includes('404') && message.location().url.includes('/api/agent/knowledge'))
-    || (message.text().includes('404') && message.location().url.includes('/api/agent/automations'));
+    || (message.text().includes('404') && message.location().url.includes('/api/agent/automations'))
+    // The generic browser job deliberately runs with the embedded MCP server disabled. Its
+    // configuration probe therefore returns 404; dedicated MCP browser coverage exercises it enabled.
+    || (message.text().includes('404') && message.location().url.includes('/api/agent/mcp-server'));
 }
 
 /** Le strict nécessaire pour que decisionRow() (supervision.js) rende une carte sélectionnable. */
