@@ -68,6 +68,58 @@ export async function servers() {
   }, renderServers);
 }
 
+function platformContextActions(title, context, auditQuery) {
+  const actions = el('div', 'context-actions context-actions-standard');
+  const ask = el('button', 'primary', 'Interroger l’agent');
+  ask.type = 'button';
+  ask.addEventListener('click', () => {
+    dispatchEvent(new CustomEvent('kex:context-chat', { detail: {
+      contextId: `mcp:${auditQuery || title}`, title, context,
+    } }));
+  });
+  const audit = el('button', 'ghost', 'Voir l’audit');
+  audit.type = 'button';
+  audit.addEventListener('click', () => {
+    location.hash = `#/audit?q=${encodeURIComponent(auditQuery || title)}`;
+  });
+  const copy = el('button', 'ghost', 'Copier le lien');
+  copy.type = 'button';
+  copy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(location.href); toast('Lien copié'); }
+    catch { toast('Copie indisponible dans ce navigateur', 'error'); }
+  });
+  actions.append(ask, audit, copy);
+  return actions;
+}
+
+function openToolDrawer(server, tool) {
+  setDrawerParam('mcp', server.connection);
+  const metric = metricFor(server.connection, tool.name);
+  const context = [
+    `Connexion MCP : ${server.connection}`,
+    `Outil : ${tool.name}`,
+    `Description : ${tool.description || '—'}`,
+    `Appels : ${metric?.callCount ?? 0}`,
+    `Latence moyenne : ${metric?.averageDurationMs == null ? '—' : `${Math.round(metric.averageDurationMs)} ms`}`,
+  ].join('\n');
+  const body = el('div', 'stack');
+  body.append(platformContextActions(`Outil MCP · ${tool.name}`, context, tool.name));
+  body.append(
+    definition('Connexion', el('span', null, server.connection)),
+    definition('Outil', el('code', null, tool.name)),
+    definition('Description', el('span', null, tool.description || '—')),
+    definition('Appels', el('span', null, String(metric?.callCount ?? 0))),
+    definition('Latence moyenne', el('span', null,
+      metric?.averageDurationMs == null ? '—' : `${Math.round(metric.averageDurationMs)} ms`)),
+  );
+  if (tool.inputSchema) {
+    const details = el('details', 'technical-id');
+    details.append(el('summary', null, 'Schéma d’entrée'), el('pre', null, JSON.stringify(tool.inputSchema, null, 2)));
+    body.append(details);
+  }
+  openDrawer(`Outil MCP · ${tool.name}`, body);
+}
+
 function renderMcpConnectionsCockpit(list) {
   const host = $('#mcp-connections-cockpit');
   if (!host) return;
@@ -107,8 +159,8 @@ function renderMcpConnectionsCockpit(list) {
       el('td', null, managed?.transport || '—'));
     row.tabIndex = 0;
     row.classList.add('clickable');
-    row.addEventListener('click', () => openServerDetails(server, managed));
-    row.addEventListener('keydown', (event) => { if (event.key === 'Enter') openServerDetails(server, managed); });
+    row.addEventListener('click', () => openServerDrawer(server));
+    row.addEventListener('keydown', (event) => { if (event.key === 'Enter') openServerDrawer(server); });
     body.append(row);
   });
   table.append(body);
@@ -191,7 +243,11 @@ function card(server) {
         button.append(el('span', 'muted', label));
       }
       button.addEventListener('click', () => invoke(null, server.connection, tool));
-      item.append(button);
+      const detail = el('button', 'ghost compact', 'Détails');
+      detail.type = 'button';
+      detail.setAttribute('aria-label', `Détails de l’outil ${tool.name}`);
+      detail.addEventListener('click', () => openToolDrawer(server, tool));
+      item.append(button, detail);
       list.append(item);
     });
     node.append(list);
@@ -276,6 +332,15 @@ function openServerDrawer(server, updateUrl = true) {
   if (updateUrl) setDrawerParam('mcp', server.connection);
   const state = managed && !managed.enabled ? 'UNKNOWN' : (server.initialized ? 'OK' : 'UNKNOWN');
   const body = el('div', 'stack');
+  const context = [
+    `Connexion MCP : ${server.connection}`,
+    `Serveur : ${server.serverName || 'Non annoncé'}`,
+    `Version : ${server.version || '—'}`,
+    `Protocole : ${server.protocolVersion || '—'}`,
+    `Transport : ${managed?.transport || '—'}`,
+    `Outils : ${server.tools?.length || 0}`,
+  ].join('\n');
+  body.append(platformContextActions(`Serveur MCP · ${server.connection}`, context, server.connection));
   body.append(
     definition('État', stateTag(state,
       managed && !managed.enabled ? 'Désactivé' : (server.initialized ? 'Initialisé' : 'Pas de handshake'))),
