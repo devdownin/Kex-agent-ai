@@ -110,13 +110,13 @@ public class KexMcpServerController {
     private final ObjectProvider<McpServerAuditPublisher> audit;
     private final ObjectProvider<McpServerRateLimiter> rateLimiter;
     private final MeterRegistry meters;
-    private final McpClientSessionRegistry sessions = new McpClientSessionRegistry();
+    private final McpClientSessionRegistry sessions;
 
     public KexMcpServerController(ObjectMapper mapper, ObjectProvider<SupervisionService> supervision,
                                   ObjectProvider<KafkaViewService> kafka,
                                   KexMcpServerProperties properties, ObjectProvider<BuildProperties> buildProperties,
                                   ObjectProvider<McpServerAuditPublisher> audit, ObjectProvider<McpServerRateLimiter> rateLimiter,
-                                  MeterRegistry meters) {
+                                  MeterRegistry meters, McpClientSessionRegistry sessions) {
         this.mapper = mapper;
         this.supervision = supervision;
         this.kafka = kafka;
@@ -125,6 +125,7 @@ public class KexMcpServerController {
         this.audit = audit;
         this.rateLimiter = rateLimiter;
         this.meters = meters;
+        this.sessions = sessions;
     }
 
     @GetMapping
@@ -225,7 +226,8 @@ public class KexMcpServerController {
         };
         if ("initialize".equals(method) && response.getStatusCode().is2xxSuccessful()) {
             String sessionId = sessions.open(params.path("clientInfo").path("name").asText("unknown"),
-                    params.path("clientInfo").path("version").asText("unknown"));
+                    params.path("clientInfo").path("version").asText("unknown"),
+                    responseProtocol(response));
             response = ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders())
                     .header(SESSION_HEADER, sessionId).body(response.getBody());
         }
@@ -250,6 +252,15 @@ public class KexMcpServerController {
                         "resources", Map.of("listChanged", false), "prompts", Map.of("listChanged", false)),
                 "instructions", "Read-only Kex supervision endpoint. Human approvals and all state changes "
                         + "stay in Kex's authenticated operator API and console."));
+    }
+
+    private static String responseProtocol(ResponseEntity<Object> response) {
+        Object body = response.getBody();
+        if (body instanceof Map<?, ?> envelope && envelope.get("result") instanceof Map<?, ?> result) {
+            Object protocol = result.get("protocolVersion");
+            if (protocol instanceof String value) return value;
+        }
+        return PROTOCOL;
     }
 
     private String serverVersion() {
