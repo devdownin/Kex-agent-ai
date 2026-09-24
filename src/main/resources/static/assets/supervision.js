@@ -105,13 +105,88 @@ export async function refresh() {
 
 export const current = () => snapshot;
 
+const CONTEXT_STORAGE = 'kex.agent.global-context';
+
+function globalContext() {
+  return stored(CONTEXT_STORAGE, { environment: 'ALL', process: 'ALL', period: 'ALL' });
+}
+
+function itemTime(item) {
+  return item?.at || item?.lastSeenAt || item?.firstSeenAt || item?.decidedAt || item?.resolvedAt || item?.lastRun || null;
+}
+
+function contextMatches(item, context = globalContext()) {
+  if (!item) return true;
+  const processId = item.processId || item.id;
+  const processName = item.processName || item.name;
+  if (context.process !== 'ALL' && context.process !== processId && context.process !== processName) return false;
+  const environment = item.environment || item.env || item.stage;
+  if (context.environment !== 'ALL' && environment && environment !== context.environment) return false;
+  if (context.environment !== 'ALL' && !environment) return false;
+  if (context.period !== 'ALL') {
+    const stampValue = itemTime(item);
+    if (stampValue && Date.now() - new Date(stampValue).getTime() > Number(context.period)) return false;
+  }
+  return true;
+}
+
+function contextualize(data) {
+  const context = globalContext();
+  const next = { ...data };
+  for (const key of ['processes', 'alerts', 'pending', 'incidents']) {
+    if (Array.isArray(data?.[key])) next[key] = data[key].filter((item) => contextMatches(item, context));
+  }
+  next.processesMonitored = next.processes?.length ?? data?.processesMonitored;
+  next.pendingApprovals = next.pending?.length ?? data?.pendingApprovals;
+  next.anomaliesDetected = next.alerts?.length ?? data?.anomaliesDetected;
+  return next;
+}
+
+function syncGlobalContext(data = snapshot) {
+  const context = globalContext();
+  const process = $('#context-process');
+  const environment = $('#context-environment');
+  if (!process || !environment) return;
+
+  const processes = data?.processes || [];
+  const processOptions = [el('option', null, 'Tous')];
+  processOptions[0].value = 'ALL';
+  processes.forEach((item) => {
+    const option = el('option', null, item.name);
+    option.value = item.processId || item.name;
+    processOptions.push(option);
+  });
+  process.replaceChildren(...processOptions);
+  process.value = processOptions.some((option) => option.value === context.process) ? context.process : 'ALL';
+
+  const environments = [...new Set(processes.map((item) => item.environment || item.env || item.stage).filter(Boolean))].sort();
+  const envOptions = [el('option', null, 'Tous')];
+  envOptions[0].value = 'ALL';
+  environments.forEach((name) => {
+    const option = el('option', null, name);
+    option.value = name;
+    envOptions.push(option);
+  });
+  environment.replaceChildren(...envOptions);
+  environment.value = envOptions.some((option) => option.value === context.environment) ? context.environment : 'ALL';
+
+  $('#context-period').value = context.period;
+}
+
+async function rerenderCurrentContext() {
+  const view = location.hash.replace(/^#\//, '').split('?')[0] || 'overview';
+  const loaders = { overview, attention: attentionView, incidents, activity, processes, decisions, alerts, audit };
+  if (loaders[view]) await loaders[view]();
+}
+
 /* ── Vue d'ensemble ────────────────────────────────────────────────────── */
 
 export async function overview() {
   const host = $('#kpis');
   host.replaceChildren(skeleton('kpis', 'Analyse des processus…'));
   try {
-    const data = await refresh();
+    const data = contextualize(await refresh());
+    syncGlobalContext(snapshot);
     renderOverviewHero(data);
     $('#agent-brief').replaceChildren(agentBrief(data));
     host.replaceChildren(kpis(data));
@@ -183,7 +258,7 @@ export function liveCycle(progress) {
 /* ── File d'action ─────────────────────────────────────────────────────── */
 
 export async function attentionView() {
-  await render($('#attention-workspace'), refresh, (data) => {
+  await render($('#attention-workspace'), async () => contextualize(await refresh()), (data) => {
     const severity = { ERROR: 0, WARNING: 1, UNKNOWN: 2, OK: 3 };
     const pending = [...(data.pending || [])].sort((a, b) => {
       const left = a.expiresAt ? new Date(a.expiresAt).getTime() : Number.MAX_SAFE_INTEGER;
@@ -229,8 +304,8 @@ export async function attentionView() {
 
 export async function incidents() {
   await render($('#incident-workspace'), async () => {
-    const data = await refresh();
-    const history = await api(`${BASE}/decisions`).catch(() => data.pending || []);
+    const data = contextualize(await refresh());
+    const history = (await api(`${BASE}/decisions`).catch(() => data.pending || [])).filter(contextMatches);
     return { data, history };
   }, ({ data, history }) => incidentWorkspace(data, history));
 }
@@ -589,7 +664,7 @@ function timeline(cycle) {
 /* ── Processus ─────────────────────────────────────────────────────────── */
 
 export async function processes() {
-  await render($('#processes-table'), refresh, (data) => processTable(filtered(data.processes), openProcess));
+  await render($('#processes-table'), async () => contextualize(await refresh()), (data) => processTable(filtered(data.processes), openProcess));
 }
 
 // Lus dans l'URL, pas dans une variable de module : un rechargement ou un lien partagé retrouve
@@ -1036,11 +1111,12 @@ async function resolveDecision(decision, approve) {
 export async function decisions() {
   await render($('#decisions-list'), () => api(`${BASE}/decisions`), (rows) => {
     const state = params().get('decisionEtat') || stored(DECISION_FILTER_STORAGE, 'ALL');
-    const matching = rows.filter((decision) => state === 'ALL'
+    const contextual = rows.filter(contextMatches);
+    const matching = contextual.filter((decision) => state === 'ALL'
       || (state === 'PENDING' && decision.status === 'PENDING_APPROVAL')
       || (state === 'FAILED' && ['FAILED', 'EXPIRED'].includes(decision.status))
       || (state === 'RESOLVED' && ['EXECUTED', 'REJECTED', 'BLOCKED', 'SIMULATED'].includes(decision.status)));
-    if (!rows.length) return empty('Aucune décision.', 'Elles apparaîtront après un cycle d’analyse.',
+    if (!contextual.length) return empty('Aucune décision.', 'Elles apparaîtront après un cycle d’analyse.',
       { href: '#/overview', label: 'Lancer une analyse' });
     if (!matching.length) return empty('Aucune décision dans cette vue.', 'Choisissez un autre filtre.');
     const list = el('div', 'cards wide');
@@ -1225,6 +1301,7 @@ function decisionSection(title) {
 
 export async function alerts() {
   await render($('#alerts-list'), () => api(`${BASE}/alerts`), (items) => {
+    items = items.filter(contextMatches);
     if (!items.length) {
       return empty('Aucune alerte active.',
         'Une alerte que le dernier cycle ne revoit plus a cessé d’être vraie et sort de cette liste.',
@@ -1275,12 +1352,56 @@ export async function alerts() {
   });
 }
 
+/* ── Activité unifiée ─────────────────────────────────────────────────── */
+
+export async function activity() {
+  await render($('#activity-timeline'), async () => {
+    const data = contextualize(await refresh());
+    const auditRows = (await api(`${BASE}/audit`).catch(() => [])).filter(contextMatches);
+    const events = [];
+
+    (data.lastCycle?.events || []).forEach((event) => events.push({
+      at: event.at, kind: 'Cycle', title: event.label, detail: event.detail || 'Étape du cycle',
+      href: '#/overview',
+    }));
+    (data.alerts || []).forEach((item) => events.push({
+      at: item.lastSeenAt || item.firstSeenAt, kind: 'Alerte', title: item.title,
+      detail: item.processName, href: `#/alerts?alerte=${encodeURIComponent(item.id)}`,
+    }));
+    (data.pending || []).forEach((item) => events.push({
+      at: item.decidedAt || item.createdAt, kind: 'Décision', title: item.action,
+      detail: item.processName, href: `#/decisions?decision=${encodeURIComponent(item.id)}`,
+    }));
+    auditRows.forEach((row) => events.push({
+      at: row.at, kind: 'Audit', title: row.action, detail: [row.processId, row.result].filter(Boolean).join(' · '),
+      href: '#/audit',
+    }));
+    return events.filter((event) => event.at).sort((a, b) => new Date(b.at) - new Date(a.at));
+  }, (events) => {
+    if (!events.length) return empty('Aucune activité dans ce contexte.',
+      'Élargissez la période ou réinitialisez le contexte global.',
+      { label: 'Réinitialiser le contexte', onClick: () => $('#context-reset')?.click() });
+    const list = el('ol', 'activity-stream');
+    events.forEach((event) => {
+      const item = el('li', 'activity-event');
+      const meta = el('div', 'activity-meta');
+      meta.append(el('span', 'activity-kind', event.kind), el('time', 'muted', stamp(event.at)));
+      const link = el('a', 'activity-title', event.title);
+      link.href = event.href;
+      item.append(meta, link);
+      if (event.detail) item.append(el('p', 'muted', event.detail));
+      list.append(item);
+    });
+    return list;
+  });
+}
+
 /* ── Audit ─────────────────────────────────────────────────────────────── */
 
 export async function audit() {
   const query = (params().get('q') || '').toLowerCase();
   await render($('#audit-table'), () => api(`${BASE}/audit`), (rows) => {
-    const matching = rows.filter((row) => !query || JSON.stringify(row).toLowerCase().includes(query));
+    const matching = rows.filter(contextMatches).filter((row) => !query || JSON.stringify(row).toLowerCase().includes(query));
     if (!matching.length) return empty('Aucune entrée d’audit.', 'Chaque décision et chaque changement y laisse une trace.');
     const table = el('table', 'grid');
     const head = el('thead');
@@ -1681,8 +1802,26 @@ export function wire() {
   $('#refresh-decisions').addEventListener('click', decisions);
   $('#refresh-attention').addEventListener('click', attentionView);
   $('#refresh-incidents').addEventListener('click', incidents);
+  $('#refresh-activity')?.addEventListener('click', activity);
   $('#refresh-performance').addEventListener('click', performance);
   $('#refresh-audit').addEventListener('click', audit);
+  const persistContext = async () => {
+    remember(CONTEXT_STORAGE, {
+      environment: $('#context-environment').value,
+      process: $('#context-process').value,
+      period: $('#context-period').value,
+    });
+    await rerenderCurrentContext();
+  };
+  $('#context-environment')?.addEventListener('change', persistContext);
+  $('#context-process')?.addEventListener('change', persistContext);
+  $('#context-period')?.addEventListener('change', persistContext);
+  $('#context-reset')?.addEventListener('click', async () => {
+    remember(CONTEXT_STORAGE, { environment: 'ALL', process: 'ALL', period: 'ALL' });
+    syncGlobalContext(snapshot);
+    await rerenderCurrentContext();
+  });
+  syncGlobalContext(snapshot);
 
   document.querySelectorAll('[data-agent-tab]').forEach((button) => {
     button.addEventListener('click', () => selectAgentTab(button.dataset.agentTab));
