@@ -19,6 +19,11 @@ public class McpClientSessionRegistry {
     private final Duration ttl;
     private final Duration idleAfter;
 
+    /** Default lifecycle retained for direct construction outside Spring. */
+    public McpClientSessionRegistry() {
+        this(Clock.systemUTC(), Duration.ofMinutes(30), Duration.ofMinutes(5));
+    }
+
     public McpClientSessionRegistry(KexMcpServerProperties properties) {
         this(Clock.systemUTC(), properties.sessionTtl(), properties.sessionIdleAfter());
     }
