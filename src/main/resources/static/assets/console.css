@@ -275,6 +275,8 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 210px;
+  max-height: min(70vh, 420px);
+  overflow-y: auto;
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
