@@ -754,7 +754,7 @@ function openProcess(row) {
     definition('Couverture', coverageTag(row.coverage)),
   );
   const extra = el('div');
-  const actions = el('div', 'context-actions');
+  const actions = el('div', 'context-actions context-actions-standard');
   const favorites = new Set(stored(FAVORITES_STORAGE, []));
   const favorite = el('button', 'ghost', favorites.has(row.processId) ? '★ Retirer des favoris' : '☆ Ajouter aux favoris');
   favorite.type = 'button';
@@ -765,20 +765,13 @@ function openProcess(row) {
     toast(favorites.has(row.processId) ? `${row.name} ajouté aux favoris.` : `${row.name} retiré des favoris.`);
     if (!$('#view-processes').hidden) processes();
   });
-  const ask = contextChatButton('Interroger l’agent', `Processus · ${row.name}`,
-    processContext(row, alerts), `process:${row.processId}`, 'primary');
-  const copy = el('button', 'ghost', 'Copier l’identifiant');
-  copy.type = 'button';
-  copy.classList.add('technical-id');
-  copy.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(row.processId);
-      toast('Identifiant copié');
-    } catch {
-      toast('Copie indisponible dans ce navigateur', 'error');
-    }
+  const standard = contextualActionBar({
+    title: `Processus · ${row.name}`,
+    context: processContext(row, alerts),
+    contextId: `process:${row.processId}`,
+    auditQuery: row.processId,
   });
-  actions.append(favorite, ask, copy);
+  actions.append(favorite, ...standard.children);
   extra.append(actions);
   if (row.coverage && !row.coverage.complete && row.coverage.stopReason !== 'NOT_REPORTED') {
     const banner = el('p', 'banner',
@@ -895,6 +888,25 @@ function alertCard(alert) {
   return card;
 }
 
+function contextualActionBar({ title, context, contextId, auditQuery, primaryLabel = 'Interroger l’agent' }) {
+  const actions = el('div', 'context-actions context-actions-standard');
+  actions.append(contextChatButton(primaryLabel, title, context, contextId, 'primary'));
+  const audit = el('button', 'ghost', 'Voir l’audit');
+  audit.type = 'button';
+  audit.addEventListener('click', () => {
+    dismissDrawer();
+    location.hash = `#/audit?q=${encodeURIComponent(auditQuery || title)}`;
+  });
+  const copy = el('button', 'ghost', 'Copier le lien');
+  copy.type = 'button';
+  copy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(location.href); toast('Lien copié'); }
+    catch { toast('Copie indisponible dans ce navigateur', 'error'); }
+  });
+  actions.append(audit, copy);
+  return actions;
+}
+
 function contextChatButton(label, title, context, contextId, className = 'ghost') {
   const ask = el('button', className, label);
   ask.type = 'button';
@@ -938,11 +950,12 @@ function openAnomaly(anomaly) {
   // Le titre est déjà celui du panneau : la pastille n'y ajoute que la gravité, en français.
   body.append(stateTag(anomaly.severity));
   body.append(el('p', 'muted', anomaly.processName));
-  const actions = el('div', 'context-actions');
-  const ask = contextChatButton('Poursuivre avec l’agent', `Alerte · ${anomaly.title}`,
-    alertContext(anomaly), `alert:${anomaly.id}`, 'primary');
-  actions.append(ask);
-  body.append(actions);
+  body.append(contextualActionBar({
+    title: `Alerte · ${anomaly.title}`,
+    context: alertContext(anomaly),
+    contextId: `alert:${anomaly.id}`,
+    auditQuery: anomaly.processId || anomaly.id,
+  }));
   if (anomaly.occurrences) body.append(recurrence(anomaly));
 
   body.append(el('h3', 'drawer-sub', 'Ce que l’agent observe'));
@@ -1190,6 +1203,19 @@ async function openDecision(id) {
     hero.append(meta, el('h3', null, decision.objective || decision.action));
     if (decision.context) hero.append(el('p', null, decision.context));
     body.append(hero);
+    body.append(contextualActionBar({
+      title: `Décision · ${decision.action}`,
+      context: [
+        `Processus : ${decision.processName || '—'}`,
+        `Objectif : ${decision.objective || '—'}`,
+        `Action : ${decision.action}`,
+        `Contexte : ${decision.context || '—'}`,
+        `Impact : ${decision.estimatedImpact || '—'}`,
+        `État : ${DECISION_LABELS[decision.status] || decision.status}`,
+      ].join('\n'),
+      contextId: `decision:${decision.id}`,
+      auditQuery: decision.correlationId || decision.processName || decision.id,
+    }));
 
     const evidence = decisionSection('Ce que l’agent a observé');
     if (decision.observations?.length) {

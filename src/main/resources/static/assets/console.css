@@ -1972,3 +1972,32 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   .activity-event { grid-template-columns: auto minmax(0, 1fr); }
   .activity-event time { grid-column: 2; }
 }
+
+
+/* ── Operator launcher and contextual action bars ─────────────────────── */
+.command-group {
+  padding: 8px 12px 4px;
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.command-empty { margin: 0; padding: 18px 12px; color: var(--ink-3); text-align: center; }
+.context-actions-standard {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0 0 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+.tool-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: stretch;
+}
+.tool-list li > button:first-child { min-width: 0; }
+.tool-list li > .compact { width: auto; align-self: center; }
