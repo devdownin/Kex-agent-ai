@@ -678,6 +678,22 @@ export async function view() {
  * fond qui les rafraîchit déjà tous les uns après les autres.
  */
 export function wire() {
+  registerDrawer('mcp', async (connection) => {
+    if (!lastServers.length) await servers();
+    const server = lastServers.find((item) => item.connection === connection);
+    if (server) openServerDrawer(server, false);
+  });
+  registerDrawer('outil', async (reference) => {
+    if (!lastServers.length) await servers();
+    const separator = reference.indexOf('::');
+    if (separator < 0) return;
+    const connection = reference.slice(0, separator);
+    const name = reference.slice(separator + 2);
+    const server = lastServers.find((item) => item.connection === connection);
+    const tool = server?.tools?.find((item) => item.name === name);
+    if (tool) invoke(null, connection, tool, false);
+  });
+
   $('#refresh-tools').addEventListener('click', view);
   $('#tools-search').addEventListener('input', (event) => {
     setParams({ q: event.target.value.trim() });
