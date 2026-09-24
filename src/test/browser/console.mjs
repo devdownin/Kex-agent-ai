@@ -1156,6 +1156,7 @@ await check('un canal actif se distingue d’un canal inactif', async () => {
 
 
 await check('aucune erreur de script sur le parcours', () => {
+  if (scriptErrors.length) console.error('Erreurs navigateur capturées :', JSON.stringify(scriptErrors, null, 2));
   assert.deepEqual(scriptErrors, [], `erreurs navigateur : ${JSON.stringify(scriptErrors)}`);
 });
 
