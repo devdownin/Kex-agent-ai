@@ -89,7 +89,6 @@ function renderTemplateFields() {
     input.name = name; input.required = true; input.placeholder = name;
     label.append(input); return label;
   }));
-  renderTemplateFields();
 }
 
 function playgroundTargets() {
