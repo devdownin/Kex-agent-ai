@@ -16,6 +16,18 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
   let lastToolArguments = null;
   await page.route('**/api/agent/mcp-server', async (route) => {
     const request = route.request();
+    if (request.method() === 'GET') {
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({
+          state: 'UP', activeSessions: 1, totalSessions: 2, requestCount: 42, p95Millis: 18.4,
+          sessions: [{ id: 'browser-test-session', name: 'browser', version: '1', state: 'ACTIVE',
+            protocol: '2025-06-18', callCount: 7, createdAt: new Date().toISOString(),
+            lastActivityAt: new Date().toISOString() }],
+        }),
+      });
+      return;
+    }
     const rpc = JSON.parse(request.postData() || '{}');
     nextId = rpc.id || nextId + 1;
     const results = {
@@ -52,6 +64,9 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
   assert.equal(await page.textContent('#mcp-resources-count'), '1');
   assert.equal(await page.textContent('#mcp-templates-count'), '1');
   assert.equal(await page.textContent('#mcp-prompts-count'), '1');
+  assert.match(await page.textContent('#mcp-ops-summary'), /42/);
+  assert.match(await page.textContent('#mcp-ops-summary'), /18 ms/);
+  assert.match(await page.textContent('#mcp-ops-summary'), /1/);
 
   await page.click('[data-mcp-tab="catalog"]');
   await page.waitForSelector('[data-mcp-panel="catalog"]:not([hidden]) .mcp-catalog-card');
