@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 
-import { $, credentials, el, empty, freshnessTag, openDrawer, registerDrawer, report, setDrawerParam } from './core.js';
+import { $, credentials, el, empty, freshnessTag, openDrawer, registerDrawer, report, setDrawerParam, toast } from './core.js';
 
 const ENDPOINT = '/api/agent/mcp-server';
 const PROTOCOL = '2025-06-18';
@@ -250,7 +250,27 @@ function openSessionDetails(item, updateUrl = true) {
   add('Dernière activité', item.lastActivityAt ? new Date(item.lastActivityAt).toLocaleString() : '—');
   add('Appels', String(item.callCount ?? 0));
   add('Identifiant de session', item.id);
-  openDrawer('Session MCP', list);
+  const wrap = el('div', 'stack');
+  const actions = el('div', 'context-actions context-actions-standard');
+  const ask = el('button', 'primary', 'Interroger l’agent');
+  ask.type = 'button';
+  ask.addEventListener('click', () => dispatchEvent(new CustomEvent('kex:context-chat', { detail: {
+    contextId: `mcp-session:${item.id}`,
+    title: `Session MCP · ${item.name}/${item.version}`,
+    context: `Client : ${item.name}/${item.version}\nÉtat : ${item.state}\nProtocole : ${item.protocol || '—'}\nAppels : ${item.callCount ?? 0}`,
+  } })));
+  const audit = el('button', 'ghost', 'Voir l’audit');
+  audit.type = 'button';
+  audit.addEventListener('click', () => { location.hash = `#/audit?q=${encodeURIComponent(item.id)}`; });
+  const copy = el('button', 'ghost', 'Copier le lien');
+  copy.type = 'button';
+  copy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(location.href); toast('Lien copié'); }
+    catch { toast('Copie indisponible dans ce navigateur', 'error'); }
+  });
+  actions.append(ask, audit, copy);
+  wrap.append(actions, list);
+  openDrawer('Session MCP', wrap);
 }
 
 export async function view() {
