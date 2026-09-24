@@ -41,7 +41,7 @@ class KexMcpServerComplianceTest {
                 beans.getBeanProvider(SupervisionService.class), beans.getBeanProvider(KafkaViewService.class),
                 new KexMcpServerProperties(true, Set.of("https://console.example"), 120, false),
                 beans.getBeanProvider(BuildProperties.class), beans.getBeanProvider(McpServerAuditPublisher.class), beans.getBeanProvider(McpServerRateLimiter.class),
-                new SimpleMeterRegistry())).build();
+                new SimpleMeterRegistry(), new McpClientSessionRegistry())).build();
     }
 
     @Test
