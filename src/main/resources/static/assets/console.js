@@ -303,6 +303,10 @@ function syncRailButton() {
   railToggle.title = collapsed ? 'Développer la navigation' : 'Réduire la navigation';
   railToggle.querySelector('[aria-hidden="true"]').textContent = collapsed ? '»' : '«';
   railToggle.querySelector('.rail-toggle-label').textContent = collapsed ? 'Développer' : 'Réduire';
+  document.querySelectorAll('.rail .nav-item').forEach((item) => {
+    if (collapsed) item.title = item.getAttribute('aria-label') || item.textContent.trim();
+    else item.removeAttribute('title');
+  });
 }
 
 railToggle?.addEventListener('click', () => {
