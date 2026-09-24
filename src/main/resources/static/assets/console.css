@@ -237,7 +237,8 @@ body {
 :root[data-rail="collapsed"] .rail-caption,
 :root[data-rail="collapsed"] .rail-toggle-label { display: none; }
 :root[data-rail="collapsed"] .rail { padding-inline: 10px; }
-:root[data-rail="collapsed"] .nav-item { justify-content: center; padding-inline: 10px; position: relative; }
+:root[data-rail="collapsed"] .nav-item { justify-content: center; padding-inline: 10px; position: relative; font-size: 0; gap: 0; }
+:root[data-rail="collapsed"] .nav-item .nav-ico { width: 20px; height: 20px; }
 :root[data-rail="collapsed"] .nav-item .badge { position: absolute; top: 3px; right: 2px; min-width: 17px; padding-inline: 4px; }
 :root[data-rail="collapsed"] .rail-foot { justify-content: center; }
 :root[data-rail="collapsed"] .rail-toggle { margin-left: 0; }
@@ -1258,7 +1259,9 @@ table.grid tr.clickable:hover td:last-child { border-top-right-radius: var(--rad
 #add-mcp-server { width: min(680px, calc(100vw - 32px)); }
 
 .tool-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.tool-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: start; }
 .tool-list button { width: 100%; text-align: left; background: transparent; border-color: transparent; padding: 6px 8px; }
+.tool-list .ghost.compact { width: auto; white-space: nowrap; }
 .tool-list button:hover { background: var(--surface-2); border-color: var(--line); }
 .tool-list .name { font: 12px var(--mono); }
 .tool-list .desc { display: block; color: var(--ink-3); font-size: 12px; overflow-wrap: anywhere; }
