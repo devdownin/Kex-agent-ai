@@ -43,6 +43,7 @@ controlled, and every result can be traced.
 ## 🚀 Highlights
 
 - **Runtime MCP management** — add and test HTTP, SSE or stdio servers directly from the UI.
+- **MCP sessions & Playground** — inspect session activity and lifecycle, browse resources and resource templates, and exercise MCP capabilities from the console.
 - **Secure by default** — bearer authentication, encrypted MCP configuration and explicit stdio
   allowlists.
 - **Per-tool permissions** — decide exactly which tools each connection may expose to the model.
@@ -243,9 +244,14 @@ Restart, then `GET /api/agent/mcp/servers` tells you what it found. The whole st
 MCP is, if this is your first one — is in [`docs/MCP.md`](docs/MCP.md).
 
 You can also manage them under **Technical → MCP servers**: test before add, HTTP or stdio,
-per-tool permissions, diagnostics, enable/disable and import/export. Set `KEX_MCP_STORAGE_KEY` to
-encrypt and retain these connections; for stdio, explicitly allow executables with
-`KEX_MCP_STDIO_ALLOWED_COMMANDS=npx,uvx`.
+per-tool permissions, diagnostics, enable/disable and import/export. The MCP workspace also exposes
+active/idle sessions and their activity, plus a Playground for tools, resources and resource
+templates. Resource-template fields are generated as soon as a template is selected, so parameterized
+resources can be exercised without hand-building their URI. Sessions are tracked in a registry and
+expire after 30 minutes of inactivity by default.
+
+Set `KEX_MCP_STORAGE_KEY` to encrypt and retain these connections; for stdio, explicitly allow
+executables with `KEX_MCP_STDIO_ALLOWED_COMMANDS=npx,uvx`.
 
 ## 🔭 API
 
@@ -259,6 +265,7 @@ encrypt and retain these connections; for stdio, explicitly allow executables wi
 | `POST` | `/api/agent/mcp/servers/{connection}/tools/{tool}` | Call a tool directly, no model involved |
 | `GET` | `/api/agent/mcp/servers/{connection}/resources` | List a server's resources |
 | `GET` | `/api/agent/mcp/servers/{connection}/resource?uri=…` | Read one |
+| MCP session APIs | `/api/agent/mcp/**` | Track MCP session lifecycle and activity for the Control Center |
 | `POST` `GET` `DELETE` | `/api/agent/knowledge` | Feed, search and prune the knowledge base (when enabled) |
 | `GET` | `/api/agent/supervision/overview` | Everything the first screen needs, in one request |
 | `POST` | `/api/agent/supervision/cycles` | Run an analysis cycle now |
