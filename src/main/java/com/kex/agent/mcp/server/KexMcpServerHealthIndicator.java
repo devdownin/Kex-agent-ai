@@ -22,11 +22,6 @@ public class KexMcpServerHealthIndicator implements HealthIndicator {
     private final ObjectProvider<KafkaViewService> kafka;
     private final McpClientSessionRegistry sessions;
 
-    KexMcpServerHealthIndicator(ObjectProvider<SupervisionService> supervision,
-                                ObjectProvider<KafkaViewService> kafka) {
-        this(supervision, kafka, new McpClientSessionRegistry());
-    }
-
     public KexMcpServerHealthIndicator(ObjectProvider<SupervisionService> supervision,
                                        ObjectProvider<KafkaViewService> kafka,
                                        McpClientSessionRegistry sessions) {
