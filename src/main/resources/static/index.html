@@ -31,51 +31,58 @@
          police à l'autre, et détonnaient à côté du logo. Aucune police d'icônes chargée — même
          contrainte que le reste de la console : pas d'outillage, pas de dépendance externe. -->
     <nav aria-label="Sections">
+      <span class="nav-section">Pilotage</span>
       <a class="nav-item" href="#/overview" data-view="overview" aria-label="Vue d'ensemble">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg>
         Vue d'ensemble</a>
       <a class="nav-item" href="#/attention" data-view="attention" aria-label="À traiter">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 21 19H3Z"/><path d="M12 10.3v3.4"/><circle cx="12" cy="16.4" r=".9" fill="currentColor" stroke="none"/></svg>
-        À traiter
-        <span class="badge" id="nav-attention" hidden>0</span></a>
+        À traiter <span class="badge" id="nav-attention" hidden>0</span></a>
       <a class="nav-item" href="#/incidents" data-view="incidents" aria-label="Incidents">
-        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14v14H5z"/><path d="M8 9h8M8 12h5M8 15h7"/><circle cx="17.5" cy="15.5" r="2.5"/></svg>
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 5h14v14H5z"/><path d="M8 9h8M8 12h5M8 15h7"/></svg>
         Incidents</a>
-      <a class="nav-item" href="#/agent" data-view="agent" aria-label="Agent">
-        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="8" width="11" height="10" rx="2.5"/><circle cx="10" cy="13" r=".6" fill="currentColor" stroke="none"/><circle cx="14" cy="13" r=".6" fill="currentColor" stroke="none"/><path d="M12 8V5.5"/><circle cx="12" cy="4.3" r="1.1"/><path d="M4 12.5h2.5M17.5 12.5H20"/></svg>
-        Agent</a>
-      <a class="nav-item" href="#/chat" data-view="chat" aria-label="Conversation">
-        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 5.5h15v11h-9.2L6 20v-3.5H4.5Z"/></svg>
-        Conversation</a>
       <a class="nav-item" href="#/processes" data-view="processes" aria-label="Processus">
-        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 10.5h16M4 15h16"/></svg>
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 10.5h16M4 15h16"/></svg>
         Processus</a>
       <a class="nav-item" href="#/decisions" data-view="decisions" aria-label="Décisions">
-        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 20 12 12 20 4 12Z"/></svg>
-        Décisions
-        <span class="badge" id="nav-pending" hidden>0</span></a>
-      <a class="nav-item" href="#/settings" data-view="settings" aria-label="Configuration">
-        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 5v2.2M12 16.8V19M5 12h2.2M16.8 12H19M7.1 7.1l1.55 1.55M15.35 15.35l1.55 1.55M7.1 16.9l1.55-1.55M15.35 8.65l1.55-1.55"/></svg>
-        Configuration</a>
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 4 20 12 12 20 4 12Z"/></svg>
+        Décisions <span class="badge" id="nav-pending" hidden>0</span></a>
+      <a class="nav-item" href="#/chat" data-view="chat" aria-label="Conversation">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4.5 5.5h15v11h-9.2L6 20v-3.5H4.5Z"/></svg>
+        Conversation</a>
+      <a class="nav-item nav-secondary" href="#/alerts" data-view="alerts" aria-label="Alertes">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 4 21 19H3Z"/><path d="M12 10.3v3.4"/></svg>
+        Alertes <span class="badge" id="nav-alerts" hidden>0</span></a>
+
       <hr>
-      <span class="nav-section">Supervision</span>
-      <a class="nav-item" href="#/alerts" data-view="alerts" aria-label="Alertes">
-        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 21 19H3Z"/><path d="M12 10.3v3.4"/><circle cx="12" cy="16.4" r=".9" fill="currentColor" stroke="none"/></svg>
-        Alertes
-        <span class="badge" id="nav-alerts" hidden>0</span></a>
+      <span class="nav-section">Agent</span>
+      <a class="nav-item" href="#/agent" data-view="agent" aria-label="Agent">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="6.5" y="8" width="11" height="10" rx="2.5"/><path d="M12 8V5.5M4 12.5h2.5M17.5 12.5H20"/></svg>
+        Agent</a>
+
+      <hr>
+      <span class="nav-section">Plateforme</span>
+      <a class="nav-item" href="#/integrations" data-view="integrations" aria-label="Intégrations">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 7h8v10H8z"/><path d="M4 10h4M16 10h4M4 14h4M16 14h4"/></svg>
+        Intégrations</a>
+      <a class="nav-item" href="#/knowledge" data-view="knowledge" aria-label="Connaissance">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 5h6v14H5zM13 5h6v14h-6z"/><path d="M8 8h1M16 8h1"/></svg>
+        Connaissance</a>
+      <a class="nav-item" href="#/system" data-view="system" aria-label="Système">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3"/></svg>
+        Système</a>
       <a class="nav-item" href="#/audit" data-view="audit" aria-label="Audit">
-        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="16" rx="1.5"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="4" width="14" height="16" rx="1.5"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>
         Audit</a>
+
       <hr>
-      <span class="nav-section">Outils</span>
-      <a class="nav-item" href="#/tools" data-view="tools" aria-label="Technique">
-        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 12h16M12 4v16"/></svg>
-        Technique</a>
+      <span class="nav-section">Configuration</span>
+      <a class="nav-item" href="#/settings" data-view="settings" aria-label="Configuration">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 5v2.2M12 16.8V19M5 12h2.2M16.8 12H19"/></svg>
+        Configuration</a>
     </nav>
 
-    <div class="rail-foot">
-      <button type="button" class="ghost" id="theme-toggle" aria-pressed="false">Thème</button>
-    </div>
+    <div class="rail-foot"><span class="rail-caption">Supervision agentique</span></div>
   </aside>
 
   <header class="topbar">
@@ -99,8 +106,9 @@
       </button>
       <button type="button" class="primary" id="run-cycle">Exécuter maintenant</button>
       <details class="action-menu">
-        <summary class="ghost" aria-label="Ouvrir les actions secondaires">Actions</summary>
+        <summary class="ghost" aria-label="Ouvrir les réglages">Réglages</summary>
         <div class="action-menu-popover">
+          <button type="button" class="menu-action" id="theme-toggle" aria-label="Changer le thème" aria-pressed="false">Thème : système</button>
           <button type="button" class="menu-action" id="toggle-pause" aria-label="Mettre l’agent en pause">Pause agent</button>
           <button type="button" class="menu-action" id="open-credentials" aria-label="Gérer les identifiants">
             <span id="credential-label">Jeton absent</span>
@@ -199,7 +207,7 @@
         <div>
           <span class="panel-kicker">Priorités opérationnelles</span>
           <h1>À traiter</h1>
-          <p>Décisions, alertes et processus dégradés réunis dans une seule file d’action.</p>
+          <p>Une file unique, ordonnée par impact, urgence puis ancienneté.</p>
         </div>
         <button type="button" class="primary" id="refresh-attention">Actualiser</button>
       </section>
@@ -245,16 +253,17 @@
 
             <fieldset>
               <legend>Autonomie par capacité</legend>
-              <p class="hint">Toute capacité non réglée est interdite : le droit d'agir ne s'hérite pas.
-                Le champ de droite est le plancher de confiance propre à la capacité — il ne peut que
-                relever le plancher global, jamais l'abaisser.</p>
+              <details class="inline-help"><summary>Comment fonctionne l’autonomie par capacité ?</summary>
+                <p class="hint">Toute capacité non réglée est interdite : le droit d’agir ne s’hérite pas. Le plancher de confiance propre à une capacité ne peut que relever le plancher global.</p>
+              </details>
               <div id="autonomy-rows"></div>
             </fieldset>
 
             <fieldset>
               <legend>Seuil de confiance</legend>
-              <p class="hint">Plancher global : en deçà, une action autonome repasse par une validation
-                humaine au lieu de s'exécuter. Chaque capacité peut exiger davantage, jamais moins.</p>
+              <details class="inline-help"><summary>Comment est utilisé ce seuil ?</summary>
+                <p class="hint">En dessous du plancher global, une action autonome repasse par validation humaine. Une capacité peut exiger davantage, jamais moins.</p>
+              </details>
               <label for="confidence">Plancher</label>
               <input type="range" id="confidence" min="0" max="100" step="5">
               <output id="confidence-output" for="confidence">85 %</output>
@@ -417,14 +426,14 @@
         <button type="button" data-settings-target="settings-model">Modèle</button>
         <button type="button" data-settings-target="settings-detection">Détection</button>
         <button type="button" data-settings-target="settings-monitoring-panel">Surveillance</button>
-        <button type="button" data-settings-target="settings-mcp-server">Serveur MCP</button>
+        <button type="button" data-settings-target="settings-mcp-server">Serveur MCP Kex</button>
       </nav>
       <section class="panel mcp-server-panel" id="settings-mcp-server">
         <div class="panel-head">
-          <div><span class="panel-kicker">Exposition agentique</span><h1>Serveur MCP</h1></div>
+          <div><span class="panel-kicker">Exposition agentique</span><h1>Serveur MCP Kex</h1></div>
           <span class="status" id="mcp-server-status" data-state="unknown"><span class="status-mark" aria-hidden="true">●</span><span id="mcp-server-status-label">Vérification…</span></span>
         </div>
-        <p class="hint">Inspecter exactement ce que Kex expose aux clients MCP. Les outils affichés ici restent en lecture seule.</p>
+        <p class="hint">Inspecter ce que Kex expose en tant que serveur aux clients MCP. Cet espace est distinct des connexions MCP externes utilisées par l’agent.</p>
         <nav class="local-nav mcp-tabs" aria-label="Vues du serveur MCP">
           <button type="button" class="active" data-mcp-tab="overview">Vue d’ensemble</button>
           <button type="button" data-mcp-tab="catalog">Catalogue</button>
@@ -432,9 +441,9 @@
         </nav>
         <div data-mcp-panel="overview">
           <div class="mcp-metrics" id="mcp-metrics">
-            <div class="metric"><strong id="mcp-tools-count">—</strong><span>Tools</span></div>
-            <div class="metric"><strong id="mcp-resources-count">—</strong><span>Resources</span></div>
-            <div class="metric"><strong id="mcp-templates-count">—</strong><span>Templates</span></div>
+            <div class="metric"><strong id="mcp-tools-count">—</strong><span>Outils</span></div>
+            <div class="metric"><strong id="mcp-resources-count">—</strong><span>Ressources</span></div>
+            <div class="metric"><strong id="mcp-templates-count">—</strong><span>Modèles</span></div>
             <div class="metric"><strong id="mcp-prompts-count">—</strong><span>Prompts</span></div>
             <div class="metric"><strong id="mcp-active-sessions">—</strong><span>Sessions actives</span></div>
             <div class="metric"><strong id="mcp-health-state">—</strong><span>Santé MCP</span></div>
@@ -443,20 +452,24 @@
             <div class="subpanel"><span class="panel-kicker">Contrat</span><h2>Lecture seule</h2><p class="hint">Les mutations gouvernées ne sont pas exposées par le catalogue MCP.</p></div>
             <div class="subpanel"><span class="panel-kicker">Protocole</span><h2 id="mcp-protocol">—</h2><p class="hint" id="mcp-server-version">Version serveur inconnue</p></div>
           </div>
-          <div class="subpanel"><span class="panel-kicker">Clients</span><h2>Sessions MCP</h2><div id="mcp-session-list" class="mcp-session-list"><p class="hint">Aucune session observée.</p></div></div>
+          <div class="subpanel"><span class="panel-kicker">Clients</span><h2>Sessions MCP</h2><div id="mcp-session-list" class="mcp-session-list"><p class="hint">Aucun client MCP connecté.</p></div></div>
         </div>
         <div data-mcp-panel="catalog" hidden>
-          <div class="toolbar"><label>Type <select id="mcp-catalog-kind"><option value="tools">Tools</option><option value="resources">Resources</option><option value="templates">Templates</option><option value="prompts">Prompts</option></select></label></div>
+          <div class="toolbar"><label>Type <select id="mcp-catalog-kind"><option value="tools">Outils</option><option value="resources">Ressources</option><option value="templates">Modèles de ressource</option><option value="prompts">Prompts</option></select></label></div>
           <div id="mcp-catalog-list" class="mcp-catalog-list"></div>
         </div>
         <div data-mcp-panel="playground" hidden>
           <div class="mcp-playground-grid">
             <form id="mcp-playground-form" class="subpanel">
               <span class="panel-kicker">Requête</span><h2>Tester le contrat MCP</h2>
-              <label>Opération <select id="mcp-playground-operation"><option value="tool">Appeler un tool</option><option value="resource">Lire une resource</option><option value="template">Instancier un template</option><option value="prompt">Rendre un prompt</option></select></label>
+              <label>Opération <select id="mcp-playground-operation"><option value="tool">Appeler un outil</option><option value="resource">Lire une ressource</option><option value="template">Instancier un modèle de ressource</option><option value="prompt">Rendre un prompt</option></select></label>
               <label>Cible <select id="mcp-playground-target"></select></label>
               <div id="mcp-template-fields" class="stack" hidden></div>
-              <label>Arguments JSON <textarea id="mcp-playground-arguments" rows="8" spellcheck="false">{}</textarea></label>
+              <div id="mcp-schema-fields" class="mcp-schema-fields" hidden></div>
+              <details class="advanced mcp-json-mode">
+                <summary>Mode avancé · JSON</summary>
+                <label>Arguments JSON <textarea id="mcp-playground-arguments" rows="8" spellcheck="false">{}</textarea></label>
+              </details>
               <button type="submit" class="primary">Exécuter</button>
             </form>
             <div class="subpanel"><span class="panel-kicker">Résultat</span><h2>Réponse MCP</h2><h3>Données structurées</h3><pre id="mcp-playground-structured" tabindex="0">Aucune requête exécutée.</pre><h3>Contenu texte</h3><pre id="mcp-playground-text" tabindex="0">—</pre><div class="panel-head"><h3>JSON-RPC brut</h3><button type="button" class="ghost" id="mcp-playground-copy">Copier</button></div><pre id="mcp-playground-result" tabindex="0">Aucune requête exécutée.</pre></div>
@@ -504,11 +517,9 @@
           <h1>Modèle de langage</h1>
           <button type="button" class="ghost" id="refresh-llm">Rafraîchir</button>
         </div>
-        <p class="hint">Lue dans la configuration résolue de l'instance — variables d'environnement
-          comprises — et non dans un fichier : ce qui est affiché est ce qui tourne. En lecture
-          seule, le client du modèle étant câblé au démarrage ; un champ modifiable ici accepterait
-          une valeur que l'échange suivant ignorerait. Ces réglages se posent en variables
-          d'environnement, et prennent effet au redémarrage de l'agent.</p>
+        <details class="inline-help"><summary>Pourquoi cette configuration est-elle en lecture seule ?</summary>
+          <p class="hint">La vue montre la configuration réellement résolue de l’instance, variables d’environnement comprises. Le client du modèle est câblé au démarrage : toute modification prend donc effet après redémarrage.</p>
+        </details>
         <div id="llm-config" data-skeleton="list"></div>
       </section>
 
@@ -569,24 +580,27 @@
       </section>
     </section>
 
-    <!-- ══ Technique (MCP) ══ -->
-    <section class="view" id="view-tools" hidden>
+    <!-- ══ Intégrations ══ -->
+    <section class="view" id="view-integrations" hidden>
+      <section class="workspace-heading">
+        <div><span class="panel-kicker">Plateforme</span><h1>Intégrations</h1><p>Connexions externes utilisées par l’agent pour observer et agir.</p></div>
+      </section>
       <section class="panel">
         <div class="panel-head">
-          <h1>Serveurs MCP</h1>
+          <h1>Connexions MCP</h1>
           <div class="panel-actions">
             <button type="button" class="ghost" id="import-mcp">Importer</button>
             <button type="button" class="ghost" id="export-mcp">Exporter</button>
             <button type="button" class="primary" id="open-add-mcp">Ajouter un serveur</button>
             <button type="button" class="ghost" id="refresh-tools"
-                    aria-label="Rafraîchir la vue technique" title="Rafraîchir la vue technique">Rafraîchir</button>
+                    aria-label="Rafraîchir les intégrations" title="Rafraîchir les intégrations">Rafraîchir</button>
           </div>
         </div>
-        <p class="hint">La vue technique : ce que l'agent peut réellement observer et actionner. Le tableau de bord métier n'en est pas saturé.</p>
+        <p class="hint">Serveurs MCP externes consommés par Kex. Le serveur MCP Kex exposé aux clients se configure séparément.</p>
         <div class="mcp-storage-status" id="mcp-storage-status" aria-live="polite"></div>
         <input type="file" id="mcp-import-file" accept="application/json" aria-label="Importer une configuration MCP" hidden>
         <label class="sr-only" for="tools-search">Rechercher un serveur ou un outil</label>
-        <input type="search" id="tools-search" placeholder="Rechercher un serveur ou un outil">
+        <input type="search" id="tools-search" placeholder="Rechercher une connexion MCP ou un outil">
         <div class="servers" id="servers"></div>
       </section>
       <section class="panel">
@@ -620,6 +634,13 @@
         <div id="kafka-topics"></div>
       </section>
 
+    </section>
+
+    <!-- ══ Connaissance ══ -->
+    <section class="view" id="view-knowledge" hidden>
+      <section class="workspace-heading">
+        <div><span class="panel-kicker">Plateforme</span><h1>Connaissance</h1><p>Mémoire, résumés durables et base de connaissance utilisés par l’agent.</p></div>
+      </section>
       <section class="panel">
         <div class="panel-head"><h1>Mémoire long-terme</h1></div>
         <p class="hint">Ce que le modèle retient au-delà d'une conversation, via l'outil
@@ -643,6 +664,13 @@
         <div id="knowledge-panel"></div>
       </section>
 
+    </section>
+
+    <!-- ══ Système ══ -->
+    <section class="view" id="view-system" hidden>
+      <section class="workspace-heading">
+        <div><span class="panel-kicker">Plateforme</span><h1>Système</h1><p>État technique de l’instance, métriques et diagnostic d’exécution.</p></div>
+      </section>
       <section class="panel">
         <div class="panel-head"><h2>Santé de l'instance</h2></div>
         <div class="tiles" id="metric-tiles"></div>

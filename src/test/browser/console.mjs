@@ -62,7 +62,7 @@ page.on('console', (message) => {
 /**
  * Trois échecs de requête sont attendus et déjà traités par la console, donc pas des défauts :
  * le `401` avant la saisie du jeton, le `404` d'une métrique qu'aucun appel n'a encore créée — la
- * vue Technique l'affiche « — », comme le veut la règle « une mesure absente n'est pas zéro » —, et
+ * vue Intégrations l'affiche « — », comme le veut la règle « une mesure absente n'est pas zéro » —, et
  * le `404` de la base de connaissance quand `kex.agent.knowledge.enabled` vaut false, comme dans ce
  * job : `knowledge.js` l'affiche calmement comme désactivée, mais le navigateur journalise quand
  * même l'échec réseau sous-jacent. Le filtrer ici garde le reste du garde-fou utile.
@@ -327,18 +327,18 @@ await check('le bandeau hors ligne apparaît puis disparaît', async () => {
   await page.waitForFunction(() => document.querySelector('#offline').hidden, null, { timeout: 3000 });
 });
 
-await check('la vue technique n’a qu’un bouton de rafraîchissement', async () => {
+await check('la vue Intégrations n’a qu’un bouton de rafraîchissement', async () => {
   // Défaut : chaque panneau ajouté à cette vue arrivait avec le sien — trois pour un même geste,
   // au-dessus d'un sondage de fond qui les rafraîchit déjà tous. Les autres vues n'en ont qu'un.
   await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
-  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
-  const refreshers = await page.$$eval('#view-tools button',
+  await page.goto(`${BASE}/#/integrations`, { waitUntil: 'domcontentloaded' });
+  const refreshers = await page.$$eval('#view-integrations button',
     (nodes) => nodes.filter((node) => node.textContent.trim() === 'Rafraîchir').length);
 
   assert.equal(refreshers, 1);
   // Et il rafraîchit la vue entière, pas le seul panneau dans lequel il est posé.
   assert.match(await page.$eval('#refresh-tools', (node) => node.getAttribute('aria-label')),
-    /vue technique/);
+    /intégrations/);
 });
 
 await check('le catalogue recommandé liste les deux entrées et distingue celle qui exige un jeton', async () => {
@@ -401,7 +401,7 @@ await check('la carte d’un serveur MCP unique occupe toute la largeur du panne
     }]),
   }));
   await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
-  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/integrations`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#servers .server');
 
   const widths = await page.evaluate(() => ({
@@ -447,7 +447,7 @@ await check('le diagnostic MCP distingue ajout, suppression et changement de sch
   });
 
   await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
-  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/integrations`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#servers .server');
   await page.locator('#servers .server').getByRole('button', { name: 'Diagnostic', exact: true }).click();
   await page.waitForSelector('.mcp-diagnostics');
@@ -545,7 +545,7 @@ await check('les résumés durables s’affichent et se retirent depuis leur car
   });
 
   await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
-  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/knowledge`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#summaries-list .card');
   assert.match(await page.$eval('#summaries-list', (node) => node.textContent), /Purger les topics de test/);
 
@@ -558,12 +558,12 @@ await check('les résumés durables s’affichent et se retirent depuis leur car
 });
 
 await check('un tableau déjà rendu ne clignote pas au sondage de fond', async () => {
-  // Défaut repéré sur la grille des serveurs MCP de la vue Technique, mais dans render() lui-même
+  // Défaut repéré sur la grille des serveurs MCP de la vue Intégrations, mais dans render() lui-même
   // (core.js), partagé par Processus, Décisions, Alertes, Audit et les topics Kafka : chaque
   // sondage de fond effaçait l'hôte avec le témoin « Chargement… », plus étroit que le tableau
   // qu'il remplace, avant de le reconstruire — un flash toutes les 15 secondes qui donnait
   // l'impression que le bloc n'occupait plus toute la largeur disponible. Vérifié ici sur
-  // Processus plutôt que sur la vue Technique : ce job démarre l'agent avec
+  // Processus plutôt que sur la vue Intégrations : ce job démarre l'agent avec
   // `spring.ai.mcp.client.enabled=false`, sans serveur MCP à lister.
   await page.goto(`${BASE}/#/processes`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#processes-table table.grid tbody tr');
@@ -635,7 +635,7 @@ await check('un outil qui attend des paramètres propose un exemple pré-rempli,
       }]),
     }));
     await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
-  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/integrations`, { waitUntil: 'domcontentloaded' });
     // Un nom d'outil propre à ce cas, jamais réutilisé ailleurs dans la suite : `page.goto` vers un
     // hash déjà courant ne redéclenche pas le routage (pas de `hashchange` sur un fragment inchangé),
     // et sans ce repère la grille encore affichée par le cas précédent — pas la donnée qu'on vient de
@@ -681,7 +681,7 @@ await check('un résultat affiché survit au sondage de fond, jusqu’à ce qu�
     }));
 
     await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
-  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/integrations`, { waitUntil: 'domcontentloaded' });
     // Nom propre à ce cas — voir le commentaire du cas précédent sur `page.goto` vers un hash déjà
     // courant.
     await page.waitForSelector('.tool-list .name:has-text("kex_ping_bgrefresh")');
@@ -728,7 +728,7 @@ await check('les arguments qui ne respectent pas le schéma d’un outil sont re
       route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
     await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
-  await page.goto(`${BASE}/#/tools`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/#/integrations`, { waitUntil: 'domcontentloaded' });
     // Nom propre à ce cas — voir le commentaire plus haut sur `page.goto` vers un hash déjà courant.
     await page.waitForSelector('.tool-list .name:has-text("kex_topics_reject")');
     await page.click('#servers .server ul.tool-list button');

@@ -51,7 +51,8 @@ function setStatus(ok, label) {
 function card(item, kind) {
   const node = el('article', 'mcp-catalog-card');
   const title = el('strong', 'mcp-catalog-name', item.name || item.uri || item.uriTemplate || 'Sans nom');
-  const badge = el('span', 'chip', kind === 'tools' ? 'READ ONLY' : kind.slice(0, -1).toUpperCase());
+  const labels = { tools: 'LECTURE SEULE', resources: 'RESSOURCE', templates: 'MODÈLE', prompts: 'PROMPT' };
+  const badge = el('span', 'chip', labels[kind] || kind.toUpperCase());
   const head = el('div', 'mcp-catalog-head'); head.append(title, badge);
   node.append(head);
   if (item.description) node.append(el('p', 'hint', item.description));
@@ -74,12 +75,19 @@ function templateArguments(item) {
   return [...(item?.uriTemplate?.matchAll(/\{([^}]+)\}/g) || [])].map((match) => match[1]);
 }
 
+function selectedCatalogItem() {
+  const op = $('#mcp-playground-operation').value;
+  const target = $('#mcp-playground-target').value;
+  const items = op === 'tool' ? catalog.tools : op === 'resource' ? catalog.resources
+    : op === 'template' ? catalog.templates : catalog.prompts;
+  return items.find((entry) => (entry.name || entry.uri || entry.uriTemplate) === target);
+}
+
 function renderTemplateFields() {
   const host = $('#mcp-template-fields');
   if (!host) return;
   const op = $('#mcp-playground-operation').value;
-  const target = $('#mcp-playground-target').value;
-  const item = catalog.templates.find((entry) => (entry.name || entry.uriTemplate) === target);
+  const item = selectedCatalogItem();
   const names = op === 'template' ? templateArguments(item) : [];
   host.hidden = names.length === 0;
   host.replaceChildren(...names.map((name) => {
@@ -89,6 +97,92 @@ function renderTemplateFields() {
     input.name = name; input.required = true; input.placeholder = name;
     label.append(input); return label;
   }));
+}
+
+function schemaInput(name, schema, required) {
+  const label = document.createElement('label');
+  label.className = 'mcp-schema-field';
+  const title = document.createElement('span');
+  title.textContent = required ? name + ' *' : name;
+  label.append(title);
+
+  let input;
+  if (Array.isArray(schema.enum)) {
+    input = document.createElement('select');
+    if (!required) {
+      const empty = document.createElement('option');
+      empty.value = ''; empty.textContent = 'Non renseigné';
+      input.append(empty);
+    }
+    schema.enum.forEach((value) => {
+      const option = document.createElement('option');
+      option.value = String(value); option.textContent = String(value);
+      input.append(option);
+    });
+  } else if (schema.type === 'boolean') {
+    input = document.createElement('select');
+    const empty = document.createElement('option');
+    empty.value = ''; empty.textContent = required ? 'Choisir…' : 'Non renseigné';
+    input.append(empty);
+    [['true', 'Oui'], ['false', 'Non']].forEach(([value, text]) => {
+      const option = document.createElement('option'); option.value = value; option.textContent = text; input.append(option);
+    });
+  } else if (['object', 'array'].includes(schema.type)) {
+    input = document.createElement('textarea');
+    input.rows = 4;
+    input.spellcheck = false;
+    input.placeholder = schema.type === 'array' ? '[]' : '{}';
+  } else {
+    input = document.createElement('input');
+    input.type = ['integer', 'number'].includes(schema.type) ? 'number' : 'text';
+    if (schema.type === 'integer') input.step = '1';
+    if (schema.minimum != null) input.min = String(schema.minimum);
+    if (schema.maximum != null) input.max = String(schema.maximum);
+  }
+  input.dataset.schemaName = name;
+  input.dataset.schemaType = schema.type || 'string';
+  input.required = required;
+  if (schema.description) {
+    input.setAttribute('aria-describedby', 'mcp-schema-help-' + name);
+    const help = document.createElement('small');
+    help.id = 'mcp-schema-help-' + name; help.className = 'hint'; help.textContent = schema.description;
+    label.append(input, help);
+  } else label.append(input);
+  return label;
+}
+
+function renderSchemaFields() {
+  const host = $('#mcp-schema-fields');
+  if (!host) return;
+  const op = $('#mcp-playground-operation').value;
+  const item = selectedCatalogItem();
+  const schema = op === 'tool' ? item?.inputSchema : null;
+  const properties = schema?.properties || {};
+  const required = new Set(schema?.required || []);
+  const fields = Object.entries(properties).map(([name, definition]) =>
+    schemaInput(name, definition || {}, required.has(name)));
+  host.hidden = fields.length === 0;
+  host.replaceChildren(...fields);
+}
+
+function renderPlaygroundFields() {
+  renderTemplateFields();
+  renderSchemaFields();
+}
+
+function schemaArguments() {
+  const values = {};
+  document.querySelectorAll('#mcp-schema-fields [data-schema-name]').forEach((input) => {
+    if (input.value === '') return;
+    const type = input.dataset.schemaType;
+    let value = input.value;
+    if (type === 'boolean') value = value === 'true';
+    else if (type === 'integer') value = Number.parseInt(value, 10);
+    else if (type === 'number') value = Number.parseFloat(value);
+    else if (type === 'object' || type === 'array') value = JSON.parse(value);
+    values[input.dataset.schemaName] = value;
+  });
+  return values;
 }
 
 function playgroundTargets() {
@@ -101,7 +195,7 @@ function playgroundTargets() {
     option.textContent = item.name || item.uri || item.uriTemplate;
     return option;
   }));
-  renderTemplateFields();
+  renderPlaygroundFields();
 }
 
 async function executePlayground(event) {
@@ -110,6 +204,9 @@ async function executePlayground(event) {
   result.textContent = 'Exécution…';
   try {
     let args = JSON.parse($('#mcp-playground-arguments').value || '{}');
+    if ($('#mcp-playground-operation').value === 'tool') {
+      args = { ...args, ...schemaArguments() };
+    }
     if ($('#mcp-playground-operation').value === 'template') {
       args = Object.fromEntries([...document.querySelectorAll('#mcp-template-fields input')].map((input) => [input.name, input.value]));
     }
@@ -137,6 +234,28 @@ async function executePlayground(event) {
   }
 }
 
+function openSessionDetails(item) {
+  const drawer = $('#drawer');
+  $('#drawer-title').textContent = 'Session MCP';
+  const body = $('#drawer-body');
+  const list = el('dl', 'definition-list');
+  const add = (label, value) => {
+    const dt = document.createElement('dt'); dt.textContent = label;
+    const dd = document.createElement('dd'); dd.textContent = value ?? '—';
+    list.append(dt, dd);
+  };
+  add('Client', `${item.name}/${item.version}`);
+  add('État', item.state === 'IDLE' ? 'Inactif' : 'Actif');
+  add('Protocole', item.protocol);
+  add('Créée le', item.createdAt ? new Date(item.createdAt).toLocaleString() : '—');
+  add('Dernière activité', item.lastActivityAt ? new Date(item.lastActivityAt).toLocaleString() : '—');
+  add('Appels', String(item.callCount ?? 0));
+  add('Identifiant de session', item.id);
+  body.replaceChildren(list);
+  drawer.hidden = false;
+  $('#drawer-close').focus();
+}
+
 export async function view() {
   try {
     const init = await initialize();
@@ -159,14 +278,53 @@ export async function view() {
       const summary = await fetch(ENDPOINT, { headers }).then((response) => response.ok ? response.json() : null);
       if (summary) {
         $('#mcp-active-sessions').textContent = summary.activeSessions ?? '0';
-        $('#mcp-health-state').textContent = summary.state || '—';
+        const healthLabels = { UP: 'Opérationnel', DEGRADED: 'Dégradé', DOWN: 'Indisponible' };
+        $('#mcp-health-state').textContent = healthLabels[summary.state] || summary.state || '—';
         const host = $('#mcp-session-list');
-        host.replaceChildren(...(summary.sessions || []).map((item) => {
-          const row = el('div', 'mcp-session-row');
-          row.append(el('strong', '', `${item.name}/${item.version}`),
-            el('span', 'muted', `${item.state || 'ACTIVE'} · ${item.protocol || '—'} · ${item.callCount} appels · ${new Date(item.lastActivityAt).toLocaleString()}`));
-          return row;
-        }));
+        const sessions = summary.sessions || [];
+        if (!sessions.length) {
+          host.replaceChildren(el('div', 'mcp-empty-action',
+            el('strong', null, 'Aucun client MCP connecté'),
+            el('span', 'muted', 'Le serveur Kex est disponible mais aucune session cliente n’est actuellement observée.')));
+        } else {
+          const table = el('table', 'mcp-session-table');
+          const head = document.createElement('thead');
+          const header = document.createElement('tr');
+          ['Client', 'État', 'Activité', 'Appels', 'Protocole', ''].forEach((label) => header.append(el('th', null, label)));
+          head.append(header);
+          const body = document.createElement('tbody');
+          sessions.forEach((item) => {
+            const row = document.createElement('tr');
+            row.className = 'clickable-row';
+            row.tabIndex = 0;
+            row.setAttribute('aria-label', `Détails de la session ${item.name}/${item.version}`);
+            row.addEventListener('click', () => openSessionDetails(item));
+            row.addEventListener('keydown', (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openSessionDetails(item);
+              }
+            });
+            const client = el('td', null, `${item.name}/${item.version}`);
+            const state = el('td', null, item.state === 'IDLE' ? '○ Inactif' : '● Actif');
+            state.dataset.state = item.state === 'IDLE' ? 'idle' : 'active';
+            const activity = el('td', 'muted', new Date(item.lastActivityAt).toLocaleString());
+            const calls = el('td', 'technical-id', String(item.callCount ?? 0));
+            const protocol = el('td', 'technical-id', item.protocol || '—');
+            const actionCell = document.createElement('td');
+            const details = el('button', 'ghost compact', 'Détails');
+            details.type = 'button';
+            details.addEventListener('click', (event) => {
+              event.stopPropagation();
+              openSessionDetails(item);
+            });
+            actionCell.append(details);
+            row.append(client, state, activity, calls, protocol, actionCell);
+            body.append(row);
+          });
+          table.append(head, body);
+          host.replaceChildren(table);
+        }
       }
     } catch (error) { report(error); }
     setStatus(true, 'Opérationnel · lecture seule');
@@ -187,7 +345,7 @@ export function bind() {
   }));
   $('#mcp-catalog-kind')?.addEventListener('change', () => renderCatalog());
   $('#mcp-playground-operation')?.addEventListener('change', playgroundTargets);
-  $('#mcp-playground-target')?.addEventListener('change', renderTemplateFields);
+  $('#mcp-playground-target')?.addEventListener('change', renderPlaygroundFields);
   $('#mcp-playground-form')?.addEventListener('submit', executePlayground);
   $('#mcp-playground-copy')?.addEventListener('click', async () => {
     await navigator.clipboard.writeText($('#mcp-playground-result').textContent);

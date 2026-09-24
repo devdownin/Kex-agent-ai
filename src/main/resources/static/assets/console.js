@@ -38,7 +38,9 @@ const VIEWS = {
   },
   alerts: { title: 'Alertes', load: supervision.alerts },
   audit: { title: 'Audit', load: supervision.audit },
-  tools: { title: 'Technique', load: tools.view },
+  integrations: { title: 'Intégrations', load: tools.integrationsView },
+  knowledge: { title: 'Connaissance', load: tools.knowledgeView },
+  system: { title: 'Système', load: tools.systemView },
   chat: { title: 'Conversation', load: chat.prefill },
 };
 
@@ -555,7 +557,8 @@ const TICK_MS = 1_000;
 // Les écrans qui portent un formulaire ne se rafraîchissent pas : un rendu par-dessus effacerait
 // ce que quelqu'un est en train de saisir. Le chat non plus, pour la même raison.
 const SELF_REFRESHING = new Set([
-  'overview', 'attention', 'processes', 'decisions', 'alerts', 'incidents', 'audit', 'tools',
+  'overview', 'attention', 'processes', 'decisions', 'alerts', 'incidents', 'audit',
+  'integrations', 'knowledge', 'system',
 ]);
 
 /**
