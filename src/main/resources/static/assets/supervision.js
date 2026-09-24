@@ -1068,13 +1068,16 @@ async function resolveDecision(decision, approve) {
 }
 
 export async function decisions() {
+  const context = operatorContext();
   await render($('#decisions-list'), () => api(`${BASE}/decisions`), (rows) => {
     const state = params().get('decisionEtat') || stored(DECISION_FILTER_STORAGE, 'ALL');
-    const matching = rows.filter((decision) => state === 'ALL'
+    const scoped = rows.filter((decision) =>
+      matchesOperatorProcess(decision, context) && inOperatorPeriod(operatorTimestamp(decision), context));
+    const matching = scoped.filter((decision) => state === 'ALL'
       || (state === 'PENDING' && decision.status === 'PENDING_APPROVAL')
       || (state === 'FAILED' && ['FAILED', 'EXPIRED'].includes(decision.status))
       || (state === 'RESOLVED' && ['EXECUTED', 'REJECTED', 'BLOCKED', 'SIMULATED'].includes(decision.status)));
-    if (!rows.length) return empty('Aucune décision.', 'Elles apparaîtront après un cycle d’analyse.',
+    if (!scoped.length) return empty('Aucune décision dans ce contexte.', 'Élargissez la période ou choisissez tous les processus.',
       { href: '#/overview', label: 'Lancer une analyse' });
     if (!matching.length) return empty('Aucune décision dans cette vue.', 'Choisissez un autre filtre.');
     const list = el('div', 'cards wide');
@@ -1258,7 +1261,10 @@ function decisionSection(title) {
 /* ── Alertes ───────────────────────────────────────────────────────────── */
 
 export async function alerts() {
+  const context = operatorContext();
   await render($('#alerts-list'), () => api(`${BASE}/alerts`), (items) => {
+    items = items.filter((item) =>
+      matchesOperatorProcess(item, context) && inOperatorPeriod(operatorTimestamp(item), context));
     if (!items.length) {
       return empty('Aucune alerte active.',
         'Une alerte que le dernier cycle ne revoit plus a cessé d’être vraie et sort de cette liste.',
