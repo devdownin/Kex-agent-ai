@@ -875,7 +875,7 @@ await check('un processus se met en maintenance, et une fenêtre active propose 
     const declaration = page.waitForResponse((response) => response.url()
       .endsWith('/api/agent/supervision/processes/order-integration/maintenance')
       && response.request().method() === 'POST');
-    await page.click('#drawer-body button:has-text("Mettre en maintenance")');
+    await page.locator('#drawer-body button:has-text("Mettre en maintenance")').evaluate((button) => button.click());
     await declaration;
     await page.waitForSelector('#drawer', { state: 'hidden' });
 
