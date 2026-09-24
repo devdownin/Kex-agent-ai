@@ -754,7 +754,7 @@ function openProcess(row) {
     definition('Couverture', coverageTag(row.coverage)),
   );
   const extra = el('div');
-  const actions = el('div', 'context-actions');
+  const actions = el('div', 'context-actions context-actions-standard');
   const favorites = new Set(stored(FAVORITES_STORAGE, []));
   const favorite = el('button', 'ghost', favorites.has(row.processId) ? '★ Retirer des favoris' : '☆ Ajouter aux favoris');
   favorite.type = 'button';
