@@ -99,6 +99,7 @@ export const onSnapshot = (watcher) => watchers.add(watcher);
 
 export async function refresh() {
   snapshot = await api(`${BASE}/overview`);
+  syncGlobalContext(snapshot);
   watchers.forEach((watcher) => watcher(snapshot));
   return snapshot;
 }
@@ -191,7 +192,6 @@ export async function overview() {
   host.replaceChildren(skeleton('kpis', 'Analyse des processus…'));
   try {
     const data = contextualize(await refresh());
-    syncGlobalContext(snapshot);
     renderOverviewHero(data);
     $('#agent-brief').replaceChildren(agentBrief(data));
     host.replaceChildren(kpis(data));
