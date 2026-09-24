@@ -115,15 +115,11 @@ function overviewStub(overrides = {}) {
   };
 }
 
+// Seed credentials before loading the application so core.js initializes its in-memory token
+// from sessionStorage. Mutating sessionStorage after module evaluation leaves memoryKey empty.
+await page.addInitScript((token) => sessionStorage.setItem('kex.agent.api-key', token), TOKEN);
 await page.goto(`${BASE}/#/settings`, { waitUntil: 'domcontentloaded' });
-// Seed the session token directly: the browser suite tests authenticated console behavior, not
-// native <dialog> rendering, which varies in headless Chromium depending on viewport/menu state.
-await page.evaluate((token) => sessionStorage.setItem('kex.agent.api-key', token), TOKEN);
-await page.reload({ waitUntil: 'domcontentloaded' });
-await page.fill('#api-key', TOKEN, { force: true });
-// Submit through the DOM as the credentials dialog is intentionally not part of this test's contract.
-await page.locator('#credentials-form').evaluate((form) => form.requestSubmit());
-// Native dialog behavior is outside this suite; keep it from intercepting the application controls.
+// Native dialog behavior is outside this suite; keep it from intercepting application controls.
 await page.locator('#credentials').evaluate((dialog) => { if (dialog.open) dialog.close(); });
 
 await check('l’écran courant se recharge après la saisie du jeton', async () => {
