@@ -128,7 +128,7 @@ function renderPreview() {
   id.id = 'process-wizard-id';
   id.required = true;
   id.maxLength = 64;
-  id.pattern = '[a-z0-9][a-z0-9-]*';
+  id.pattern = '[a-z0-9](?:[a-z0-9]|-)*';
   id.value = value().id;
   idLabel.htmlFor = id.id;
   const hintLabel = el('label', null, 'Preuves à consulter (hint)');
