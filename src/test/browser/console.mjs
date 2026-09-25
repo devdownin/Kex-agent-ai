@@ -891,6 +891,53 @@ await check('un échange retrouvé dans l’historique se réaffiche sans rejoue
     await page.unroute('**/api/agent/chat');
   });
 
+await check('le parcours guidé utilise les suggestions Kafka et demande une confirmation', async () => {
+  const posted = [];
+  await page.route('**/api/agent/whoami', (route) => route.fulfill({ status: 200,
+    contentType: 'application/json', body: JSON.stringify({ name: 'admin', tenant: 'admin', roles: ['ADMIN'] }) }));
+  await page.route('**/api/agent/kafka/topics', (route) => route.fulfill({ status: 200,
+    contentType: 'application/json', body: JSON.stringify({ topics: [
+      { name: 'orders.in' }, { name: 'orders.out' }], coverage: { complete: true } }) }));
+  await page.route('**/api/agent/kafka/topics/orders.in/lag', (route) => route.fulfill({ status: 200,
+    contentType: 'application/json', body: JSON.stringify({ groups: [{ groupId: 'orders-worker' }],
+      coverage: { complete: true } }) }));
+  await page.route('**/api/agent/supervision/processes', (route) => {
+    const body = route.request().postDataJSON();
+    posted.push(body);
+    return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  try {
+    await page.goto(`${BASE}/#/chat`, { waitUntil: 'domcontentloaded' });
+    await page.click('#start-process-wizard');
+    await page.fill('#process-wizard-answer', 'Intégration des commandes');
+    await page.click('#process-wizard-next');
+    await page.fill('#process-wizard-answer', 'Vers ERP');
+    await page.click('#process-wizard-next');
+    await page.waitForSelector('#process-wizard-options option[value="orders.in"]', { state: 'attached' });
+    await page.fill('#process-wizard-answer', 'orders.in');
+    await page.click('#process-wizard-next');
+    await page.fill('#process-wizard-answer', 'orders.out');
+    await page.click('#process-wizard-next');
+    await page.waitForSelector('#process-wizard-options option[value="orders-worker"]', { state: 'attached' });
+    await page.fill('#process-wizard-answer', 'orders-worker');
+    await page.click('#process-wizard-next');
+    await page.click('#process-wizard-next');
+    assert.equal(posted.length, 0, 'l’aperçu ne crée rien avant confirmation');
+    assert.match(await page.$eval('#process-wizard-question pre', (node) => node.textContent),
+      /topics \[orders.in, orders.out\], consumer group orders-worker/);
+    await page.click('#process-wizard-next');
+    await page.waitForFunction(() => document.querySelector('#process-wizard').hidden);
+    assert.equal(posted.length, 1);
+    assert.equal(posted[0].id, 'integration-des-commandes');
+    assert.equal(posted[0].hint, 'topics [orders.in, orders.out], consumer group orders-worker');
+  } finally {
+    await page.unroute('**/api/agent/whoami');
+    await page.unroute('**/api/agent/kafka/topics');
+    await page.unroute('**/api/agent/kafka/topics/orders.in/lag');
+    await page.unroute('**/api/agent/supervision/processes');
+  }
+});
+
 await check('plusieurs processus en anomalie au même cycle affichent un incident corrélé', async () => {
   await page.route('**/api/agent/supervision/overview', (route) => route.fulfill({
     status: 200, contentType: 'application/json',

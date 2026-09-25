@@ -2,9 +2,11 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.supervision;
 
+import java.nio.file.Path;
 import java.time.Clock;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -43,6 +45,14 @@ class SupervisionConfig {
         return new InMemorySupervisionStateRepository(properties.historySize());
     }
 
+    @Bean
+    @Profile("!shared-memory")
+    ProcessDefinitionRepository fileProcessDefinitions(ObjectMapper objectMapper,
+            @Value("${kex.agent.supervision.process-store-path:${user.home}/.kex-agent-ai/processes.json}")
+            String path) {
+        return new FileProcessDefinitionRepository(objectMapper, Path.of(path));
+    }
+
     /**
      * Audit et état décisionnel basculent ensemble sur Postgres avec la mémoire de conversation :
      * l'audit parce que c'est la pièce de conformité, les décisions, la pause et les fenêtres de
@@ -54,6 +64,11 @@ class SupervisionConfig {
     @Configuration(proxyBeanMethods = false)
     @Profile("shared-memory")
     static class JdbcAuditConfig {
+
+        @Bean
+        ProcessDefinitionRepository jdbcProcessDefinitions(JdbcTemplate jdbcTemplate) {
+            return new JdbcProcessDefinitionRepository(jdbcTemplate);
+        }
 
         @Bean
         AuditRepository jdbcAuditRepository(JdbcTemplate jdbcTemplate) {

@@ -97,6 +97,7 @@ class SecurityConfig {
                                 "/api/agent/skills/*/reject",
                                 "/api/agent/skills/*/retire").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/agent/mcp/servers",
+                                "/api/agent/supervision/processes",
                                 "/api/agent/mcp/servers/test", "/api/agent/mcp/servers/*/enabled",
                                 "/api/agent/mcp/servers/*/refresh", "/api/agent/mcp/configuration",
                                 "/api/agent/mcp/catalog/*/install", "/api/agent/mcp/catalog/discover/*/*/install")

@@ -1269,6 +1269,14 @@ table.grid tr.clickable:hover td:last-child { border-top-right-radius: var(--rad
 .chat-starters .hint { margin: 0 0 10px; }
 .chat-starter-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .chat-starter-list button { text-align: left; white-space: normal; }
+.chat-starters > button { margin-bottom: 10px; }
+.process-wizard { padding: 16px; margin-top: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.process-wizard h2 { font-size: 16px; margin: 0; }
+.process-wizard form { display: grid; gap: 10px; }
+.process-wizard label { display: block; font-weight: 600; font-size: 13px; }
+.process-wizard input, .process-wizard textarea { width: 100%; box-sizing: border-box; }
+.process-wizard pre { max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.process-wizard .row-end { display: flex; justify-content: flex-end; gap: 8px; }
 
 .transcript { list-style: none; margin: 0; padding: 0; flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
 .turn { display: flex; flex-direction: column; gap: 6px; max-width: 78ch; }

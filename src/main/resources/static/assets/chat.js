@@ -8,6 +8,7 @@ import {
   $, ago, api, busy, dismissDrawer, el, empty, failure, headers, openDrawer, registerDrawer, report,
   params, setDrawerParam, setParams,
 } from './core.js';
+import { wireProcessWizard } from './process-creation.js';
 
 const CONVERSATION_STORAGE = 'kex.agent.conversation';
 
@@ -608,6 +609,7 @@ export function prefill() {
 export function wire(onUnauthorized) {
   unauthorized = onUnauthorized;
   setConversation(conversationId);
+  wireProcessWizard();
   $('#chat-process-starters').replaceChildren(...PROCESS_STARTERS.map(({ label, prompt }) => {
     const button = el('button', 'ghost', label);
     button.type = 'button';
