@@ -1448,12 +1448,24 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
 }
 .notification-item.read { border-left-color: var(--line); opacity: .72; }
 
-.comparison-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.comparison-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .comparison-metric { padding: 14px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--bg); }
 .comparison-metric strong { display: block; font: 700 24px var(--mono); }
 .comparison-metric span { color: var(--ink-3); font-size: 12px; }
 .comparison-metric[data-state="OK"] strong { color: var(--ok); }
 .comparison-metric[data-state="WARNING"] strong { color: var(--warn); }
+.comparison-metric[data-state="ERROR"] strong { color: var(--danger); }
+.comparison-metric[data-state="PENDING"] strong { color: var(--pending); }
+
+.since-last-visit { border-top: 2px solid var(--agent); }
+.visit-details { margin: 12px 0 0; padding-left: 20px; color: var(--ink-2); font-size: 12px; }
+.visit-details li + li { margin-top: 4px; }
+.action-verification { border-top: 2px solid var(--accent); }
+.action-verification > .muted { margin: -4px 0 12px; }
+.verification-metric strong { font-size: 16px; overflow-wrap: anywhere; }
+#action-verification-verdict[data-state="OK"] { color: var(--ok); background: var(--ok-soft); }
+#action-verification-verdict[data-state="ERROR"] { color: var(--danger); background: var(--danger-soft); }
+#action-verification-verdict[data-state="PENDING"] { color: var(--pending); background: var(--pending-soft); }
 
 .saved-views { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; gap: 8px; margin: 10px 0; }
 .help-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
