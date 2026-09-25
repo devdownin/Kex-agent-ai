@@ -58,8 +58,9 @@ controlled, and every result can be traced.
 ## 🟠 Kafka ready out of the box
 
 It ships wired to [Kafka SQL Explorer](https://github.com/devdownin/Kafkaexplorer), whose MCP server
-exposes 15 read-only tools over Kafka: topic listing, Flink SQL, schema inference, cross-topic key
-tracing and cluster audits. The model chooses the appropriate tool; the MCP server enforces the
+exposes 21 read-only tools over Kafka: topic listing, Flink SQL, schema inference, cross-topic key
+tracing, cluster audits, process health, topic activity, consumer diagnosis, flow health,
+before/after verification and incident evidence. The model chooses the appropriate tool; the MCP server enforces the
 operational guardrails. One `docker compose up` and you are asking questions of your broker in
 plain language — while retaining an audit trail of what the agent actually did.
 
@@ -169,7 +170,9 @@ With Kafka SQL Explorer connected, the model has real verbs instead of vague rec
 | *"What's in demo.orders?"* | `kex_preview_messages`, `kex_infer_schema` | Real records, plus the structure inferred from them |
 | *"Where did order ORD-1042 go?"* | `kex_trace_key` | Its path across topics, hop by hop, with latency |
 | *"Why is the DLQ filling up?"* | `kex_run_audit`, `kex_get_audit` | A graded diagnosis, not a metadata dump |
-| *"Which consumer groups are behind?"* | `kex_consumer_lag` | Time lag — the age of the oldest unread message |
+| *"Which consumer groups are behind?"* | `kex_diagnose_consumer` / `kex_consumer_lag` | A measured verdict plus lag and backlog age |
+| *"Is this integration process healthy?"* | `kex_process_health`, then `kex_incident_evidence` if needed | Process status with evidence and coverage |
+| *"Where does this flow lose events?"* | `kex_flow_health` | The largest measured stage-to-stage drop, without claiming causality |
 | *"Count yesterday's orders over 100 €"* | `kex_sql_query` | The Flink SQL it ran, and the rows it got back |
 
 The model picks the tool; the server enforces the guardrails. Explorer is read-only by default, with
