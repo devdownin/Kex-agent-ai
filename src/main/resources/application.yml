@@ -155,13 +155,13 @@ kex:
         # depuis un nom d'organisation inventerait une confiance que personne n'a accordée.
         trusted-publisher-repositories: []
       sources:
-        # Éteintes par défaut, comme chaque extension qui ajoute une sortie réseau propre à
-        # l'agent : interroger un registre tiers est un choix d'opérateur.
+        # Le registre officiel est actif par défaut pour la découverte en lecture seule.
+        # Le catalogue Docker reste optionnel. Chaque source peut être désactivée explicitement.
         docker:
           enabled: ${KEX_MCP_CATALOG_DOCKER_ENABLED:false}
           base-url: ${KEX_MCP_CATALOG_DOCKER_BASE_URL:https://hub.docker.com}
         official-registry:
-          enabled: ${KEX_MCP_CATALOG_OFFICIAL_REGISTRY_ENABLED:false}
+          enabled: ${KEX_MCP_CATALOG_OFFICIAL_REGISTRY_ENABLED:true}
           base-url: ${KEX_MCP_CATALOG_OFFICIAL_REGISTRY_BASE_URL:https://registry.modelcontextprotocol.io}
 
   agent:
