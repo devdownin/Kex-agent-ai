@@ -913,12 +913,12 @@ await check('le parcours guidé utilise les suggestions Kafka et demande une con
     await page.click('#process-wizard-next');
     await page.fill('#process-wizard-answer', 'Vers ERP');
     await page.click('#process-wizard-next');
-    await page.waitForSelector('#process-wizard-options option[value="orders.in"]');
+    await page.waitForSelector('#process-wizard-options option[value="orders.in"]', { state: 'attached' });
     await page.fill('#process-wizard-answer', 'orders.in');
     await page.click('#process-wizard-next');
     await page.fill('#process-wizard-answer', 'orders.out');
     await page.click('#process-wizard-next');
-    await page.waitForSelector('#process-wizard-options option[value="orders-worker"]');
+    await page.waitForSelector('#process-wizard-options option[value="orders-worker"]', { state: 'attached' });
     await page.fill('#process-wizard-answer', 'orders-worker');
     await page.click('#process-wizard-next');
     await page.click('#process-wizard-next');
