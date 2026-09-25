@@ -1264,6 +1264,11 @@ table.grid tr.clickable:hover td:last-child { border-top-right-radius: var(--rad
 .chat-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 16px; align-items: start; }
 .chat-main { display: flex; flex-direction: column; min-height: calc(100dvh - 160px); }
 .conv-id { font-size: 11px; color: var(--ink-3); }
+.chat-starters { padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.chat-starters h2 { font-size: 14px; margin: 0 0 4px; }
+.chat-starters .hint { margin: 0 0 10px; }
+.chat-starter-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.chat-starter-list button { text-align: left; white-space: normal; }
 
 .transcript { list-style: none; margin: 0; padding: 0; flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
 .turn { display: flex; flex-direction: column; gap: 6px; max-width: 78ch; }
