@@ -937,6 +937,25 @@ class SupervisionServiceTest {
     /* ── Seuils par processus ──────────────────────────────────────────── */
 
     @Test
+    void le_cycle_privilegie_les_diagnostics_operationnels_kafkaexplorer() {
+        analysisReturns(Map.of("processes", List.of(), "anomalies", List.of()));
+        SupervisionService service = service(properties(List.of(ORDERS), Map.of(), Map.of()));
+
+        service.runCycle("test");
+
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        verify(agentService).askStructured(anyString(), prompt.capture(), any());
+        assertThat(prompt.getValue())
+                .contains("kex_process_health")
+                .contains("kex_topic_activity")
+                .contains("kex_diagnose_consumer")
+                .contains("kex_flow_health")
+                .contains("kex_compare_process_state")
+                .contains("kex_incident_evidence")
+                .contains("reste UNKNOWN plutôt que de");
+    }
+
+    @Test
     void un_processus_avec_seuils_propres_les_recite_dans_le_prompt() {
         MonitoredProcess noisy = new MonitoredProcess("noisy", "Noisy", null, null,
                 new ThresholdOverrides(5000L, null, null, null, null));
