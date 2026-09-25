@@ -6,7 +6,7 @@
 // chaînes pour une poignée de fichiers statiques.
 
 import {
-  $, ago, api, confirmAction, credentials, drawerOpen, el, onCredentialChange, onUnauthorized, operatorContext,
+  $, ago, api, confirmAction, credentials, drawerOpen, duration, el, onCredentialChange, onUnauthorized, operatorContext,
   refreshFreshnessTag, report, restoreDrawerFromUrl, setOperatorContext, stamp, toast, viewName,
 } from './core.js';
 import * as automations from './automations.js';
@@ -102,6 +102,8 @@ function renderBadges(data) {
   syncOperatorContext(data);
   applyDashboardLayout();
   renderNotifications(data);
+  renderSinceLastVisit(data);
+  renderActionVerification(data);
   renderComparison(data);
 }
 
@@ -115,6 +117,142 @@ function readJson(key, fallback) {
 
 function writeJson(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* préférence locale facultative */ }
+}
+
+const VISIT_STORAGE = 'kex.agent.last-visit';
+const visitBaseline = readJson(VISIT_STORAGE, null);
+let latestVisitSnapshot = null;
+
+function operationalSnapshot(data) {
+  return {
+    seenAt: new Date().toISOString(),
+    cycleAt: data?.agent?.lastCycleAt || null,
+    alerts: Object.fromEntries((data?.alerts || []).map((item) => [item.id, {
+      title: item.title, processName: item.processName, severity: item.severity,
+    }])),
+    pending: Object.fromEntries((data?.pending || []).map((item) => [item.id, {
+      action: item.action, processName: item.processName,
+    }])),
+    processes: Object.fromEntries((data?.processes || []).map((item) => [item.processId, {
+      name: item.name, state: item.state,
+    }])),
+  };
+}
+
+function renderSinceLastVisit(data) {
+  const host = $('#since-last-visit');
+  if (!host) return;
+  latestVisitSnapshot = operationalSnapshot(data);
+  if (!visitBaseline?.seenAt) {
+    host.hidden = true;
+    return;
+  }
+
+  const previousAlerts = visitBaseline.alerts || {};
+  const currentAlerts = latestVisitSnapshot.alerts;
+  const previousPending = visitBaseline.pending || {};
+  const currentPending = latestVisitSnapshot.pending;
+  const newAlerts = Object.keys(currentAlerts).filter((id) => !previousAlerts[id]);
+  const resolvedAlerts = Object.keys(previousAlerts).filter((id) => !currentAlerts[id]);
+  const newPending = Object.keys(currentPending).filter((id) => !previousPending[id]);
+  const changedProcesses = Object.entries(latestVisitSnapshot.processes).filter(([id, value]) =>
+    visitBaseline.processes?.[id] && visitBaseline.processes[id].state !== value.state);
+
+  $('#since-last-visit-time').textContent = `Dernière visite : ${stamp(visitBaseline.seenAt)}`;
+  $('#since-last-visit-grid').replaceChildren(
+    comparisonMetric('Nouvelles alertes', newAlerts.length, newAlerts.length ? 'WARNING' : 'OK'),
+    comparisonMetric('Alertes résolues', resolvedAlerts.length, resolvedAlerts.length ? 'OK' : null),
+    comparisonMetric('Nouvelles décisions', newPending.length, newPending.length ? 'PENDING' : null),
+    comparisonMetric('États modifiés', changedProcesses.length, changedProcesses.length ? 'WARNING' : null),
+  );
+  const details = $('#since-last-visit-details');
+  const lines = [
+    ...newAlerts.slice(0, 3).map((id) => `Nouvelle alerte · ${currentAlerts[id].processName} · ${currentAlerts[id].title}`),
+    ...resolvedAlerts.slice(0, 3).map((id) => `Résolue · ${previousAlerts[id].processName} · ${previousAlerts[id].title}`),
+    ...newPending.slice(0, 3).map((id) => `À valider · ${currentPending[id].processName} · ${currentPending[id].action}`),
+    ...changedProcesses.slice(0, 3).map(([id, value]) =>
+      `${value.name || id} : ${visitBaseline.processes[id].state} → ${value.state}`),
+  ];
+  details.replaceChildren(...(lines.length
+    ? lines.map((line) => el('li', null, line))
+    : [el('li', 'muted', 'Aucun changement opérationnel depuis la dernière visite.')]));
+  host.hidden = false;
+}
+
+function persistVisit() {
+  if (latestVisitSnapshot) writeJson(VISIT_STORAGE, latestVisitSnapshot);
+}
+addEventListener('pagehide', persistVisit);
+addEventListener('visibilitychange', () => {
+  if (document.hidden) persistVisit();
+});
+
+function renderActionVerification(data) {
+  const host = $('#action-verification');
+  if (!host) return;
+  const verification = readJson('kex.agent.action-verification', null);
+  if (!verification?.before || !verification.processId) {
+    host.hidden = true;
+    return;
+  }
+  const process = (data?.processes || []).find((row) => row.processId === verification.processId);
+  if (!process) {
+    host.hidden = true;
+    return;
+  }
+
+  const afterAlerts = (data?.alerts || []).filter((alert) => alert.processId === verification.processId);
+  const freshAt = process.lastRun || data?.agent?.lastCycleAt;
+  const measuredAfter = freshAt && new Date(freshAt).getTime() > new Date(verification.executedAt).getTime();
+  $('#action-verification-title').textContent = verification.action;
+  $('#action-verification-process').textContent = verification.processName || process.name;
+
+  const verdict = $('#action-verification-verdict');
+  const grid = $('#action-verification-grid');
+  if (!measuredAfter) {
+    verdict.dataset.state = 'PENDING';
+    verdict.textContent = 'Vérification en attente d’une nouvelle mesure';
+    grid.replaceChildren(
+      comparisonMetric('État avant', verification.before.state),
+      comparisonMetric('Alertes avant', verification.before.alertCount ?? verification.before.alertIds?.length ?? 0),
+      comparisonMetric('Retard avant', duration(verification.before.delayMillis)),
+    );
+    host.hidden = false;
+    return;
+  }
+
+  const rank = { OK: 0, UNKNOWN: 1, WARNING: 2, ERROR: 3 };
+  const beforeRank = rank[verification.before.state] ?? 1;
+  const afterRank = rank[process.state] ?? 1;
+  const beforeAlerts = verification.before.alertCount ?? verification.before.alertIds?.length ?? 0;
+  const afterAlertCount = afterAlerts.length;
+  const beforeDelay = verification.before.delayMillis;
+  const afterDelay = process.delayMillis;
+  let label = 'Inchangé';
+  let state = 'UNKNOWN';
+  if (process.state === 'OK' && verification.before.state !== 'OK') {
+    label = 'Résolu'; state = 'OK';
+  } else if (afterRank < beforeRank || afterAlertCount < beforeAlerts
+      || (beforeDelay != null && afterDelay != null && afterDelay < beforeDelay)) {
+    label = 'Amélioré'; state = 'OK';
+  } else if (afterRank > beforeRank || afterAlertCount > beforeAlerts
+      || (beforeDelay != null && afterDelay != null && afterDelay > beforeDelay)) {
+    label = 'Dégradé'; state = 'ERROR';
+  }
+  verdict.dataset.state = state;
+  verdict.textContent = `${label} · mesuré ${ago(freshAt) || stamp(freshAt)}`;
+  grid.replaceChildren(
+    transitionMetric('État', verification.before.state, process.state),
+    transitionMetric('Alertes', beforeAlerts, afterAlertCount),
+    transitionMetric('Retard', duration(beforeDelay), duration(afterDelay)),
+  );
+  host.hidden = false;
+}
+
+function transitionMetric(label, before, after) {
+  const node = el('div', 'comparison-metric verification-metric');
+  node.append(el('span', null, label), el('strong', null, `${before ?? '—'} → ${after ?? '—'}`));
+  return node;
 }
 
 function renderNotifications(data) {
@@ -233,10 +371,11 @@ function badge(selector, count) {
 
 /* ── Contexte opérateur et tableau de bord ───────────────────────────── */
 
-const DASHBOARD_DEFAULT = ['hero', 'kpis', 'onboarding', 'incidents', 'comparison', 'brief', 'operations', 'timeline'];
+const DASHBOARD_DEFAULT = ['hero', 'kpis', 'onboarding', 'visit', 'incidents', 'verification', 'comparison', 'brief', 'operations', 'timeline'];
 const DASHBOARD_LABELS = {
   hero: 'Synthèse globale', kpis: 'Indicateurs clés', onboarding: 'Configuration restante',
-  incidents: 'Incidents', comparison: 'Comparaison de cycles', brief: 'Synthèse de l’agent',
+  visit: 'Depuis ma dernière visite', incidents: 'Incidents', verification: 'Vérification après action',
+  comparison: 'Comparaison de cycles', brief: 'Synthèse de l’agent',
   operations: 'Processus et décisions', timeline: 'Dernier cycle',
 };
 
@@ -587,8 +726,18 @@ $('#reset-preferences').addEventListener('click', () => {
 const commandDialog = $('#command-palette');
 const commandQuery = $('#command-query');
 
+const RECENT_COMMANDS_STORAGE = 'kex.agent.command-recent';
+
+function rememberCommand(item) {
+  if (!item.href) return;
+  const recent = readJson(RECENT_COMMANDS_STORAGE, []).filter((entry) => entry.href !== item.href);
+  recent.unshift({ label: item.label, href: item.href, kind: item.kind, keywords: item.keywords || '' });
+  writeJson(RECENT_COMMANDS_STORAGE, recent.slice(0, 6));
+}
+
 function commandItems() {
   const snapshot = supervision.current();
+  const recent = readJson(RECENT_COMMANDS_STORAGE, []).map((item) => ({ ...item, group: 'Récents' }));
   const commands = [
     { label: 'Vue d’ensemble', group: 'Navigation', kind: 'Navigation', href: '#/overview', keywords: 'accueil dashboard' },
     { label: 'À traiter', group: 'Navigation', kind: 'Navigation', href: '#/attention', keywords: 'priorités actions' },
@@ -622,7 +771,22 @@ function commandItems() {
       href: `#/decisions?decision=${encodeURIComponent(decision.id)}`,
       keywords: `${decision.objective || ''} ${decision.processName || ''}` });
   }
-  return commands;
+  for (const shortcut of supervision.processShortcuts()) {
+    commands.push({
+      label: shortcut.label,
+      group: shortcut.type === 'view' ? 'Vues sauvegardées' : 'Favoris',
+      kind: shortcut.type === 'view' ? 'Vue processus' : 'Processus favori',
+      href: shortcut.href,
+      keywords: shortcut.keywords,
+    });
+  }
+  const seen = new Set();
+  return [...recent, ...commands].filter((item) => {
+    const key = item.href ? `href:${item.href}` : `action:${item.label}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function renderCommands() {
@@ -647,6 +811,7 @@ function renderCommands() {
     button.append(el('span', 'strong', item.label), el('span', 'hint', item.kind));
     button.addEventListener('click', () => {
       commandDialog.close();
+      rememberCommand(item);
       if (item.href) location.hash = item.href;
       else item.action?.();
     });

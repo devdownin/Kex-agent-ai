@@ -688,10 +688,13 @@ const processQuery = () => (params().get('q') ?? stored(PROCESS_FILTER_STORAGE, 
 function filtered(rows) {
   const state = processFilter();
   const query = processQuery();
+  const favorites = new Set(stored(FAVORITES_STORAGE, []));
   return (rows || []).filter((row) => {
     const matchesState = state === 'ALL'
-      || (state === 'ATTENTION' ? row.state === 'WARNING' || row.state === 'ERROR' : row.state === state);
-    const matchesQuery = !query || row.name.toLowerCase().includes(query);
+      || (state === 'ATTENTION' ? row.state === 'WARNING' || row.state === 'ERROR'
+        : state === 'FAVORITES' ? favorites.has(row.processId) : row.state === state);
+    const matchesQuery = !query || row.name.toLowerCase().includes(query)
+      || row.processId?.toLowerCase().includes(query);
     return matchesState && matchesQuery;
   }).sort(favoriteFirst);
 }
@@ -702,6 +705,28 @@ function favoriteFirst(left, right) {
 }
 
 const prioritized = (rows) => [...(rows || [])].sort(favoriteFirst);
+
+export function processShortcuts() {
+  const views = stored(SAVED_VIEWS_STORAGE, []).map((view, index) => ({
+    type: 'view',
+    label: view.name,
+    href: `#/processes?${new URLSearchParams({
+      ...(view.state && view.state !== 'ALL' ? { etat: view.state } : {}),
+      ...(view.query ? { q: view.query } : {}),
+    }).toString()}`.replace(/\?$/, ''),
+    keywords: `${view.state || 'ALL'} ${view.query || ''}`,
+    index,
+  }));
+  const favorites = new Set(stored(FAVORITES_STORAGE, []));
+  const rows = current()?.processes || [];
+  const favoriteItems = rows.filter((row) => favorites.has(row.processId)).map((row) => ({
+    type: 'favorite',
+    label: row.name,
+    href: `#/processes?processus=${encodeURIComponent(row.processId)}`,
+    keywords: `${row.processId} ${row.state || ''}`,
+  }));
+  return [...views, ...favoriteItems];
+}
 
 /** Colonnes de la vue d'ensemble : l'essentiel d'abord, le relevé technique au second niveau. */
 const COMPACT = ['Processus', 'État', 'Dernière exécution', 'Retard', 'Couverture'];
@@ -1120,11 +1145,22 @@ async function resolveDecision(decision, approve) {
   if (!confirmed) return;
 
   try {
+    const before = approve ? actionBaseline(decision) : null;
     const body = approve ? undefined : { reason: 'Refusée depuis la console' };
     const result = await api(`${BASE}/decisions/${encodeURIComponent(decision.id)}/${approve ? 'approve' : 'reject'}`,
       { method: 'POST', body });
     toast(`${decision.action} — ${DECISION_LABELS[result.status] || result.status}`,
       result.status === 'FAILED' ? 'error' : undefined);
+    if (approve && result.status === 'EXECUTED' && before) {
+      remember('kex.agent.action-verification', {
+        decisionId: decision.id,
+        processId: decision.processId,
+        processName: decision.processName,
+        action: decision.action,
+        executedAt: new Date().toISOString(),
+        before,
+      });
+    }
     // Le paramètre part avec le panneau : sinon un rechargement rouvrirait une décision tranchée.
     dismissDrawer();
     await overview();
@@ -1132,6 +1168,19 @@ async function resolveDecision(decision, approve) {
   } catch (error) {
     report(error);
   }
+}
+
+function actionBaseline(decision) {
+  const data = current();
+  const process = (data?.processes || []).find((row) => row.processId === decision.processId);
+  const alerts = (data?.alerts || []).filter((alert) => alert.processId === decision.processId);
+  return {
+    cycleAt: data?.agent?.lastCycleAt || null,
+    state: process?.state || 'UNKNOWN',
+    delayMillis: process?.delayMillis ?? null,
+    alertIds: alerts.map((alert) => alert.id),
+    alertCount: alerts.length,
+  };
 }
 
 export async function decisions() {
@@ -1833,6 +1882,14 @@ export function syncFilters() {
   if ($('#audit-search').value !== auditSearch) $('#audit-search').value = auditSearch;
 }
 
+function applySavedProcessView(view) {
+  if (!view) return;
+  remember(PROCESS_FILTER_STORAGE, { state: view.state, query: view.query });
+  setParams({ etat: view.state === 'ALL' ? null : view.state, q: view.query || null });
+  syncFilters();
+  processes();
+}
+
 function syncSavedViews() {
   const select = $('#saved-process-view');
   const views = stored(SAVED_VIEWS_STORAGE, []);
@@ -1956,11 +2013,7 @@ export function wire() {
   $('#saved-process-view').addEventListener('change', (event) => {
     const view = stored(SAVED_VIEWS_STORAGE, [])[Number(event.target.value)];
     $('#delete-process-view').disabled = !view;
-    if (!view) return;
-    remember(PROCESS_FILTER_STORAGE, { state: view.state, query: view.query });
-    setParams({ etat: view.state === 'ALL' ? null : view.state, q: view.query || null });
-    syncFilters();
-    processes();
+    applySavedProcessView(view);
   });
   $('#delete-process-view').addEventListener('click', () => {
     const value = $('#saved-process-view').value;
