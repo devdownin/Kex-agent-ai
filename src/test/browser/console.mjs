@@ -911,6 +911,8 @@ await check('le parcours guidé utilise les suggestions Kafka et demande une con
     await page.click('#start-process-wizard');
     await page.fill('#process-wizard-answer', 'Intégration des commandes');
     await page.click('#process-wizard-next');
+    assert.match(await page.locator('#process-wizard-draft').innerText(), /Intégration des commandes/);
+    assert.equal(await page.locator('#process-wizard-bar').evaluate((node) => node.value), 2);
     await page.fill('#process-wizard-answer', 'Vers ERP');
     await page.click('#process-wizard-next');
     await page.waitForSelector('#process-wizard-options option[value="orders.in"]', { state: 'attached' });
@@ -935,6 +937,37 @@ await check('le parcours guidé utilise les suggestions Kafka et demande une con
     await page.unroute('**/api/agent/kafka/topics');
     await page.unroute('**/api/agent/kafka/topics/orders.in/lag');
     await page.unroute('**/api/agent/supervision/processes');
+  }
+});
+
+await check('les changements mesurés apparaissent entre deux cycles sans historique inventé', async () => {
+  let cycle = 'ui-before';
+  await page.route('**/api/agent/supervision/overview', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify(overviewStub({
+      agent: { ...overviewStub().agent, lastCycleId: cycle },
+      anomaliesDetected: cycle === 'ui-before' ? 0 : 2,
+      processesWarning: cycle === 'ui-before' ? 1 : 0,
+      processesError: cycle === 'ui-before' ? 0 : 1,
+      processes: [{ ...overviewStub().processes[0], state: cycle === 'ui-before' ? 'WARNING' : 'ERROR' }],
+    })),
+  }));
+  try {
+    await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#kpis .kpis-grid');
+    assert.equal(await page.locator('#kpis .kpi-change').count(), 0,
+      'aucune variation n’est affichée avant un deuxième cycle observé');
+    cycle = 'ui-after';
+    await page.evaluate(async () => (await import('/assets/supervision.js')).overview());
+    assert.match(await page.locator('#kpis .kpi[data-kind="alerts"] .kpi-change').innerText(),
+      /\+2 depuis le cycle précédent/);
+    assert.match(await page.locator('#overview-processes .process-change-label').innerText(),
+      /WARNING → ERROR/);
+    assert.match(await page.locator('#overview-cycle-label').innerText(), /Dernier cycle/);
+    await page.evaluate(async () => (await import('/assets/supervision.js')).overview());
+    assert.equal(await page.locator('#overview-processes tr.just-changed').count(), 0,
+      'un sondage sans changement ne relance pas l’animation');
+  } finally {
+    await page.unroute('**/api/agent/supervision/overview');
   }
 });
 
