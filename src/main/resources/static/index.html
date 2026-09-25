@@ -193,7 +193,23 @@
         </div>
         <div class="onboarding-steps" id="onboarding-steps"></div>
       </section>
+      <section class="panel since-last-visit" id="since-last-visit" data-dashboard-block="visit" hidden>
+        <div class="panel-head">
+          <div><span class="panel-kicker">Reprise opérateur</span><h2>Depuis ma dernière visite</h2></div>
+          <span class="muted" id="since-last-visit-time"></span>
+        </div>
+        <div class="comparison-grid visit-grid" id="since-last-visit-grid"></div>
+        <ul class="visit-details" id="since-last-visit-details"></ul>
+      </section>
       <div id="incident-banner" data-dashboard-block="incidents"></div>
+      <section class="panel action-verification" id="action-verification" data-dashboard-block="verification" hidden>
+        <div class="panel-head">
+          <div><span class="panel-kicker">Avant → après</span><h2 id="action-verification-title">Vérification d’action</h2></div>
+          <span class="state" id="action-verification-verdict" data-state="PENDING">En attente</span>
+        </div>
+        <p class="muted" id="action-verification-process"></p>
+        <div class="comparison-grid" id="action-verification-grid"></div>
+      </section>
       <section class="panel cycle-comparison" id="cycle-comparison" data-dashboard-block="comparison" hidden>
         <div class="panel-head"><h2>Depuis le cycle précédent</h2><span class="muted" id="comparison-time"></span></div>
         <div class="comparison-grid" id="comparison-grid"></div>
@@ -418,6 +434,7 @@
             <button type="button" class="chip-toggle" data-filter="WARNING" aria-pressed="false">Warning</button>
             <button type="button" class="chip-toggle" data-filter="ERROR" aria-pressed="false">Erreur</button>
             <button type="button" class="chip-toggle" data-filter="ATTENTION" aria-pressed="false">Intervention requise</button>
+            <button type="button" class="chip-toggle" data-filter="FAVORITES" aria-pressed="false">★ Favoris</button>
           </div>
         </div>
         <label class="sr-only" for="process-search">Rechercher un processus</label>
@@ -821,7 +838,7 @@
     <kbd>Esc</kbd>
   </div>
   <div class="command-results" id="command-results" role="listbox" aria-label="Résultats"></div>
-  <p class="command-hint">Entrée pour ouvrir · ↑↓ pour naviguer</p>
+  <p class="command-hint">Entrée pour ouvrir · ↑↓ pour naviguer · Ctrl/Cmd+K ou / pour rappeler</p>
 </dialog>
 
 <dialog id="notifications" class="notifications-dialog">
