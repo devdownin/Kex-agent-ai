@@ -344,6 +344,9 @@ function incidentDetail(incident, data, decisionHistory) {
     incidentContext(incident), incident.id, 'primary'));
   detail.append(head, el('p', 'incident-hypothesis', incident.hypothesis));
 
+  const related = relatedDecisions(incident, decisionHistory);
+  detail.append(recommendedActionSection(incident, related));
+
   const symptoms = incidentSection('Symptômes actifs', 'Ce que le dernier état confirme');
   if (incident.alerts.length) incident.alerts.forEach((alert) => symptoms.append(incidentSymptom(alert)));
   else symptoms.append(empty('Aucune alerte active correspondante.',
@@ -357,7 +360,6 @@ function incidentDetail(incident, data, decisionHistory) {
   else evidence.append(empty('Aucune preuve active à explorer.'));
   detail.append(evidence);
 
-  const related = relatedDecisions(incident, decisionHistory);
   const decisionsSection = incidentSection('Décisions liées',
     'Actions proposées ou déjà tranchées pour les processus concernés.');
   if (!related.length) decisionsSection.append(empty('Aucune décision liée.'));
@@ -368,6 +370,54 @@ function incidentDetail(incident, data, decisionHistory) {
   chronology.append(incidentTimeline(incident, data.lastCycle));
   detail.append(chronology);
   return detail;
+}
+
+function recommendedActionSection(incident, related) {
+  const section = incidentSection('Prochaine action recommandée',
+    'Une proposition exploitable, avec son fondement, son impact et le niveau de confiance.');
+  const pending = (related || []).find((decision) => decision.status === 'PENDING_APPROVAL');
+  const recommendedAlert = [...incident.alerts]
+    .filter((alert) => alert.recommendation)
+    .sort((left, right) => (right.confidence || 0) - (left.confidence || 0))[0];
+
+  if (!pending && !recommendedAlert) {
+    section.append(empty('Aucune action proposée.',
+      'L’incident reste observable sans inventer de remédiation : poursuivez l’investigation avec l’agent.'));
+    section.append(contextChatButton('Investiguer avec l’agent', `Incident · ${incident.title}`,
+      incidentContext(incident), incident.id, 'primary'));
+    return section;
+  }
+
+  const card = el('article', 'recommended-action');
+  if (pending) {
+    card.dataset.state = 'PENDING';
+    card.append(
+      stateTag('PENDING', 'Validation requise'),
+      el('h4', null, pending.action),
+      definition('Pourquoi', el('span', null, pending.context || pending.objective || incident.hypothesis || '—')),
+      definition('Impact estimé', el('span', null, pending.estimatedImpact || 'Non renseigné')),
+      confidenceBar(pending.confidence, pending.observations?.length),
+    );
+    card.append(decisionActions(pending));
+  } else {
+    card.dataset.state = recommendedAlert.severity;
+    card.append(
+      stateTag(recommendedAlert.severity, 'Recommandation'),
+      el('h4', null, recommendedAlert.recommendation),
+      definition('Pourquoi', el('span', null, recommendedAlert.analysis || recommendedAlert.title)),
+      definition('Impact estimé', el('span', null, 'À confirmer avant exécution')),
+      confidenceBar(recommendedAlert.confidence, recommendedAlert.observations?.length),
+    );
+    const actions = el('div', 'row-end');
+    const inspect = el('button', 'ghost', 'Voir l’alerte');
+    inspect.type = 'button';
+    inspect.addEventListener('click', () => openAnomaly(recommendedAlert));
+    actions.append(inspect, contextChatButton('Investiguer', `Alerte · ${recommendedAlert.title}`,
+      alertContext(recommendedAlert), `alert:${recommendedAlert.id}`, 'primary'));
+    card.append(actions);
+  }
+  section.append(card);
+  return section;
 }
 
 function incidentSection(title, subtitleText) {
@@ -400,6 +450,7 @@ function evidenceNode(alert, processes) {
     definition('Source', el('span', null, `Supervision · ${alert.processName}`)),
     definition('Fraîcheur', el('span', null, `${ago(alert.lastSeenAt) || 'à l’instant'} (${stamp(alert.lastSeenAt)})`)),
     definition('Couverture', process?.coverage ? coverageTag(process.coverage) : el('span', 'muted', 'Non renseignée')),
+    definition('Nature', el('span', null, alert.observations?.length ? 'Faits observés + analyse' : 'Analyse sans mesure structurée')),
   );
   body.append(provenance);
   if (alert.observations?.length) {
@@ -417,6 +468,9 @@ function evidenceNode(alert, processes) {
   raw.append(el('summary', null, 'Données brutes'), el('pre', 'dump', JSON.stringify({
     id: alert.id, processId: alert.processId, observations: alert.observations,
     firstSeenAt: alert.firstSeenAt, lastSeenAt: alert.lastSeenAt, confidence: alert.confidence,
+    probableCause: alert.probableCause, recommendation: alert.recommendation,
+    knowledgeReference: alert.knowledgeReference, pendingDecisionId: alert.pendingDecisionId,
+    decisionIds: alert.decisionIds,
   }, null, 2)));
   body.append(raw);
   node.append(body);
