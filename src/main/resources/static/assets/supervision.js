@@ -6,7 +6,7 @@
 import {
   $, ago, api, busy, circuitBreakersValue, clockTime, confirmAction, definition, dismissDrawer,
   downloadCsv, drawerOpen, duration, el, empty, errorState, frag, freshnessTag, inOperatorPeriod, loading,
-  openDrawer, operatorContext, params, percent, registerDrawer, render, report, setParams, skeleton, sortable, sparkline, stamp, stateMark,
+  openDrawer, operatorContext, params, percent, registerDrawer, render, report, setOperatorContext, setParams, skeleton, sortable, sparkline, stamp, stateMark,
   stateTag, toast,
 } from './core.js';
 
@@ -233,6 +233,12 @@ export async function attentionView() {
     const critical = alerts.filter((item) => item.severity === 'ERROR').length
       + degraded.filter((item) => item.state === 'ERROR').length;
     const workspace = el('div', 'attention-grid');
+    if (!data.processesMonitored && !(current()?.processes?.length)) {
+      workspace.append(empty('Aucun processus sous surveillance.',
+        'Déclarez votre premier processus pour remplir cette file avec des observations réelles.',
+        { href: '#/chat?creation=process', label: 'Préparer un processus' }));
+      return workspace;
+    }
     const summary = el('section', 'attention-summary');
     const copy = el('div', 'attention-summary-copy');
     copy.append(el('strong', null, `${total} élément${total === 1 ? '' : 's'} à traiter`),
@@ -271,8 +277,14 @@ export async function incidents() {
 function incidentWorkspace(data, decisionHistory) {
   const candidates = incidentCandidates(data);
   if (!candidates.length) {
+    if (!data.processesMonitored) return empty('Aucun processus à examiner.',
+      'Préparez un processus surveillé pour que l’agent puisse rechercher des anomalies.',
+      { href: '#/chat?creation=process', label: 'Préparer un processus' });
+    if (!data.agent?.lastCycleAt) return empty('Aucun cycle exécuté.',
+      'L’agent pourra afficher les incidents après sa première analyse.',
+      { href: '#/overview', label: 'Lancer une analyse' });
     return empty('Aucun incident actif.',
-      'Le cockpit apparaît dès qu’une anomalie est active ou que plusieurs processus sont corrélés.',
+      'Les processus surveillés n’ont pas d’incident actif au dernier cycle.',
       { href: '#/overview', label: 'Voir la synthèse' });
   }
   const selectedId = params().get('incident');
@@ -646,8 +658,15 @@ function attention(data) {
   const pending = data.pending || [];
   const alerts = data.alerts || [];
   if (!pending.length && !alerts.length) {
-    return empty('Aucune anomalie détectée.', `Dernière analyse : ${clockTime(data.agent.lastCycleAt)}`,
-      { href: '#/attention', label: 'Ouvrir la file d’action' });
+    if (!data.processesMonitored) return empty('Aucun processus sous surveillance.',
+      'Déclarez un processus pour commencer à recevoir des alertes et des décisions.',
+      { href: '#/chat?creation=process', label: 'Préparer un processus' });
+    if (!data.agent?.lastCycleAt) return empty('Premier relevé en attente.',
+      'Lancez une analyse pour connaître l’état de vos processus.',
+      { href: '#/agent', label: 'Piloter l’agent' });
+    return empty('Aucune alerte ni décision en attente.',
+      `Dernière analyse : ${clockTime(data.agent.lastCycleAt)}. Les processus restent consultables.`,
+      { href: '#/processes', label: 'Voir les processus' });
   }
   const list = el('div', 'cards');
   pending.forEach((decision) => list.append(approvalCard(decision)));
@@ -659,8 +678,13 @@ function attention(data) {
 }
 
 function timeline(cycle) {
-  if (!cycle) return empty('Aucun cycle exécuté.', 'Lancez une analyse depuis l’en-tête.',
-    { href: '#/overview', label: 'Revenir au pilotage' });
+  if (!cycle) {
+    if (!current()?.processes?.length) return empty('Le premier cycle attend un processus.',
+      'Déclarez un processus avant de lancer son analyse.',
+      { href: '#/chat?creation=process', label: 'Préparer un processus' });
+    return empty('Aucun cycle exécuté.', 'Le premier relevé donnera ici les étapes observées.',
+      { href: '#/agent', label: 'Piloter l’agent' });
+  }
   const list = el('ol', 'timeline');
   for (const event of cycle.events) {
     const item = el('li');
@@ -734,9 +758,27 @@ const FULL = ['Processus', 'État', 'Dernière exécution', 'Durée', 'Retard', 
 
 function processTable(rows, onSelect, limit, columns = FULL) {
   if (!rows || !rows.length) {
-    return empty('Aucun processus surveillé.',
-      'Déclarez-les dans kex.agent.supervision.processes — rien n’est inventé pour remplir l’écran.',
-      { href: '#/settings', label: 'Voir la configuration' });
+    if (current()?.processes?.length) return empty('Aucun processus dans cette sélection.',
+      'Élargissez vos filtres ou affichez tous les processus surveillés.',
+      { onClick: () => {
+        remember(PROCESS_FILTER_STORAGE, { state: 'ALL', query: '' });
+        setOperatorContext({ process: '', period: 'all' });
+        $('#context-process').value = '';
+        $('#context-period').value = 'all';
+        if (params().has('q') || params().has('etat')) setParams({ q: null, etat: null });
+        syncFilters();
+        location.hash = '#/processes';
+        processes();
+      }, label: 'Afficher tous les processus' });
+    const guide = empty('Votre premier processus commence ici.',
+      'Renseignez son nom et son topic d’entrée. Vous pourrez vérifier sa déclaration avant l’enregistrement.',
+      { href: '#/chat?creation=process', label: 'Préparer un processus' });
+    guide.classList.add('empty-guide');
+    const steps = el('ol', 'empty-steps');
+    ['Décrire le processus', 'Choisir les topics à suivre', 'Vérifier la déclaration']
+      .forEach((label) => steps.append(el('li', null, label)));
+    guide.querySelector('.empty-action').before(steps);
+    return guide;
   }
   const table = el('table', 'grid');
   const head = el('thead');

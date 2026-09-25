@@ -688,6 +688,20 @@ legend { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter
   font: 700 16px var(--mono);
 }
 .empty-action { margin-top: 4px; text-decoration: none; }
+.empty-guide {
+  gap: 11px;
+  padding: 24px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  background: linear-gradient(130deg, var(--accent-soft), var(--surface) 56%);
+  color: var(--ink);
+}
+.empty-guide::before { content: "+" !important; color: var(--accent) !important; background: var(--surface) !important; }
+.empty-guide > p:first-of-type { font-size: 15px; font-weight: 700; }
+.empty-guide > .hint { color: var(--ink-2); }
+.empty-steps { display: flex; flex-wrap: wrap; gap: 9px; margin: 3px 0 0; padding: 0; list-style: none; counter-reset: guide; }
+.empty-steps li { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line-soft); font-size: 12px; color: var(--ink-2); }
+.empty-steps li::before { counter-increment: guide; content: counter(guide); display: grid; place-items: center; flex: none; width: 19px; height: 19px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700; }
+.empty-guide .empty-action { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); font-weight: 700; }
 /* Même règle que les pastilles et les KPI : la couleur ne porte jamais l'état seule. Sans ce
    glyphe, une erreur ne se distinguait de « rien à signaler » que par la couleur du texte, et
    `.state.empty` — pas d'anomalie, pas de décision en attente — restait le seul état vraiment

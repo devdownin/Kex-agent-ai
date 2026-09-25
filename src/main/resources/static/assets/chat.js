@@ -592,6 +592,10 @@ function openHistory() {
 
 /** Reprend un diagnostic contextuel préparé depuis une alerte ou un processus. */
 export function prefill() {
+  if (params().get('creation') === 'process') {
+    setParams({ creation: null }, true);
+    $('#start-process-wizard').click();
+  }
   const draft = params().get('draft');
   if (!draft) return;
   const field = $('#prompt');
