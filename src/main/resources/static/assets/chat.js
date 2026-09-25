@@ -21,6 +21,25 @@ const CONTEXT_CONVERSATIONS = 'kex.agent.context-conversations';
 const MAX_HISTORY = 20;
 const MAX_TURNS_STORED = 40;
 
+const PROCESS_STARTERS = [
+  {
+    label: 'Définir un processus',
+    prompt: 'Aide-moi à définir un nouveau processus d’intégration à surveiller. Pose-moi les questions nécessaires sur son objectif, ses étapes, ses sources et destinations, et les preuves disponibles avant de proposer sa déclaration dans kex.agent.supervision.processes.',
+  },
+  {
+    label: 'Suivre un flux Kafka',
+    prompt: 'Prépare une entrée YAML sous kex.agent.supervision.processes pour un flux Kafka allant de [topic source] à [topic destination], consommé par [consumer group]. Propose id, name, description et hint fondés sur ces informations. Signale ce qu’il faut encore vérifier.',
+  },
+  {
+    label: 'Suivre plusieurs étapes',
+    prompt: 'Aide-moi à décrire un processus d’intégration en plusieurs étapes : [étapes et topics dans l’ordre]. Identifie les preuves à contrôler à chaque étape, puis propose les champs id, name, description et hint de son entrée YAML sous kex.agent.supervision.processes.',
+  },
+  {
+    label: 'Surveiller les échecs',
+    prompt: 'Prépare une entrée YAML sous kex.agent.supervision.processes pour [flux métier] avec sa DLQ [topic DLQ] et son consumer group [groupe]. Décris comment détecter un retard ou des échecs et propose id, name, description et hint sans supposer de seuils non fournis.',
+  },
+];
+
 let conversationId = null;
 let inFlight = null;
 let unauthorized = () => {};
@@ -589,6 +608,18 @@ export function prefill() {
 export function wire(onUnauthorized) {
   unauthorized = onUnauthorized;
   setConversation(conversationId);
+  $('#chat-process-starters').replaceChildren(...PROCESS_STARTERS.map(({ label, prompt }) => {
+    const button = el('button', 'ghost', label);
+    button.type = 'button';
+    button.addEventListener('click', () => {
+      const field = $('#prompt');
+      field.value = field.value.trim() ? `${field.value.trimEnd()}\n\n${prompt}` : prompt;
+      resizeComposer(field);
+      field.focus();
+      field.setSelectionRange(field.value.length, field.value.length);
+    });
+    return button;
+  }));
   registerDrawer('historique', openHistory);
   addEventListener('kex:context-chat', (event) => openContextual(event.detail));
   $('#context-chat-close').addEventListener('click', closeContextual);
