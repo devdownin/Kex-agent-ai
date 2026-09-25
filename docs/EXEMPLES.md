@@ -14,6 +14,39 @@ découverte de serveurs MCP sont des gestes d'exploitation, pas des phrases — 
 [Ce qui n'est pas un prompt](#ce-qui-nest-pas-un-prompt). Le dire évite une démonstration qui tombe
 à plat devant un agent qui répond « je n'ai pas d'outil pour ça ».
 
+
+## Démo reproductible : incident → preuve → décision
+
+Le profil de démonstration part de la stack Docker standard et ajoute uniquement des données de
+scénario. Il ne remplace ni les outils MCP ni le cycle de supervision par des mocks.
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+export EXPLORER_MCP_AUTH_TOKEN="$(openssl rand -hex 32)"
+export KEX_AGENT_API_KEY="$(openssl rand -hex 32)"
+
+docker compose -f docker-compose.yml -f compose/demo.yml up -d
+```
+
+Le service `demo-seed` prépare cinq topics déterministes :
+
+| Scénario | Données préparées | Ce qu'il permet d'observer |
+|---|---|---|
+| Flux nominal | `demo.nominal`, 12 événements traités | référence saine |
+| Topic vide | `demo.empty`, aucun événement | absence réelle de données |
+| Flux interrompu | `demo.stalled`, un dernier événement puis plus rien | différence entre historique présent et flux vivant |
+| Consumer en retard | `demo.lag`, 30 événements ; `demo-slow-consumer` n'en lit que 3 | consumer lag réel |
+| DLQ | `demo.dlq`, 5 événements en erreur | matière pour une investigation d'échec |
+
+L'overlay déclare également quatre processus de supervision avec des *hints* explicites. Ces hints
+indiquent quelles preuves Kafka inspecter ; ils ne codent ni le verdict ni l'action. Après le
+démarrage, ouvrez le Control Center, lancez un cycle puis ouvrez **Incidents**. Le parcours attendu
+est : symptômes → prochaine action recommandée → explorateur de preuves → décision/validation →
+chronologie.
+
+Le seed est rejouable. Les topics sont créés avec `--if-not-exists`; pour repartir d'un état
+strictement vide, supprimez les volumes de la stack avant de relancer la démo.
+
 ## Enquêter sur le cluster
 
 L'outil fait le travail, le modèle ne récite pas.
