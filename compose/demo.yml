@@ -1,0 +1,31 @@
+# Reproducible demonstration overlay for the standard docker-compose.yml.
+# Usage:
+#   docker compose -f docker-compose.yml -f compose/demo.yml up -d
+services:
+  demo-seed:
+    image: apache/kafka:4.3.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    volumes:
+      - ../scripts/demo-seed.sh:/demo-seed.sh:ro
+    entrypoint: ["bash", "/demo-seed.sh"]
+    restart: "no"
+
+  agent:
+    depends_on:
+      - explorer
+      - demo-seed
+    environment:
+      # Keep the normal agent configuration, but declare four explicit processes for the demo.
+      # The hints tell the supervised cycle which Kafka evidence to inspect; they do not hard-code
+      # a diagnosis or bypass MCP.
+      SPRING_APPLICATION_JSON: >-
+        {"kex":{"agent":{"supervision":{"processes":[
+          {"id":"demo-nominal","name":"Demo · Flux nominal","description":"Flux de référence alimenté régulièrement","hint":"Inspecte le topic demo.nominal et confirme la présence de messages récents."},
+          {"id":"demo-empty","name":"Demo · Topic vide","description":"Topic volontairement vide","hint":"Inspecte le topic demo.empty et signale explicitement qu'il ne contient aucun message."},
+          {"id":"demo-stalled","name":"Demo · Flux interrompu","description":"Flux ayant émis puis cessé","hint":"Inspecte demo.stalled : un événement historique existe mais aucun producteur ne l'alimente ensuite."},
+          {"id":"demo-lag","name":"Demo · Consumer en retard","description":"Consumer volontairement derrière le flux","hint":"Inspecte demo.lag et le groupe demo-slow-consumer ; mesure le consumer lag réel."}
+        ]}}}}
