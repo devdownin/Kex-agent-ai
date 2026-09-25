@@ -942,10 +942,17 @@ await check('le parcours guidé utilise les suggestions Kafka et demande une con
 
 await check('les changements mesurés apparaissent entre deux cycles sans historique inventé', async () => {
   let cycle = 'ui-before';
+  const previousContext = await page.evaluate(() => localStorage.getItem('kex.agent.operator-context'));
+  await page.evaluate(() => localStorage.setItem('kex.agent.operator-context',
+    JSON.stringify({ process: '', period: 'all' })));
   await page.route('**/api/agent/supervision/overview', (route) => route.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify(overviewStub({
       agent: { ...overviewStub().agent, lastCycleId: cycle },
       anomaliesDetected: cycle === 'ui-before' ? 0 : 2,
+      alerts: cycle === 'ui-before' ? [] : [1, 2].map((id) => ({
+        id: `ui-alert-${id}`, processId: 'order-integration', processName: 'Order Integration',
+        title: `Alerte ${id}`, severity: 'ERROR', lastSeenAt: new Date().toISOString(),
+      })),
       processesWarning: cycle === 'ui-before' ? 1 : 0,
       processesError: cycle === 'ui-before' ? 0 : 1,
       processes: [{ ...overviewStub().processes[0], state: cycle === 'ui-before' ? 'WARNING' : 'ERROR' }],
@@ -968,6 +975,10 @@ await check('les changements mesurés apparaissent entre deux cycles sans histor
       'un sondage sans changement ne relance pas l’animation');
   } finally {
     await page.unroute('**/api/agent/supervision/overview');
+    await page.evaluate((saved) => {
+      if (saved === null) localStorage.removeItem('kex.agent.operator-context');
+      else localStorage.setItem('kex.agent.operator-context', saved);
+    }, previousContext);
   }
 });
 
