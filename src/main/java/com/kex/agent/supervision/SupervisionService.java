@@ -636,6 +636,12 @@ public class SupervisionService {
                 - `kex_flow_health` pour repérer un drop entre étapes d'un flux ;
                 - `kex_incident_evidence` pour consolider les faits d'une anomalie avant de proposer une action ;
                 - `kex_compare_process_state` uniquement pour vérifier un avant/après quand une baseline explicite est disponible. Si `kex_process_health` ou `kex_incident_evidence` a rendu un `measurementId`, préfère `beforeMeasurementId` avec les mêmes stages et la même fenêtre ; ne mélange pas cet identifiant avec les anciens champs `before*`. Un verdict UNKNOWN ou une couverture incomplète ne prouve pas une résolution.
+                - `kex_dlq_diagnosis` pour mesurer une DLQ, sa tendance et ses signatures récentes ;
+                  fournis le topic source explicitement si tu veux calculer une part DLQ/source ;
+                - `kex_compare_windows` pour comparer deux fenêtres d'activité Kafka consécutives et
+                  homogènes. Utilise ses variations et ses drops comme corrélations, pas comme preuve
+                  de perte de messages ; le lag historique, la latence et les erreurs applicatives
+                  restent non mesurés par cet outil.
 
                 Ne remplace pas ces outils par une succession de primitives plus basses si le même
                 diagnostic est déjà rendu directement. N'invente jamais les arguments structurés
@@ -655,6 +661,11 @@ public class SupervisionService {
                   « rattrapé » ou « aucun échec » ; une mesure absente n'affirme rien.
                 - Quand un outil rend un verdict (CAUGHT_UP, BEHIND, STALLED...), suis-le plutôt \
                   que de réinterpréter les nombres toi-même.
+                - Pour `kex_dlq_diagnosis`, les signatures, clés répétées et partitions concernent
+                  seulement l'échantillon récent borné ; ne les présente jamais comme la distribution
+                  complète de la DLQ. Une part non mesurée n'est pas 0 %.
+                - Pour `kex_compare_windows`, une variation en pourcentage dont la baseline vaut
+                  zéro est non mesurée ; conserve aussi les fenêtres et la couverture retournées.
                 - Si un `resumeToken` est fourni et que le budget le permet, poursuis le relevé \
                   avant de conclure.
 

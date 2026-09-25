@@ -256,6 +256,10 @@ kex:
         #   # Le hint donne les arguments structurés attendus par les outils opérationnels
         #   # KafkaExplorer ; l'agent ne déduit pas des topics depuis le seul nom du processus.
         #   hint: topics [integration.received, integration.validated], consumer group integration-consumer
+        #   # Pour une DLQ, préciser aussi le topic source afin que kex_dlq_diagnosis
+        #   # mesure la part DLQ/source sans deviner l'appariement.
+        #   # kex_compare_windows compare deux fenêtres d'activité consécutives ; les valeurs
+        #   # non mesurées restent UNKNOWN et ne doivent pas être remplacées par zéro.
       # Le mode ne peut que restreindre l'autonomie déclarée d'une capacité, jamais l'élargir.
       mode: SUPERVISED
       # En deçà, une action autonome repasse en validation humaine plutôt que de s'exécuter.

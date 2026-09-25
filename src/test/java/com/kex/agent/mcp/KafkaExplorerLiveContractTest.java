@@ -27,12 +27,12 @@ class KafkaExplorerLiveContractTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Set<String> TOOLS = Set.of("kex_process_health", "kex_topic_activity",
             "kex_diagnose_consumer", "kex_flow_health", "kex_compare_process_state",
-            "kex_incident_evidence");
+            "kex_incident_evidence", "kex_dlq_diagnosis", "kex_compare_windows");
 
     @Autowired McpToolCatalog catalog;
 
     @Test
-    void kex_consumes_the_six_real_kafka_explorer_tools() throws Exception {
+    void kex_consumes_the_eight_real_kafka_explorer_tools() throws Exception {
         String url = System.getenv("KAFKA_EXPLORER_MCP_URL");
         assumeTrue(url != null && !url.isBlank(), "Set KAFKA_EXPLORER_MCP_URL for the live contract");
         String topic = System.getenv().getOrDefault("KAFKA_EXPLORER_TEST_TOPIC", "demo.orders.1.received");
@@ -64,6 +64,16 @@ class KafkaExplorerLiveContractTest {
                     .isEqualTo(measurementId);
             assertThat(comparison.path("data").path("afterMeasurementId").asText()).isNotBlank();
             assertThat(comparison.path("data").path("verdict").asText()).isNotBlank();
+            JsonNode windows = call("kex_compare_windows", Map.of("topics", List.of(topic)));
+            assertThat(windows.path("coverage").isObject()).isTrue();
+            assertThat(windows.path("data").path("topics").isArray()).isTrue();
+            String dlq = System.getenv("KAFKA_EXPLORER_TEST_DLQ_TOPIC");
+            if (dlq != null && !dlq.isBlank()) {
+                JsonNode diagnosis = call("kex_dlq_diagnosis", Map.of(
+                        "queueTopic", dlq, "sourceTopic", topic));
+                assertThat(diagnosis.path("coverage").isObject()).isTrue();
+                assertThat(diagnosis.path("data").path("queueTopic").asText()).isEqualTo(dlq);
+            }
         } finally {
             if (catalog.dynamicConnectionNames().contains("explorer-contract")) {
                 catalog.unregister("explorer-contract");
