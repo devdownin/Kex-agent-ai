@@ -952,6 +952,9 @@ class SupervisionServiceTest {
                 .contains("kex_flow_health")
                 .contains("kex_compare_process_state")
                 .contains("kex_incident_evidence")
+                .contains("kex_dlq_diagnosis")
+                .contains("kex_compare_windows")
+                .contains("échantillon récent borné")
                 .contains("reste UNKNOWN plutôt que de");
     }
 

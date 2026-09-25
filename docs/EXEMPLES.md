@@ -86,6 +86,19 @@ transmettre en `beforeMeasurementId` avec les mêmes stages et la même fenêtre
 que la mesure « après » porte sur une fenêtre postérieure. La comparaison doit viser la même instance
 KafkaExplorer (snapshots temporaires en mémoire) ; un résultat `UNKNOWN` ne confirme pas la résolution.
 
+Pour une DLQ, déclarer la relation dans le hint au lieu de laisser l'agent l'inférer :
+
+```
+Diagnostique demo.orders.dlq avec demo.orders comme topic source, puis compare
+les 15 dernières minutes aux 15 minutes précédentes sur demo.orders et demo.orders.dlq.
+```
+
+Kex privilégie alors `kex_dlq_diagnosis` pour la mesure de la file et `kex_compare_windows` pour
+la tendance. Les signatures d'erreur, clés répétées et partitions sont celles d'un échantillon
+récent borné ; elles ne décrivent pas toute la DLQ. Si la source n'est pas fournie, la part
+DLQ/source reste non mesurée. Une baseline nulle, une couverture incomplète ou un historique de
+lag indisponible ne doivent jamais être transformés en zéro.
+
 ## Diagnostiquer
 
 Faire dire *pourquoi*, pas *quoi*.
