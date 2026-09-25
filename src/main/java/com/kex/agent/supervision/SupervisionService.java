@@ -635,7 +635,7 @@ public class SupervisionService {
                 - `kex_diagnose_consumer` pour qualifier un consumer sans réinterpréter son lag ;
                 - `kex_flow_health` pour repérer un drop entre étapes d'un flux ;
                 - `kex_incident_evidence` pour consolider les faits d'une anomalie avant de proposer une action ;
-                - `kex_compare_process_state` uniquement pour vérifier un avant/après quand une baseline explicite est disponible.
+                - `kex_compare_process_state` uniquement pour vérifier un avant/après quand une baseline explicite est disponible. Si `kex_process_health` ou `kex_incident_evidence` a rendu un `measurementId`, préfère `beforeMeasurementId` avec les mêmes stages et la même fenêtre ; ne mélange pas cet identifiant avec les anciens champs `before*`. Un verdict UNKNOWN ou une couverture incomplète ne prouve pas une résolution.
 
                 Ne remplace pas ces outils par une succession de primitives plus basses si le même
                 diagnostic est déjà rendu directement. N'invente jamais les arguments structurés
