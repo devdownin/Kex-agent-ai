@@ -649,7 +649,8 @@ L'exécution se fait sous l'UID `10001`, pas root.
   autorisée (`kex.mcp.runtime.isolation.images`) — sans repli sur l'hôte si aucune image n'est
   déclarée pour la commande.
 - Automatic procedures are stored as pending skills and need an authenticated operator review before they enter durable context.
-- `kex.mcp.catalog.sources.docker.enabled=false` et `kex.mcp.catalog.sources.official-registry.enabled=false`
-  par défaut : lister `GET /api/agent/mcp/catalog/discover` appelle sinon un service tiers (Docker
-  Hub, le registre officiel MCP) à chaque consultation. Voir `docs/MCP.md#découvrir-des-serveurs-depuis-des-registres-externes`
+- `kex.mcp.catalog.sources.docker.enabled=false` et `kex.mcp.catalog.sources.official-registry.enabled=true`
+  par défaut : lister `GET /api/agent/mcp/catalog/discover` consulte le registre officiel MCP.
+  Définir `KEX_MCP_CATALOG_OFFICIAL_REGISTRY_ENABLED=false` pour désactiver cet accès réseau ;
+  Docker Hub reste désactivé tant que l'opérateur ne l'active pas. Voir `docs/MCP.md#découvrir-des-serveurs-depuis-des-registres-externes`
   pour la note de confiance et les critères éliminatoires qui gardent l'installation ADMIN-seule.

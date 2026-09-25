@@ -8,10 +8,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
- * Éteintes par défaut, comme chaque extension qui ajoute une sortie réseau propre à l'agent
- * (automation, channels, mcp.server, routage multi-modèles) : interroger un registre tiers à
- * chaque chargement du catalogue est un choix d'opérateur, pas un comportement d'installation par
- * défaut. {@code baseUrl} est fourni par {@code application.yml} (avec sa vraie valeur par défaut,
+ * Le registre officiel est activé par défaut dans {@code application.yml} pour la découverte
+ * en lecture seule ; Docker reste optionnel. {@code baseUrl} est fourni par
+ * {@code application.yml} (avec sa vraie valeur par défaut,
  * substituable par variable d'environnement comme {@code KAFKA_EXPLORER_URL} ailleurs) plutôt que
  * par une annotation Java : les deux sources partagent le même type {@link Source}, qui ne peut
  * donc pas porter deux URL par défaut distinctes.

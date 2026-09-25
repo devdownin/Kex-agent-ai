@@ -132,11 +132,12 @@ Au-delà des deux entrées curées de `GET /api/agent/mcp/catalog` (GitHub en le
 Microsoft Learn), `GET /api/agent/mcp/catalog/discover` interroge des registres tiers pour
 proposer des candidats non pré-vérifiés par le projet — chacun noté par un calcul de confiance
 déterministe plutôt que jugé par le modèle, pour rester reproductible et testable comme toute
-autre règle de sécurité de l'agent. Deux sources aujourd'hui, chacune éteinte par défaut :
+autre règle de sécurité de l'agent. Le registre officiel est activé par défaut ; la source Docker
+reste optionnelle. Pour modifier ce comportement :
 
 ```bash
 export KEX_MCP_CATALOG_DOCKER_ENABLED=true
-export KEX_MCP_CATALOG_OFFICIAL_REGISTRY_ENABLED=true
+export KEX_MCP_CATALOG_OFFICIAL_REGISTRY_ENABLED=false # désactiver le registre officiel
 ```
 
 | Source | Ce qu'elle expose |
