@@ -6,7 +6,7 @@ le geste réel qu'il déclenche : rien ici ne suppose une capacité qui n'existe
 Deux choses à savoir avant de démarrer une démonstration.
 
 **L'agent n'expose que deux outils au modèle** — `remember_fact` et `recall_facts`. Tout le reste
-vient des serveurs MCP branchés : par défaut les quinze outils `kex_*` de
+vient des serveurs MCP branchés : par défaut les vingt-et-un outils `kex_*` de
 [Kafka SQL Explorer](https://github.com/devdownin/Kafkaexplorer), en lecture seule.
 
 **Tout ne passe pas par un prompt.** Le cycle de supervision, la validation d'une décision et la
@@ -70,6 +70,18 @@ Quels consumer groups sont en retard, et de combien de temps — pas de combien 
 Le dernier est le plus démonstratif : Explorer rend un retard **en temps**, l'âge du plus vieux
 message non lu, et l'agent ne le recalcule pas. Une mesure absente s'affiche « non mesurée », jamais
 zéro — confondre les deux ferait lire un consumer à l'arrêt comme un consumer à jour.
+
+Les diagnostics opérationnels récents réduisent encore le nombre d'appels nécessaires au modèle :
+
+```
+Donne-moi l'état du processus orders sur [demo.orders.in, demo.orders.out] et diagnostique
+le consumer group orders-worker.
+```
+
+Le cycle de supervision privilégie alors `kex_process_health`, `kex_topic_activity`,
+`kex_diagnose_consumer` et `kex_flow_health`. S'il détecte une anomalie, il peut consolider
+les faits avec `kex_incident_evidence`. Après une action, `kex_compare_process_state` ne sert
+qu'avec une baseline explicite : ni Kex ni KafkaExplorer n'inventent l'état « avant ».
 
 ## Diagnostiquer
 
