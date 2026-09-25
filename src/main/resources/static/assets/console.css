@@ -1161,6 +1161,20 @@ table.grid tr.clickable:hover td:last-child { border-top-right-radius: var(--rad
 .incident-symptom:first-of-type, .incident-decision:first-of-type { border-top: 0; }
 .incident-symptom .muted, .incident-decision .muted { grid-column: 2; font-size: 11px; }
 .incident-symptom button, .incident-decision button { grid-column: 3; grid-row: 1 / span 2; }
+.recommended-action {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--agent) 25%, var(--line));
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--agent-soft), var(--surface));
+}
+.recommended-action[data-state="PENDING"] { border-color: color-mix(in srgb, var(--pending) 42%, var(--line)); }
+.recommended-action[data-state="ERROR"] { border-color: color-mix(in srgb, var(--danger) 42%, var(--line)); }
+.recommended-action h4 { margin: 0; font-size: 16px; line-height: 1.4; }
+.recommended-action .definition { padding: 2px 0; }
+.recommended-action .decision-actions { margin-top: 2px; }
 .evidence-node { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); margin-top: 8px; overflow: hidden; }
 .evidence-node > summary { cursor: pointer; display: flex; align-items: center; gap: 9px; padding: 12px; background: var(--surface-2); }
 .evidence-node > summary .muted { margin-left: auto; font-size: 11px; }
