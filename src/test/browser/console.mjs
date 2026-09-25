@@ -303,8 +303,14 @@ await check('le cockpit relie incident, preuves et chat contextuel sans changer 
   await page.goto(`${BASE}/#/incidents`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#incident-workspace .incident-detail');
   const sectionTitles = await page.$$eval('.incident-section > h3', (nodes) => nodes.map((node) => node.textContent));
-  assert.deepEqual(sectionTitles, ['Symptômes actifs', 'Explorateur de preuves', 'Décisions liées', 'Chronologie']);
-  const decisionsText = await page.$eval('.incident-section:nth-of-type(3)', (node) => node.innerText);
+  assert.deepEqual(sectionTitles, [
+    'Prochaine action recommandée',
+    'Symptômes actifs',
+    'Explorateur de preuves',
+    'Décisions liées',
+    'Chronologie',
+  ]);
+  const decisionsText = await page.$eval('.incident-section:nth-of-type(4)', (node) => node.innerText);
   assert.match(decisionsText, /Décision réellement liée/);
   assert.doesNotMatch(decisionsText, /Décision étrangère/);
   await page.click('.evidence-node > summary');
