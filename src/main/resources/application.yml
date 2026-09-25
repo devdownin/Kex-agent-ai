@@ -253,7 +253,9 @@ kex:
         # - id: order-integration
         #   name: Order Integration
         #   description: Commandes reçues du site vers l'ERP
-        #   hint: topic integration.events, consumer group integration-consumer
+        #   # Le hint donne les arguments structurés attendus par les outils opérationnels
+        #   # KafkaExplorer ; l'agent ne déduit pas des topics depuis le seul nom du processus.
+        #   hint: topics [integration.received, integration.validated], consumer group integration-consumer
       # Le mode ne peut que restreindre l'autonomie déclarée d'une capacité, jamais l'élargir.
       mode: SUPERVISED
       # En deçà, une action autonome repasse en validation humaine plutôt que de s'exécuter.
