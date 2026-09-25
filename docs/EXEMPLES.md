@@ -81,7 +81,10 @@ le consumer group orders-worker.
 Le cycle de supervision privilégie alors `kex_process_health`, `kex_topic_activity`,
 `kex_diagnose_consumer` et `kex_flow_health`. S'il détecte une anomalie, il peut consolider
 les faits avec `kex_incident_evidence`. Après une action, `kex_compare_process_state` ne sert
-qu'avec une baseline explicite : ni Kex ni KafkaExplorer n'inventent l'état « avant ».
+qu'avec une baseline explicite : conserver le `measurementId` rendu par la mesure « avant » et le
+transmettre en `beforeMeasurementId` avec les mêmes stages et la même fenêtre. KafkaExplorer vérifie
+que la mesure « après » porte sur une fenêtre postérieure. La comparaison doit viser la même instance
+KafkaExplorer (snapshots temporaires en mémoire) ; un résultat `UNKNOWN` ne confirme pas la résolution.
 
 ## Diagnostiquer
 
