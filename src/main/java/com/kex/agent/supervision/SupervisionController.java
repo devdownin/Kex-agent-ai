@@ -61,6 +61,23 @@ class SupervisionController {
         return supervision.snapshots();
     }
 
+    @GetMapping("/processes/definitions")
+    List<MonitoredProcess> processDefinitions() {
+        return supervision.processes();
+    }
+
+    @PostMapping("/processes")
+    @ResponseStatus(HttpStatus.CREATED)
+    MonitoredProcess createProcess(@Valid @RequestBody ProcessCreationRequest request, Principal principal) {
+        return supervision.createProcess(request, actor(principal));
+    }
+
+    @ExceptionHandler(ProcessDefinitionConflict.class)
+    ResponseEntity<ProblemDetail> processConflict(ProcessDefinitionConflict ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(detail);
+    }
+
     /** Dédupliquées et priorisées : deux cycles voyant le même symptôme signalent un incident. */
     @GetMapping("/alerts")
     List<Alert> alerts() {

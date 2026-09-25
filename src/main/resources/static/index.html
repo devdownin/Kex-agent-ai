@@ -752,8 +752,24 @@
           <ol class="transcript" id="transcript" aria-live="polite" aria-label="Transcription"></ol>
           <section class="chat-starters" aria-labelledby="chat-starters-title">
             <h2 id="chat-starters-title">Préparer un processus surveillé</h2>
-            <p class="hint">Choisissez un exemple pour l’ajouter à votre message, puis précisez votre contexte. La déclaration du processus se fait dans la configuration.</p>
+            <p class="hint">Créez un processus pas à pas, ou insérez un exemple dans votre message.</p>
+            <button type="button" class="primary" id="start-process-wizard">Créer avec l’assistant guidé</button>
             <div class="chat-starter-list" id="chat-process-starters"></div>
+          </section>
+          <section class="process-wizard" id="process-wizard" hidden aria-labelledby="process-wizard-title">
+            <div class="row-between">
+              <h2 id="process-wizard-title">Nouveau processus</h2>
+              <button type="button" class="ghost" id="process-wizard-close">Fermer</button>
+            </div>
+            <p class="hint" id="process-wizard-progress"></p>
+            <form id="process-wizard-form">
+              <div id="process-wizard-question"></div>
+              <p class="hint" id="process-wizard-note" role="status"></p>
+              <div class="row-end">
+                <button type="button" class="ghost" id="process-wizard-back">Précédent</button>
+                <button type="submit" class="primary" id="process-wizard-next">Suivant</button>
+              </div>
+            </form>
           </section>
           <form class="composer" id="composer">
             <label class="sr-only" for="prompt">Message</label>

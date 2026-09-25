@@ -93,6 +93,7 @@ public class SupervisionService {
     private final History<Anomaly> anomalies;
     private final History<SnapshotSet> snapshotHistory;
     private final SupervisionStateRepository state;
+    private final ProcessDefinitionRepository processDefinitions;
 
     private volatile List<ProcessSnapshot> snapshots = List.of();
     private volatile ActiveCycle activeCycle;
@@ -109,7 +110,7 @@ public class SupervisionService {
                        Tracer tracer, CircuitBreakerRegistry circuitBreakerRegistry,
                        AuditRepository auditRepository, WebhookNotifier notifier,
                        TokenBudgetService tokenBudget, ApplicationEventPublisher events,
-                       SupervisionStateRepository state) {
+                       SupervisionStateRepository state, ProcessDefinitionRepository processDefinitions) {
         this.agentService = agentService;
         this.toolCatalog = toolCatalog;
         this.properties = properties;
@@ -122,13 +123,14 @@ public class SupervisionService {
         this.tokenBudget = tokenBudget;
         this.events = events;
         this.state = state;
+        this.processDefinitions = processDefinitions;
         this.cycles = new History<>(properties.historySize());
         this.anomalies = new History<>(properties.historySize());
         this.snapshotHistory = new History<>(properties.historySize());
         this.policy.set(new SupervisionPolicy("policy-v1", properties.mode(),
                 Map.copyOf(properties.autonomy()), properties.confidenceThreshold(),
                 Map.copyOf(properties.confidenceThresholds()), properties.thresholds()));
-        this.snapshots = properties.processes().stream()
+        this.snapshots = processes().stream()
                 .map(process -> new ProcessSnapshot(process.id(), process.name(), ProcessState.UNKNOWN,
                         null, null, null, "Aucune analyse exécutée", Coverage.notReported()))
                 .toList();
@@ -141,11 +143,30 @@ public class SupervisionService {
     }
 
     public List<MonitoredProcess> processes() {
-        return properties.processes();
+        Map<String, MonitoredProcess> result = new LinkedHashMap<>();
+        properties.processes().forEach(process -> result.put(process.id(), process));
+        processDefinitions.all().forEach(process -> result.putIfAbsent(process.id(), process));
+        return List.copyOf(result.values());
+    }
+
+    public MonitoredProcess createProcess(ProcessCreationRequest request, String actor) {
+        String id = request.id().trim();
+        if (properties.processes().stream().anyMatch(process -> process.id().equals(id))) {
+            throw new ProcessDefinitionConflict(id);
+        }
+        MonitoredProcess process = new MonitoredProcess(id, request.name().trim(),
+                request.description() == null ? null : request.description().trim(), request.hint().trim(), null);
+        processDefinitions.create(process);
+        record(actor, "Processus créé : " + process.name(), id, null, process.description(), "Déclaré");
+        return process;
     }
 
     public List<ProcessSnapshot> snapshots() {
-        return snapshots;
+        Map<String, ProcessSnapshot> current = new HashMap<>();
+        snapshots.forEach(snapshot -> current.put(snapshot.processId(), snapshot));
+        return processes().stream().map(process -> current.getOrDefault(process.id(),
+                new ProcessSnapshot(process.id(), process.name(), ProcessState.UNKNOWN,
+                        null, null, null, "Aucune analyse exécutée", Coverage.notReported()))).toList();
     }
 
     public CycleProgress currentCycle() {
@@ -364,7 +385,7 @@ public class SupervisionService {
         if (staleSince != null) {
             return new Diagnosis(AgentState.DEGRADED, "Dernière analyse trop ancienne");
         }
-        long blind = snapshots.stream().filter(snapshot -> snapshot.state() == ProcessState.UNKNOWN).count();
+        long blind = snapshots().stream().filter(snapshot -> snapshot.state() == ProcessState.UNKNOWN).count();
         if (blind > 0) {
             return new Diagnosis(AgentState.DEGRADED, blind + " processus dans un état inconnu");
         }
@@ -372,7 +393,7 @@ public class SupervisionService {
     }
 
     public Overview overview() {
-        List<ProcessSnapshot> current = snapshots;
+        List<ProcessSnapshot> current = snapshots();
         Map<ProcessState, Long> counts = new EnumMap<>(ProcessState.class);
         current.forEach(snapshot -> counts.merge(snapshot.state(), 1L, Long::sum));
         List<Alert> open = alerts();
@@ -419,7 +440,7 @@ public class SupervisionService {
     }
 
     private MonitoredProcess findProcess(String processId) {
-        return properties.processes().stream()
+        return processes().stream()
                 .filter(process -> process.id().equals(processId))
                 .findFirst()
                 .orElseThrow(() -> new UnknownProcessException(processId));
@@ -539,7 +560,7 @@ public class SupervisionService {
         activeCycle = new ActiveCycle(cycleId, started, events);
         events.add(new CycleEvent(started, "Analyse démarrée", "Déclenchée par " + actor));
 
-        List<MonitoredProcess> monitored = properties.processes();
+        List<MonitoredProcess> monitored = processes();
         if (monitored.isEmpty()) {
             // État vide honnête : rien n'a été déclaré, donc rien n'est surveillé. Inventer des
             // processus pour remplir l'écran serait pire qu'un écran vide.

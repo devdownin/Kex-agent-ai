@@ -101,6 +101,26 @@ kex.agent.supervision.processes[0].thresholds.consumer-lag: 5000
 Un processus à faible trafic et un à fort débit ne devraient pas partager le même seuil : trop
 sensible pour l'un, trop laxiste pour l'autre.
 
+### Créer un processus depuis la conversation
+
+Dans **Conversation → Créer avec l’assistant guidé**, renseigner le nom, l’objectif et au moins le
+topic source. Les topics connus et les groupes liés au topic source sont suggérés si KafkaExplorer
+est disponible ; une liste incomplète ou indisponible n’empêche pas la saisie manuelle. Avant
+enregistrement, vérifier l’identifiant et le `hint` proposés. Seul un principal **ADMIN** peut
+confirmer **Créer ce processus**. Le processus apparaît immédiatement avec l’état `UNKNOWN`, puis
+est observé au prochain cycle. Le modèle n’enregistre rien depuis un simple message de chat.
+
+`GET /api/agent/supervision/processes/definitions` rend les déclarations effectives, et
+`POST /api/agent/supervision/processes` (ADMIN) accepte `id`, `name`, `description` et `hint`.
+L’API refuse les identifiants existants avec `409` et les entrées invalides avec `400`.
+
+Les déclarations de `kex.agent.supervision.processes` restent valables. Les processus créés dans
+la console s’ajoutent à cette liste, sans la modifier : en mono-instance ils sont conservés dans
+`kex.agent.supervision.process-store-path` (par défaut
+`${user.home}/.kex-agent-ai/processes.json`, `/var/lib/kex/processes.json` dans l’image Docker).
+Sous le profil `shared-memory`, ils sont stockés dans PostgreSQL pour être visibles de toutes les
+répliques. Prévoir la sauvegarde du volume ou de la base comme pour les autres données de l’agent.
+
 ### Fenêtres de maintenance
 
 Pas une propriété de configuration : déclarées à l'exécution, pour un déploiement qu'on n'a pas

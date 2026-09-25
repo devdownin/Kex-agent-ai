@@ -66,6 +66,28 @@ class SupervisionControllerTest {
     }
 
     @Test
+    void cree_un_processus_valide_mais_refuse_les_doublons_et_identifiants_invalides() {
+        ProcessCreationRequest request = new ProcessCreationRequest("orders", "Commandes", "Vers ERP",
+                "topics [orders.in, orders.out]");
+        given(supervision.createProcess(any(), anyString())).willReturn(
+                new MonitoredProcess("orders", "Commandes", "Vers ERP", request.hint(), null));
+
+        assertThat(mvc.post().uri("/api/agent/supervision/processes").contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"id":"orders","name":"Commandes","description":"Vers ERP",
+                         "hint":"topics [orders.in, orders.out]"} """))
+                .hasStatus(HttpStatus.CREATED).bodyJson().extractingPath("$.id").isEqualTo("orders");
+        assertThat(mvc.post().uri("/api/agent/supervision/processes").contentType(MediaType.APPLICATION_JSON)
+                .content("""{"id":"INVALID ID","name":"Commandes","hint":"topics [orders.in]"}"""))
+                .hasStatus(HttpStatus.BAD_REQUEST);
+
+        given(supervision.createProcess(any(), anyString())).willThrow(new ProcessDefinitionConflict("orders"));
+        assertThat(mvc.post().uri("/api/agent/supervision/processes").contentType(MediaType.APPLICATION_JSON)
+                .content("""{"id":"orders","name":"Commandes","hint":"topics [orders.in]"}"""))
+                .hasStatus(HttpStatus.CONFLICT);
+    }
+
+    @Test
     void declenche_un_cycle_et_rend_son_deroule() {
         given(supervision.runCycle(anyString())).willReturn(new CycleReport("cycle-1", NOW, NOW, 24, 3, 2, 1,
                 List.of(new CycleEvent(NOW, "Analyse démarrée", "manuelle")), null));

@@ -66,6 +66,25 @@ class SupervisionServiceTest {
     }
 
     @Test
+    void un_processus_cree_apparait_inconnu_puis_entre_dans_le_cycle_suivant() {
+        SupervisionService service = service(properties(List.of(), Map.of(), Map.of()));
+        ProcessCreationRequest request = new ProcessCreationRequest("orders", "Commandes", "Vers ERP",
+                "topics [orders.in, orders.out], consumer group orders-worker");
+
+        service.createProcess(request, "opérateur");
+
+        assertThat(service.overview().processesMonitored()).isEqualTo(1);
+        assertThat(service.snapshots()).singleElement()
+                .satisfies(snapshot -> assertThat(snapshot.state()).isEqualTo(ProcessState.UNKNOWN));
+        assertThatThrownBy(() -> service.createProcess(request, "opérateur"))
+                .isInstanceOf(ProcessDefinitionConflict.class);
+        analysisReturns(Map.of("processes", List.of()));
+        CycleReport report = service.runCycle("opérateur");
+        assertThat(report.processesAnalysed()).isEqualTo(1);
+        verify(agentService).askStructured(anyString(), org.mockito.ArgumentMatchers.contains("orders-worker"), any());
+    }
+
+    @Test
     void une_anomalie_sur_une_capacite_supervisee_attend_une_validation() {
         analysisReturns(anomalyPayload("RESTART_CONSUMER", 0.96));
         SupervisionService service = service(properties(List.of(ORDERS),
@@ -241,7 +260,7 @@ class SupervisionServiceTest {
         SupervisionService service = new SupervisionService(agentService, toolCatalog,
                 properties(List.of(), Map.of(), Map.of()), clock, keyMissing, tracer,
                 CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200), notifier, tokenBudget,
-                events, new InMemorySupervisionStateRepository(200));
+                events, new InMemorySupervisionStateRepository(200), definitions());
 
         service.pause("opérateur");
 
@@ -253,7 +272,7 @@ class SupervisionServiceTest {
         SupervisionService service = new SupervisionService(agentService, toolCatalog,
                 properties(List.of(), Map.of(), Map.of()), clock, keyMissing, mock(Tracer.class),
                 CircuitBreakerRegistry.ofDefaults(), new InMemoryAuditRepository(200), notifier, tokenBudget,
-                events, new InMemorySupervisionStateRepository(200));
+                events, new InMemorySupervisionStateRepository(200), definitions());
 
         service.pause("opérateur");
 
@@ -267,7 +286,7 @@ class SupervisionServiceTest {
         SupervisionService service = new SupervisionService(agentService, toolCatalog,
                 properties(List.of(), Map.of(), Map.of()), clock, keyMissing, mock(Tracer.class),
                 registry, new InMemoryAuditRepository(200), notifier, tokenBudget, events,
-                new InMemorySupervisionStateRepository(200));
+                new InMemorySupervisionStateRepository(200), definitions());
 
         assertThat(service.status().circuitBreakers())
                 .extracting(CircuitBreakerStatus::name)
@@ -1008,7 +1027,26 @@ class SupervisionServiceTest {
         return new SupervisionService(agentService, toolCatalog, properties, clock, model,
                 mock(Tracer.class), CircuitBreakerRegistry.ofDefaults(),
                 new InMemoryAuditRepository(properties.historySize()), notifier, tokenBudget, events,
-                new InMemorySupervisionStateRepository(properties.historySize()));
+                new InMemorySupervisionStateRepository(properties.historySize()), definitions());
+    }
+
+    private static ProcessDefinitionRepository definitions() {
+        return new ProcessDefinitionRepository() {
+            private final java.util.List<MonitoredProcess> saved = new java.util.ArrayList<>();
+
+            @Override
+            public List<MonitoredProcess> all() {
+                return List.copyOf(saved);
+            }
+
+            @Override
+            public void create(MonitoredProcess process) {
+                if (saved.stream().anyMatch(entry -> entry.id().equals(process.id()))) {
+                    throw new ProcessDefinitionConflict(process.id());
+                }
+                saved.add(process);
+            }
+        };
     }
 
     private void analysisReturns(Map<String, Object> content) {

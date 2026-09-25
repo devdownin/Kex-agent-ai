@@ -37,7 +37,8 @@ RUN rm -f /usr/bin/pebble
 # `docker compose up --force-recreate`. Un volume nommé reste préférable, et docker-compose.yml
 # en monte un — celui-ci n'est que le filet.
 ENV KEX_AGENT_MEMORY_STORAGE_DIRECTORY=/var/lib/kex/memory \
-    KEX_MCP_RUNTIME_STORAGE_PATH=/var/lib/kex/mcp-servers.enc
+    KEX_MCP_RUNTIME_STORAGE_PATH=/var/lib/kex/mcp-servers.enc \
+    KEX_AGENT_SUPERVISION_PROCESS_STORE_PATH=/var/lib/kex/processes.json
 # `chown` et pas `install -o` : `install` résout son propriétaire par `getpwnam`, et le refuse
 # quand il est numérique et absent de /etc/passwd — soit exactement la situation que le paragraphe
 # ci-dessus décrit. `chown` accepte un uid numérique sans entrée correspondante. Le coreutils de
