@@ -1,0 +1,48 @@
+name: Docker Hub description
+
+# Keep the overview current independently of an image release. The page distinguishes
+# features of future images until they are published; tagged releases also sync it in publish.yml.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'DOCKERHUB.md'
+      - '.github/workflows/dockerhub-description.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dockerhub-description
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    if: github.repository == 'devdownin/Kex-agent-ai'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      - name: Check Docker Hub credentials
+        id: hub
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "${DOCKERHUB_USERNAME:-}" ] && [ -n "${DOCKERHUB_TOKEN:-}" ]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::Docker Hub credentials are not configured; overview not synced.'
+          fi
+      - name: Sync the overview
+        if: steps.hub.outputs.enabled == 'true'
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ vars.DOCKERHUB_REPOSITORY || 'compagnonsdudev/kex-agent-ai' }}
+          readme-filepath: ./DOCKERHUB.md
+          short-description: ${{ github.event.repository.description }}
+          enable-url-completion: false
