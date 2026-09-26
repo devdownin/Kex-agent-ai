@@ -982,6 +982,52 @@ await check('les changements mesurés apparaissent entre deux cycles sans histor
   }
 });
 
+await check('un premier lancement guide vers la création et une sélection vide rétablit les processus', async () => {
+  let configured = false;
+  const previous = await page.evaluate(() => ({
+    context: localStorage.getItem('kex.agent.operator-context'),
+    filters: localStorage.getItem('kex.agent.filters.processes'),
+  }));
+  await page.evaluate(() => {
+    localStorage.setItem('kex.agent.operator-context', JSON.stringify({ process: '', period: 'all' }));
+    localStorage.removeItem('kex.agent.filters.processes');
+  });
+  await page.route('**/api/agent/supervision/overview', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify(overviewStub(configured ? {} : {
+      agent: { ...overviewStub().agent, lastCycleAt: null, lastCycleId: null },
+      processes: [], processesMonitored: 0, processesWarning: 0,
+    })),
+  }));
+  try {
+    await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#overview-processes .empty-guide');
+    assert.match(await page.locator('#overview-attention').innerText(), /Aucun processus sous surveillance/);
+    await page.click('#overview-processes .empty-action');
+    await page.waitForSelector('#process-wizard:not([hidden]) #process-wizard-answer');
+    assert.match(page.url(), /#\/chat/);
+    await page.click('#process-wizard-close');
+
+    configured = true;
+    await page.goto(`${BASE}/#/processes`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#processes-table table.grid tbody tr');
+    await page.click('.chip-toggle[data-filter="ERROR"]');
+    await page.waitForSelector('#processes-table .empty-action');
+    await page.click('#processes-table .empty-action');
+    await page.waitForSelector('#processes-table table.grid tbody tr');
+    assert.match(await page.locator('#processes-table').innerText(), /Order Integration/);
+  } finally {
+    await page.unroute('**/api/agent/supervision/overview');
+    await page.evaluate((saved) => {
+      for (const [key, value] of [
+        ['kex.agent.operator-context', saved.context], ['kex.agent.filters.processes', saved.filters],
+      ]) {
+        if (value === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
+      }
+    }, previous);
+  }
+});
+
 await check('plusieurs processus en anomalie au même cycle affichent un incident corrélé', async () => {
   await page.route('**/api/agent/supervision/overview', (route) => route.fulfill({
     status: 200, contentType: 'application/json',
