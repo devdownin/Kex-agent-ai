@@ -176,6 +176,10 @@
           <span class="hero-eyebrow">Centre de supervision</span>
           <h1 id="overview-title">Kex veille sur vos processus</h1>
           <p id="overview-summary">Connectez l’agent pour obtenir une synthèse opérationnelle.</p>
+          <div class="hero-cycle" id="overview-cycle" role="status">
+            <span class="hero-cycle-dot" aria-hidden="true"></span>
+            <span id="overview-cycle-label">En attente du premier cycle</span>
+          </div>
         </div>
         <div class="hero-health" id="overview-health" data-state="UNKNOWN">
           <span class="hero-health-mark" aria-hidden="true">?</span>
@@ -762,8 +766,10 @@
               <button type="button" class="ghost" id="process-wizard-close">Fermer</button>
             </div>
             <p class="hint" id="process-wizard-progress"></p>
+            <progress id="process-wizard-bar" max="7" value="1" aria-label="Avancement de la création du processus"></progress>
             <form id="process-wizard-form">
               <div id="process-wizard-question"></div>
+              <div id="process-wizard-draft" class="process-wizard-draft" aria-label="Déclaration en préparation"></div>
               <p class="hint" id="process-wizard-note" role="status"></p>
               <div class="row-end">
                 <button type="button" class="ghost" id="process-wizard-back">Précédent</button>
