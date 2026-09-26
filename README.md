@@ -171,6 +171,9 @@ With Kafka SQL Explorer connected, the model has real verbs instead of vague rec
 | *"Where did order ORD-1042 go?"* | `kex_trace_key` | Its path across topics, hop by hop, with latency |
 | *"Why is the DLQ filling up?"* | `kex_run_audit`, `kex_get_audit` | A graded diagnosis, not a metadata dump |
 | *"Which consumer groups are behind?"* | `kex_diagnose_consumer` / `kex_consumer_lag` | A measured verdict plus lag and backlog age |
+| *"Has orders fallen behind since the last check?"* | `kex_consumer_lag_trend` | Change and rates from two complete readings; an unavailable baseline is reported as unmeasured |
+| *"Does orders meet our prod topic rules?"* | `kex_topic_policy_review` | Each configured threshold checked against observed configuration, or `NOT_CONFIGURED` |
+| *"How do we handle orders.dlq?"* | `kex_dlq_review` | Bounded Kafka evidence alongside declared source, retries, monitoring and replay runbook |
 | *"Is this integration process healthy?"* | `kex_process_health`, then `kex_incident_evidence` if needed | Process status with evidence and coverage |
 | *"Where does this flow lose events?"* | `kex_flow_health` | The largest measured stage-to-stage drop, without claiming causality |
 | *"Count yesterday's orders over 100 €"* | `kex_sql_query` | The Flink SQL it ran, and the rows it got back |
@@ -196,7 +199,7 @@ flowchart LR
     T -.->|stdio / SSE| O([Any other<br/>MCP server])
     subgraph E["Kafka SQL Explorer :8080"]
         G[Guards: read-only,<br/>deny-list, rate limit, audit]
-        K[15 kex_* tools]
+        K[kex_* tools]
     end
     E --> KA([Kafka cluster])
 ```
