@@ -67,6 +67,24 @@ Runtime connections can be encrypted and persisted with `KEX_MCP_STORAGE_KEY`. F
 executables remain opt-in through `KEX_MCP_STDIO_ALLOWED_COMMANDS`. MCP sessions expire after 30 minutes
 of inactivity by default.
 
+## Kafka operational reviews
+
+With a compatible Kafka SQL Explorer MCP server connected, the agent can answer:
+
+| Ask | MCP evidence | Interpretation |
+|---|---|---|
+| "Is the orders topic compliant in prod?" | `kex_topic_policy_review(topic, environment)` | Compares the observed settings with an **operator-configured** rule for that environment; `NOT_CONFIGURED` is not a pass. |
+| "Is this consumer falling behind?" | `kex_consumer_lag_trend(topic, groupId)` | Needs two complete readings; the first or an expired baseline has no measured trend. |
+| "Where does orders.dlq lead?" | `kex_dlq_review(queueTopic)` | Reads bounded Kafka evidence and reports the **declared** source, retry topics, monitoring reference and replay runbook. No automatic replay. |
+
+Configure topic policies and DLQ routes on **Kafka SQL Explorer**, not on the agent.
+For a baseline that survives Explorer restarts or works across replicas, configure its
+shared lag history directory on a writable volume with interprocess locking.
+See [Kafka SQL Explorer's deployment example](https://github.com/devdownin/Kafkaexplorer/blob/main/docs/DOCKERHUB.md#operational-mcp-reviews)
+and [the agent's MCP guide](https://github.com/devdownin/Kex-agent-ai/blob/main/docs/MCP.md).
+The agent distinguishes declarations from live observations and treats unavailable data
+as unmeasured.
+
 ## Configuration
 
 | Variable | Role |
@@ -110,7 +128,7 @@ connections stay on disk either way, so the volume is never pointless.
 
 ## What it will not do
 
-The Kafka SQL Explorer MCP server is **read-only** — fifteen tools, none of them mutating. In front
+The Kafka SQL Explorer MCP server is **read-only by default**. In front
 of it the agent observes and recommends; it does not act. Where a capability can act, autonomy is
 declared per capability, an execution mode can only narrow it, and anything below the confidence
 floor goes back to a human. Nothing here is a default you inherit by accident: an unlisted capability

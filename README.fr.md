@@ -31,8 +31,8 @@ comme *« quels topics n'ont rien reçu aujourd'hui ? »* devient une vraie inte
 cluster, pas une supposition bien tournée.
 
 Il est livré branché sur [Kafka SQL Explorer](https://github.com/devdownin/Kafkaexplorer), dont le
-serveur MCP expose 15 outils en lecture sur Kafka : liste des topics, SQL Flink, inférence de schéma,
-traçage d'une clé à travers les topics, audits de cluster. Un `docker compose up` et vous interrogez
+serveur MCP expose des outils en lecture sur Kafka : liste des topics, SQL Flink, inférence de schéma,
+traçage d'une clé à travers les topics, audits de cluster et revues opérationnelles. Un `docker compose up` et vous interrogez
 votre broker en langage naturel.
 
 ## ⚡ Démarrage
@@ -146,6 +146,9 @@ Avec Kafka SQL Explorer branché, le modèle a de vrais verbes au lieu d'un vagu
 | *« Où est passée la commande ORD-1042 ? »* | `kex_trace_key` | Son parcours entre topics, hop par hop, avec la latence |
 | *« Pourquoi la DLQ se remplit ? »* | `kex_run_audit`, `kex_get_audit` | Un diagnostic gradué, pas un dump de métadonnées |
 | *« Quels groupes sont en retard ? »* | `kex_consumer_lag` | Le retard en temps : l'âge du plus vieux message non lu |
+| *« Le retard d'orders augmente-t-il depuis le dernier relevé ? »* | `kex_consumer_lag_trend` | Évolution et débits entre deux relevés complets ; sans référence, une mesure indisponible |
+| *« Le topic orders respecte-t-il la politique prod ? »* | `kex_topic_policy_review` | Vérification des seuils configurés ou `NOT_CONFIGURED` |
+| *« Comment traiter orders.dlq ? »* | `kex_dlq_review` | Mesures Kafka bornées et références déclarées vers source, reprises, surveillance et runbook |
 | *« Compte les commandes d'hier > 100 € »* | `kex_sql_query` | Le SQL Flink exécuté, et les lignes obtenues |
 
 Le modèle choisit l'outil ; le serveur applique les garde-fous. L'Explorer est en lecture seule par
@@ -169,7 +172,7 @@ flowchart LR
     T -.->|stdio / SSE| O([Tout autre<br/>serveur MCP])
     subgraph E["Kafka SQL Explorer :8080"]
         G[Garde-fous : lecture seule,<br/>deny-list, rate limit, audit]
-        K[15 outils kex_*]
+        K[Outils kex_*]
     end
     E --> KA([Cluster Kafka])
 ```
