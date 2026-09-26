@@ -69,7 +69,8 @@ of inactivity by default.
 
 ## Kafka operational reviews
 
-With a compatible Kafka SQL Explorer MCP server connected, the agent can answer:
+On an agent image built after this feature is released, and with a compatible Kafka SQL
+Explorer MCP server connected, the agent can answer (check its advertised tools):
 
 | Ask | MCP evidence | Interpretation |
 |---|---|---|
