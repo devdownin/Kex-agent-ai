@@ -226,6 +226,8 @@ public class AgentService {
             context.put(TaskToolPolicy.ALLOWED_TOOLS, conversation.allowedTools());
         }
         ChatClient.ChatClientRequestSpec request = chatClient.prompt().user(message);
+        String kafkaProcedure = KafkaOperationalPlaybooks.forRequest(message);
+        if (!kafkaProcedure.isBlank()) request = request.system(kafkaProcedure);
         if (longTermMemory != null) {
             String durable = longTermMemory.context(conversation.owner());
             if (!durable.isBlank()) request = request.system(durable);
