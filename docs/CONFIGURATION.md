@@ -212,6 +212,46 @@ La charte entre en tête du contexte durable, sous le même avertissement que le
 compétences : donnée de référence, jamais gouvernance. Elle peut restreindre ce que l'agent propose,
 jamais élargir une autonomie, une permission ou une approbation.
 
+### Commandes par Gmail (`kex.agent.gmail.*`)
+
+Un compte Gmail dédié peut lire les commandes reçues dans `INBOX` en IMAP chiffré et expédier
+la réponse en SMTP. Le connecteur est désactivé par défaut et indépendant du canal d'alerte
+`kex.agent.channels.email`. Exemple (mot de passe d'application Gmail, jamais le mot de passe
+principal du compte) :
+
+```yaml
+spring.mail:
+  host: smtp.gmail.com
+  port: 587
+  username: "${KEX_GMAIL_USER}"
+  password: "${KEX_GMAIL_APP_PASSWORD}"
+  properties.mail.smtp:
+    auth: true
+    starttls.enable: true
+    connectiontimeout: 10000
+    timeout: 10000
+    writetimeout: 10000
+kex.agent.gmail:
+  enabled: true
+  username: "${KEX_GMAIL_USER}"
+  app-password: "${KEX_GMAIL_APP_PASSWORD}"
+  from: "${KEX_GMAIL_USER}"
+  allowed-senders: ["operateur@example.com"]
+  read-only-tools: []          # sans outil MCP par défaut ; lister explicitement les outils de lecture utiles
+  poll-interval: 1m
+```
+
+Envoyer un message **texte brut**, sans pièce jointe, avec le sujet exact
+`to Kex from operateur@example.com` et le prompt dans le corps. L'adresse après `from` doit
+être valide, appartenir aux `allowed-senders` et correspondre à l'adresse `From` du message.
+La réponse est envoyée à cette adresse avec le sujet `Re: to Kex from …`. Les messages non
+conformes sont ignorés ; ceux qui échouent pendant l'exécution ou l'envoi restent non lus pour
+une nouvelle tentative. Une réponse envoyée avant un arrêt brutal, mais pas encore marquée lue,
+peut être envoyée de nouveau au redémarrage. N'activer le connecteur que sur **une seule instance**
+pour éviter l'exécution concurrente des mêmes messages. L'adresse `From` seule n'authentifie pas
+cryptographiquement un expéditeur ; réserver ce compte aux opérateurs de confiance et garder
+la liste `read-only-tools` limitée aux opérations sans effet de bord.
+
 ### `kex.agent.channels.inbound.*`
 
 Approuver ou refuser une demande de validation depuis la messagerie qui l'a annoncée. **Éteint par
