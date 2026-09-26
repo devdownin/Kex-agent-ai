@@ -164,10 +164,28 @@ function renderPreview() {
   id.focus();
 }
 
+function renderDraft() {
+  const host = $('#process-wizard-draft');
+  const known = [
+    ['Nom', draft.name], ['Objectif', draft.description], ['Entrée', draft.source],
+    ['Sortie', draft.destination], ['Consumer group', draft.group], ['Topics supplémentaires', draft.stages],
+  ].filter(([, text]) => Boolean(text));
+  host.replaceChildren(el('strong', null, 'Déclaration en préparation'));
+  if (!known.length) {
+    host.append(el('p', 'hint', 'Les informations renseignées apparaîtront ici au fil des étapes.'));
+    return;
+  }
+  const list = el('dl');
+  known.forEach(([label, text]) => list.append(el('dt', null, label), el('dd', null, text)));
+  host.append(list);
+}
+
 function render() {
   if ($('#process-wizard').hidden) return;
   $('#process-wizard-progress').textContent = step < STEPS.length
     ? `Question ${step + 1} sur ${STEPS.length}` : 'Vérification finale';
+  $('#process-wizard-bar').value = step + 1;
+  renderDraft();
   $('#process-wizard-back').disabled = step === 0 || saving;
   $('#process-wizard-next').disabled = saving;
   if (step === STEPS.length) renderPreview();

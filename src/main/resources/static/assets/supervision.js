@@ -93,12 +93,24 @@ export const agentState = (state) =>
 // Cache du dernier overview : plusieurs vues en dépendent, et deux requêtes concurrentes
 // afficheraient des compteurs qui se contredisent d'un panneau à l'autre.
 let snapshot = null;
+let previousCycle = null;
+let comparedCycle = null;
+let animateCycleChanges = false;
+let lastHeroState = null;
 const watchers = new Set();
 
 export const onSnapshot = (watcher) => watchers.add(watcher);
 
 export async function refresh() {
-  snapshot = await api(`${BASE}/overview`);
+  const next = await api(`${BASE}/overview`);
+  const cycle = next.agent?.lastCycleId || next.agent?.lastCycleAt;
+  const oldCycle = snapshot?.agent?.lastCycleId || snapshot?.agent?.lastCycleAt;
+  animateCycleChanges = Boolean(cycle && oldCycle && cycle !== oldCycle);
+  if (animateCycleChanges) {
+    previousCycle = snapshot;
+    comparedCycle = cycle;
+  }
+  snapshot = next;
   watchers.forEach((watcher) => watcher(snapshot));
   return snapshot;
 }
@@ -140,12 +152,12 @@ function contextual(data) {
 
 export async function overview() {
   const host = $('#kpis');
-  host.replaceChildren(skeleton('kpis', 'Analyse des processus…'));
+  if (!host.querySelector('.kpis-grid')) host.replaceChildren(skeleton('kpis', 'Analyse des processus…'));
   try {
     const data = contextual(await refresh());
     renderOverviewHero(data);
     $('#agent-brief').replaceChildren(agentBrief(data));
-    host.replaceChildren(kpis(data));
+    host.replaceChildren(kpis(data, cycleBaseline(data)));
     $('#incident-banner').replaceChildren(...incidentBanners(data.incidents));
     $('#overview-processes').replaceChildren(processTable(prioritized(data.processes), openProcess, 8, COMPACT));
     $('#overview-attention').replaceChildren(attention(data));
@@ -198,11 +210,17 @@ function agentBrief(data) {
 
 export function liveCycle(progress) {
   const host = $('#cycle-live');
+  const hero = $('#overview-cycle');
   if (!progress) {
     host.hidden = true;
     host.replaceChildren();
+    hero.classList.remove('is-running');
+    $('#overview-cycle-label').textContent = snapshot?.agent?.lastCycleAt
+      ? `Dernier cycle · ${stamp(snapshot.agent.lastCycleAt)}` : 'En attente du premier cycle';
     return;
   }
+  hero.classList.add('is-running');
+  $('#overview-cycle-label').textContent = `Analyse en cours · ${progress.events?.length || 0} étape(s) atteinte(s)`;
   host.hidden = false;
   const heading = el('div', 'cycle-live-head');
   heading.append(el('span', 'live-pulse'));
@@ -289,6 +307,10 @@ function incidentWorkspace(data, decisionHistory) {
     button.setAttribute('aria-pressed', String(candidate.id === selected.id));
     button.append(stateTag(candidate.severity), el('strong', null, candidate.title),
       el('span', 'muted', `${candidate.alerts.length} symptôme(s) · ${ago(candidate.detectedAt) || 'à l’instant'}`));
+    const evidenceCount = candidate.alerts.reduce((count, alert) => count + (alert.observations?.length || 0), 0);
+    button.append(el('span', 'incident-choice-evidence',
+      `${evidenceCount} observation(s) · ${candidate.severity === 'ERROR' ? 'État en erreur' : 'À examiner'}`));
+    button.dataset.state = candidate.severity;
     button.addEventListener('click', () => {
       setParams({ incident: candidate.id });
       $('#incident-workspace').replaceChildren(incidentWorkspace(data, decisionHistory));
@@ -345,6 +367,14 @@ function incidentDetail(incident, data, decisionHistory) {
   detail.append(head, el('p', 'incident-hypothesis', incident.hypothesis));
 
   const related = relatedDecisions(incident, decisionHistory);
+  const evidenceCount = incident.alerts.reduce((count, alert) => count + (alert.observations?.length || 0), 0);
+  const facts = el('div', 'incident-facts');
+  facts.append(el('span', null, `${incident.alerts.length} symptôme(s) actif(s)`),
+    el('span', null, `${evidenceCount} observation(s) documentée(s)`),
+    el('span', null, related.some((decision) => decision.status === 'PENDING_APPROVAL')
+      ? 'Décision à valider' : incident.alerts.some((alert) => alert.recommendation)
+        ? 'Recommandation disponible' : 'Investigation à poursuivre'));
+  detail.append(facts);
   detail.append(recommendedActionSection(incident, related));
 
   const symptoms = incidentSection('Symptômes actifs', 'Ce que le dernier état confirme');
@@ -538,6 +568,11 @@ function attentionGroup(title, items, card, emptyMessage, href, label) {
 function processAttentionCard(process) {
   const card = el('article', 'card compact-card');
   card.dataset.state = process.state;
+  const before = cycleBaseline(current())?.processes?.find((row) => row.processId === process.processId);
+  if (before && before.state !== process.state) {
+    card.append(el('span', 'process-change-label', `${before.state} → ${process.state} au dernier cycle`));
+    if (animateCycleChanges) card.classList.add('just-changed');
+  }
   const head = el('header');
   head.append(el('h3', null, process.name), stateTag(process.state));
   card.append(head, el('p', 'muted', process.note || `Dernier relevé : ${clockTime(process.lastRun)}`));
@@ -562,21 +597,48 @@ function renderOverviewHero(data) {
   health.dataset.state = agent.tag;
   health.querySelector('.hero-health-mark').textContent = agent.mark;
   $('#overview-health-label').textContent = agent.label;
+  if (lastHeroState && lastHeroState !== agent.tag) {
+    health.classList.remove('just-changed');
+    // Relancer l'animation seulement après un changement d'état mesuré.
+    void health.offsetWidth;
+    health.classList.add('just-changed');
+  }
+  lastHeroState = agent.tag;
+  const running = Boolean(data.agent?.analysing);
+  $('#overview-cycle').classList.toggle('is-running', running);
+  $('#overview-cycle-label').textContent = running ? 'Analyse en cours'
+    : data.agent?.lastCycleAt ? `Dernier cycle · ${stamp(data.agent.lastCycleAt)}`
+      : 'En attente du premier cycle';
 }
 
-function kpis(data) {
+function cycleBaseline(data) {
+  const cycle = data.agent?.lastCycleId || data.agent?.lastCycleAt;
+  return cycle && cycle === comparedCycle && previousCycle ? contextual(previousCycle) : null;
+}
+
+function delta(value, previous) {
+  if (!Number.isFinite(value) || !Number.isFinite(previous)) return 'Comparaison indisponible';
+  const difference = value - previous;
+  return difference === 0 ? 'Stable depuis le cycle précédent'
+    : `${difference > 0 ? '+' : '−'}${Math.abs(difference)} depuis le cycle précédent`;
+}
+
+function kpis(data, before) {
   const wrap = el('div', 'kpis-grid');
   wrap.append(
-    kpi('Processus surveillés', data.processesMonitored, subtitle(data), '#/processes', null, 'processes'),
+    kpi('Processus surveillés', data.processesMonitored, subtitle(data), '#/processes', null, 'processes',
+      before && delta(data.processesMonitored, before.processesMonitored)),
     kpi('Dernière analyse', clockTime(data.agent.lastCycleAt),
       data.agent.staleSince ? 'Données potentiellement obsolètes' : ago(data.agent.lastCycleAt) || 'Jamais',
       '#/audit', data.agent.staleSince ? 'WARNING' : null, 'cycle'),
     kpi('Alertes actives', data.anomaliesDetected,
       data.anomaliesDetected ? 'Encore vues au dernier cycle' : 'Aucune au dernier cycle',
-      '#/alerts', data.anomaliesDetected ? 'WARNING' : null, 'alerts'),
+      '#/alerts', data.anomaliesDetected ? 'WARNING' : null, 'alerts',
+      before && delta(data.anomaliesDetected, before.anomaliesDetected)),
     kpi('Actions en attente', data.pendingApprovals,
       data.pendingApprovals ? 'À valider' : 'Rien à valider',
-      '#/decisions', data.pendingApprovals ? 'PENDING' : null, 'decisions'),
+      '#/decisions', data.pendingApprovals ? 'PENDING' : null, 'decisions',
+      before && delta(data.pendingApprovals, before.pendingApprovals)),
   );
   return wrap;
 }
@@ -587,7 +649,7 @@ const subtitle = (data) =>
     data.processesUnknown && `${data.processesUnknown} inconnu`]
     .filter(Boolean).join(' · ') || 'Aucun déclaré';
 
-function kpi(label, value, detail, href, state, kind) {
+function kpi(label, value, detail, href, state, kind, change) {
   // Chaque KPI conduit au détail qu'il annonce : un compteur sans issue oblige à chercher.
   const card = el('a', 'kpi');
   card.href = href;
@@ -602,6 +664,11 @@ function kpi(label, value, detail, href, state, kind) {
   }
   valueLine.append(el('strong', 'kpi-value', value));
   card.append(el('span', 'kpi-label', label), valueLine, el('span', 'kpi-detail', detail));
+  if (change) {
+    const changeTag = el('span', 'kpi-change', change);
+    if (animateCycleChanges && !change.startsWith('Stable')) changeTag.classList.add('just-changed');
+    card.append(changeTag);
+  }
   return card;
 }
 
@@ -765,9 +832,18 @@ function processTable(rows, onSelect, limit, columns = FULL) {
   };
 
   const body = el('tbody');
+  const previousProcesses = new Map((cycleBaseline(current())?.processes || [])
+    .map((item) => [item.processId, item]));
   for (const row of (limit ? rows.slice(0, limit) : rows)) {
     const line = el('tr');
     columns.forEach((column) => line.append(cells[column](row)));
+    const before = previousProcesses.get(row.processId);
+    if (before && before.state !== row.state) {
+      line.dataset.stateChange = row.state;
+      if (animateCycleChanges) line.classList.add('just-changed');
+      const name = line.querySelector('td');
+      name.append(el('span', 'process-change-label', ` ${before.state} → ${row.state}`));
+    }
     if (onSelect) {
       line.tabIndex = 0;
       line.classList.add('clickable');
