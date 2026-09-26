@@ -1,5 +1,20 @@
 # MCP, de zéro
 
+## Revues opérationnelles Kafka
+
+Pour une demande portant sur la configuration des topics, le lag ou les DLQ, l'agent
+dispose de procédures de lecture intégrées. Elles s'appuient sur les outils de
+KafkaExplorer `kex_topic_configuration`, `kex_consumer_lag_trend` et `kex_dlq_review`
+en complément des diagnostics déjà présents. La configuration et les réplicas se
+lisent avec les exigences du cluster concerné ; un topic sans groupe consommateur
+n'est pas automatiquement orphelin. Le premier relevé de lag n'a pas de tendance,
+et une tendance n'est comparable qu'après deux relevés complets du même processus
+KafkaExplorer. Une DLQ est échantillonnée, sans retraitement automatique ; les
+chemins de retry et de retraitement demandent une inspection de l'application.
+
+Ces procédures intégrées sont du code versionné. Les compétences créées ou importées
+par un utilisateur suivent toujours le circuit de proposition et de validation humaine.
+
 Ce document est pédagogique : il part du problème, explique le protocole, puis montre comment
 brancher un serveur sur cet agent et comment en écrire un.
 
