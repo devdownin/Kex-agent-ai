@@ -4,13 +4,16 @@
 
 Pour une demande portant sur la configuration des topics, le lag ou les DLQ, l'agent
 dispose de procédures de lecture intégrées. Elles s'appuient sur les outils de
-KafkaExplorer `kex_topic_configuration`, `kex_consumer_lag_trend` et `kex_dlq_review`
+KafkaExplorer `kex_topic_configuration`, `kex_topic_policy_review`,
+`kex_consumer_lag_trend` et `kex_dlq_review`
 en complément des diagnostics déjà présents. La configuration et les réplicas se
 lisent avec les exigences du cluster concerné ; un topic sans groupe consommateur
-n'est pas automatiquement orphelin. Le premier relevé de lag n'a pas de tendance,
-et une tendance n'est comparable qu'après deux relevés complets du même processus
-KafkaExplorer. Une DLQ est échantillonnée, sans retraitement automatique ; les
-chemins de retry et de retraitement demandent une inspection de l'application.
+n'est pas automatiquement orphelin. Une politique de topic n'est appliquée que si
+elle est configurée pour l'environnement demandé. Le premier relevé de lag n'a pas
+de tendance ; un volume partagé configuré dans KafkaExplorer permet de retrouver
+le relevé sur une autre instance ou après redémarrage. Une DLQ est échantillonnée,
+sans retraitement automatique ; ses liens source, retry, surveillance et runbook
+sont déclarés par l'opérateur et doivent être vérifiés dans les systèmes concernés.
 
 Ces procédures intégrées sont du code versionné. Les compétences créées ou importées
 par un utilisateur suivent toujours le circuit de proposition et de validation humaine.

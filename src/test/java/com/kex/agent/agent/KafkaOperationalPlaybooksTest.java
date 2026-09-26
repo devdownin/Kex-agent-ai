@@ -20,4 +20,11 @@ class KafkaOperationalPlaybooksTest {
     void unrelated_question_does_not_receive_kafka_procedure() {
         assertThat(KafkaOperationalPlaybooks.forRequest("Quel est mon calendrier demain ?")).isEmpty();
     }
+
+    @Test
+    void policy_review_requires_an_environment_and_distinguishes_declared_dlq_links() {
+        String procedure = KafkaOperationalPlaybooks.forRequest("Audit de configuration des topics et de la DLQ");
+        assertThat(procedure).contains("kex_topic_policy_review", "nom", "NOT_CONFIGURED",
+                "kex_dlq_review", "déclarative", "Ne pas retraiter automatiquement");
+    }
 }
