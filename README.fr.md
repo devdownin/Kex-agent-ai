@@ -364,8 +364,13 @@ GPL-3.0 — voir [LICENSE](LICENSE).
 
 ## Prévisions TimesFM
 
-**Control Center → Prévisions** lit les prévisions persistées de KafkaExplorer via cinq outils MCP en lecture seule.
+**Pilotage → Prévisions** lit les prévisions persistées de KafkaExplorer via cinq outils MCP en lecture seule.
 Choisissez l’environnement et la métrique autorisée, consultez historique, Q10/Q50/Q90, qualité réalisée,
 baselines et dépassements prédits, puis préparez une conversation avec l’agent.
 SHADOW, prévisions expirées et replis restent explicites ; Kex ne lance ni inférence ni activation.
 Consultez le [guide d’intégration et d’exploitation](docs/TIMESFM.md) pour la configuration et les limites de portée.
+
+Le dashboard affiche les risques à venir ; les aides expliquent modes et scores, les ressources
+liées ouvrent topics, groupes et processus, et l’actualisation à 60 s reste facultative.
+L’assistant de création de processus propose une série autorisée et exporte l’association YAML
+à appliquer explicitement. Voir les [exemples de prompts et du wizard](docs/EXEMPLES.md#timesfm--démonstration-et-prompts-opérationnels).

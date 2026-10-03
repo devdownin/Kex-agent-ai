@@ -5,9 +5,10 @@ le geste réel qu'il déclenche : rien ici ne suppose une capacité qui n'existe
 
 Deux choses à savoir avant de démarrer une démonstration.
 
-**L'agent n'expose que deux outils au modèle** — `remember_fact` et `recall_facts`. Tout le reste
-vient des serveurs MCP branchés : par défaut les vingt-et-un outils `kex_*` de
-[Kafka SQL Explorer](https://github.com/devdownin/Kafkaexplorer), en lecture seule.
+**Les outils disponibles dépendent des connexions MCP et de leurs permissions.** Les outils
+`remember_fact` et `recall_facts` gèrent la mémoire ; les lectures Kafka et TimesFM viennent de
+[Kafka SQL Explorer](https://github.com/devdownin/Kafkaexplorer). Vérifier le catalogue actif
+avant la démonstration plutôt que supposer un nombre fixe d’outils.
 
 **Tout ne passe pas par un prompt.** Le cycle de supervision, la validation d'une décision et la
 découverte de serveurs MCP sont des gestes d'exploitation, pas des phrases — voir
@@ -331,3 +332,59 @@ que lorsqu'il devient lui-même un outil pour un autre agent.
 
 L'ordre compte : les trois premiers points montrent ce que l'agent sait faire, les deux derniers ce
 qu'il ne se permet pas de faire seul.
+
+
+## TimesFM : démonstration et prompts opérationnels
+
+Prérequis : suivre le [guide TimesFM](TIMESFM.md), autoriser les cinq outils et disposer d’une
+série enrôlée dans KafkaExplorer. Remplacer `<series-id>` et `<environnement>` par une paire
+exacte du catalogue autorisé ; ces placeholders ne sont pas des identifiants exécutables.
+
+| Demande à l’agent | Lectures attendues et interprétation |
+|---|---|
+| « Liste les séries de prévision auxquelles tu as accès, avec leur environnement et leur unité. » | `kex_list_forecastable_metrics` ; annoncer une couverture partielle ou une indisponibilité. |
+| « Pour la série <series-id> dans <environnement>, explique la prévision et son historique : génération, horizon, mode, stratégie, points imputés et quantiles. » | `kex_metric_history`, `kex_forecast_metric` ; dater les résultats et distinguer contexte historique et état actuel. |
+| « Quels dépassements sont prédits dans <environnement> ? Cite les séries, seuils, directions, fenêtres et provenance. » | `kex_list_predicted_threshold_breaches` ; une liste vide n’établit l’absence de risque si la couverture est incomplète. |
+| « Compare la qualité réalisée de <series-id> dans <environnement> aux baselines. Précise la période, le nombre de points, MAE, MASE, pinball loss et couverture empirique. » | `kex_get_forecast_quality` ; une qualité non mesurée ne vaut pas zéro et ne garantit pas une prévision future. |
+| « Cette série est en SHADOW, en repli ou expirée : quelles conclusions restent défendables et quelles vérifications proposer ? » | Lire les états et la provenance réels ; SHADOW n’est pas une activation, un repli ne fournit pas nécessairement de quantiles. |
+
+### Parcours complet dans la console
+
+1. Depuis **Pilotage → Prévisions**, choisir l’environnement et la série. Vérifier la génération,
+   l’échéance et les avertissements avant d’interpréter le graphe ou les seuils superposés.
+2. Ouvrir les aides sur les modes et la qualité. Distinguer Q10/Q50/Q90, couverture nominale et
+   couverture empirique ; ne pas présenter les quantiles comme la probabilité d’un incident.
+3. Cliquer **Analyser avec l’agent**, relire puis envoyer le brouillon. Attendre cinq parties :
+   constat actuel, prévision, qualité, limites, vérifications proposées.
+4. Dans **Ressources liées**, ouvrir un topic ou préparer le diagnostic d’un groupe ; lire l’état
+   actuel séparément de la prévision. Des sources absentes ou incomplètes ne prouvent aucun lien.
+5. L’option d’actualisation à 60 s relit les résultats persistés. Elle ne calcule pas de nouvelles
+   prévisions et ne crée ni alerte ni notification.
+
+### Créer un processus avec le wizard
+
+Dans **Conversation → Créer avec l’assistant guidé**, essayer :
+
+| Question | Exemple de réponse |
+|---|---|
+| Nom | Intégration des commandes |
+| Objectif métier | Acheminer les commandes vers l’ERP |
+| Topic d’entrée | orders.received |
+| Topic de sortie | orders.validated |
+| Consumer group | orders-worker |
+| Topics supplémentaires | orders.checked |
+| Prévision TimesFM | Choisir une série réelle du catalogue autorisé, dans l’environnement voulu, ou continuer sans prévision. |
+
+Vérifier l’identifiant et le hint avant de confirmer avec le rôle ADMIN. Les noms Kafka ci-dessus
+sont illustratifs : utiliser les ressources de votre installation. Le choix TimesFM est explicite,
+jamais déduit du nom des topics. Le processus est enregistré seulement après confirmation.
+
+L’aperçu et la section **Configuration proposée du processus**, disponible après création,
+conservent le YAML. Le hint est enregistré immédiatement ; pour afficher le processus dans les
+ressources liées de la prévision, intégrer uniquement l’association `forecasts.process-links`
+à la configuration existante, puis redémarrer Kex. Ne pas recopier une déclaration déjà persistée.
+Voir l’[exemple de configuration](TIMESFM.md#ressources-et-processus-liés).
+
+Si le catalogue est indisponible, tronqué ou incomplet, le wizard propose de continuer sans
+prévision. Corriger la connexion ou les permissions et relancer le parcours pour choisir une
+série ; l’administration et l’enrôlement des séries restent dans KafkaExplorer.

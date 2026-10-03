@@ -409,3 +409,8 @@ Choose an environment and an approved metric, inspect history, Q10/Q50/Q90, real
 baseline scores and predicted threshold breaches, then prepare an agent conversation.
 SHADOW, expired forecasts and fallback strategies remain explicit; no inference or activation runs in Kex.
 See the [integration and operator guide](docs/TIMESFM.md) for setup and scope limits.
+
+The dashboard highlights upcoming risks. In-view help explains modes and quality scores,
+resource links lead to topics, groups and processes, and optional refresh reads results every 60 s.
+The process creation wizard offers an approved series and exports an explicit YAML association
+for operators to apply. See the [prompt and wizard examples](docs/EXEMPLES.md#timesfm--démonstration-et-prompts-opérationnels).

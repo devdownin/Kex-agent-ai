@@ -155,3 +155,21 @@ PLAYWRIGHT_MODULE=/chemin/playwright/index.mjs node src/test/browser/forecasts.m
 Le test navigateur utilise les vrais modules statiques et un serveur HTTP de fixtures, sans
 Kafka, LLM ou TimesFM. Il est inclus dans le job navigateur de la CI. La vérification avec une
 instance KafkaExplorer déployée demeure nécessaire pour le périmètre MCP de votre installation.
+
+
+## Assistant de création de processus
+
+Dans **Conversation → Créer avec l’assistant guidé**, la dernière question propose une série
+TimesFM facultative. Les options affichent environnement, métrique et identifiant exact du
+catalogue autorisé. Un catalogue incomplet, tronqué ou indisponible ne fournit aucun choix de
+série ; la création reste possible sans prévision.
+
+Le choix ajoute la série et son environnement au hint enregistré. L’aperçu final génère aussi
+le bloc `kex.agent.forecasts.process-links` avec l’identifiant de processus que vous validez.
+Après confirmation ADMIN, le YAML reste disponible dans **Configuration proposée du processus**.
+Appliquer le bloc d’association à la configuration existante et redémarrer Kex pour afficher le
+lien ; le wizard ne modifie pas cette configuration. Ne pas dupliquer dans `supervision.processes`
+un processus déjà enregistré. Aucune série n’est activée ou enrôlée par ce parcours.
+
+Voir les [prompts et la démonstration](EXEMPLES.md#timesfm--démonstration-et-prompts-opérationnels)
+et la [configuration du wizard](CONFIGURATION.md#créer-un-processus-depuis-la-conversation).

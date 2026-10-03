@@ -7,6 +7,10 @@ Versionnement [sémantique](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- Wizard de création de processus : choix TimesFM facultatif dans un catalogue complet et
+  autorisé, hint contextualisé, export YAML de l’association explicite par série/environnement.
+  Documentation MCP/configuration et exemples opérationnels complétés.
+
 - Intégration TimesFM via les cinq outils MCP KafkaExplorer en lecture seule : vue Prévisions
   par environnement, historique, quantiles, qualité réalisée, baselines et dépassements prédits.
   Brouillon de conversation contextuel, contrôle de provenance, états SHADOW/expiré/repli,

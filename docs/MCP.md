@@ -357,3 +357,22 @@ active alerts and pending decisions. It does not execute, approve or reject anyt
 
 The interoperability suite exercises both supported protocol versions, initialization/session
 negotiation and discovery. Unknown protocol versions are rejected at the transport boundary.
+
+
+## Lectures TimesFM
+
+La connexion KafkaExplorer fournit cinq outils canoniques : `kex_list_forecastable_metrics`,
+`kex_metric_history`, `kex_forecast_metric`, `kex_list_predicted_threshold_breaches` et
+`kex_get_forecast_quality`. Ils lisent des résultats persistés sans lancer d’inférence.
+Les ajouter à une éventuelle liste d’outils autorisés de la connexion configurée par
+`kex.agent.kafka.connection` ; conserver les restrictions d’environnements, topics et groupes.
+
+Le catalogue est la source des identifiants de séries pour la vue Prévisions et le wizard.
+Le champ facultatif `sources` annonce une provenance explicite : `definitionVersion`, `topics`,
+`groups`, `complete`. Les ressources liées exigent une provenance complète et autorisée ; les
+identifiants masqués par la DLP ne deviennent pas des liens. Les processus liés proviennent
+uniquement de `kex.agent.forecasts.process-links`, jamais d’une déduction depuis les hints.
+
+Une erreur, une série invisible ou une couverture incomplète n’équivaut pas à zéro incident.
+Les dates de lecture, de génération et d’évaluation de qualité ont des sens distincts.
+Voir le [guide TimesFM](TIMESFM.md) et les [exemples](EXEMPLES.md#timesfm--démonstration-et-prompts-opérationnels).
