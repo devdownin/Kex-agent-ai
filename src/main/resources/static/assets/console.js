@@ -12,6 +12,7 @@ import {
 import * as automations from './automations.js';
 import * as channels from './channels.js';
 import * as chat from './chat.js';
+import * as forecasts from './forecasts.js';
 import * as llm from './llm.js';
 import * as mcpServer from './mcp-server.js';
 import * as skills from './skills.js';
@@ -19,8 +20,10 @@ import * as supervision from './supervision.js';
 import * as tools from './tools.js';
 
 const BASE = '/api/agent/supervision';
+$('#refresh-forecasts').addEventListener('click', forecasts.view);
 
 const VIEWS = {
+  forecasts: { title: 'Prévisions', load: forecasts.view },
   overview: { title: 'Vue d’ensemble', load: supervision.overview },
   attention: { title: 'À traiter', load: supervision.attentionView },
   incidents: { title: 'Cockpit incident', load: supervision.incidents },

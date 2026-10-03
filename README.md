@@ -401,3 +401,11 @@ control, **star the project and help shape what production-grade agentic AI shou
 ## 📄 License
 
 GPL-3.0 — see [LICENSE](LICENSE).
+
+## TimesFM forecasts
+
+**Control Center → Forecasts** reads KafkaExplorer’s persisted forecasts through five read-only MCP tools.
+Choose an environment and an approved metric, inspect history, Q10/Q50/Q90, realised quality,
+baseline scores and predicted threshold breaches, then prepare an agent conversation.
+SHADOW, expired forecasts and fallback strategies remain explicit; no inference or activation runs in Kex.
+See the [integration and operator guide](docs/TIMESFM.md) for setup and scope limits.

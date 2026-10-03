@@ -38,7 +38,7 @@ class ConsoleTest {
     @Test
     void sert_les_ressources_de_la_console_sans_jeton() throws Exception {
         // Les modules sont importés les uns par les autres : un seul 404 casse toute la console.
-        for (String asset : List.of("console.js", "core.js", "supervision.js", "tools.js", "chat.js",
+        for (String asset : List.of("forecasts.js", "console.js", "core.js", "supervision.js", "tools.js", "chat.js",
                 "kafka.js", "memory.js", "llm.js", "console.css", "logo.png")) {
             assertThat(get("/assets/" + asset).statusCode()).as(asset).isEqualTo(200);
         }

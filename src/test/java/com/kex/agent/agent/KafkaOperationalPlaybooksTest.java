@@ -17,6 +17,14 @@ class KafkaOperationalPlaybooksTest {
     }
 
     @Test
+    void prevision_requires_quality_and_never_becomes_an_incident_on_its_own() {
+        assertThat(KafkaOperationalPlaybooks.forRequest("Anticiper le lag avec TimesFM"))
+                .contains("kex_list_forecastable_metrics", "kex_metric_history", "kex_get_forecast_quality",
+                        "kex_forecast_metric", "kex_list_predicted_threshold_breaches", "SHADOW", "STALE",
+                        "pas une probabilité calibrée", "Ne pas activer, alerter ou corriger");
+    }
+
+    @Test
     void unrelated_question_does_not_receive_kafka_procedure() {
         assertThat(KafkaOperationalPlaybooks.forRequest("Quel est mon calendrier demain ?")).isEmpty();
     }

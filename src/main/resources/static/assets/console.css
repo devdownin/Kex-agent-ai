@@ -2102,3 +2102,22 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
 }
 .tool-list li > button:first-child { min-width: 0; }
 .tool-list li > .compact { width: auto; align-self: center; }
+
+/* Prévisions : distinction par trait et texte, au-delà de la couleur. */
+.forecast-controls, .forecast-stats { display: flex; flex-wrap: wrap; gap: 1.25rem; margin: 1rem 0; }
+.forecast-controls label { display: grid; gap: .5rem; flex: 1 1 240px; min-width: 0; }
+.forecast-controls select { width: 100%; max-width: 100%; }
+.forecast-stat { display: grid; gap: .35rem; flex: 1 1 180px; overflow-wrap: anywhere; }
+.forecast-details { display: grid; gap: 1rem; }
+.forecast-chart { margin: 1rem 0; }
+.forecast-chart svg { width: 100%; height: auto; }
+.forecast-chart text { fill: currentColor; font-size: 11px; }
+.forecast-band { fill: #7b8ff5; opacity: .2; }
+.forecast-history-line { stroke: #3aaca4; fill: #3aaca4; }
+.forecast-future-line { stroke: #7b8ff5; stroke-dasharray: 6 4; }
+.forecast-details details { overflow-x: auto; }
+
+@media (max-width: 640px) {
+  .forecast-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+  .forecast-details .primary { white-space: normal; text-align: center; padding: .8rem; }
+}

@@ -61,6 +61,15 @@ class ApiSecurityTest {
     }
 
     @Test
+    void previsions_et_historiques_restent_authentifies() throws Exception {
+        for (String path : new String[] {"/api/agent/forecasts/metrics", "/api/agent/forecasts/breaches",
+                "/api/agent/forecasts/series/unknown"}) {
+            assertThat(status(path, null)).isEqualTo(401);
+            assertThat(status(path, "Bearer secret")).isEqualTo(200);
+        }
+    }
+
+    @Test
     void laisse_passer_la_sonde_de_sante() throws Exception {
         assertThat(status("/actuator/health", null)).isEqualTo(200);
     }

@@ -664,6 +664,15 @@ public class SupervisionService {
                   de perte de messages ; le lag historique, la latence et les erreurs applicatives
                   restent non mesurés par cet outil.
 
+                Pour anticiper un risque, les outils TimesFM en lecture seule sont disponibles
+                seulement si KafkaExplorer les annonce : kex_list_forecastable_metrics,
+                kex_forecast_metric, kex_metric_history, kex_get_forecast_quality et
+                kex_list_predicted_threshold_breaches. Ne devine jamais une série ou ses sources.
+                Citer la fraîcheur, la stratégie, le mode et la qualité réalisée. Une prévision
+                SHADOW, STALE ou de fallback n'est pas un incident observé. Les quantiles ne sont
+                pas une probabilité calibrée. Ne crée aucune anomalie, alerte ou action sur la
+                seule base d'une prévision ; confirme avec des mesures opérationnelles actuelles.
+
                 Ne remplace pas ces outils par une succession de primitives plus basses si le même
                 diagnostic est déjà rendu directement. N'invente jamais les arguments structurés
                 (liste des topics, consumer groups, baseline) à partir du seul nom d'un processus :
