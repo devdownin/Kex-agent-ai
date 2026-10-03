@@ -372,5 +372,5 @@ Consultez le [guide d’intégration et d’exploitation](docs/TIMESFM.md) pour 
 
 Le dashboard affiche les risques à venir ; les aides expliquent modes et scores, les ressources
 liées ouvrent topics, groupes et processus, et l’actualisation à 60 s reste facultative.
-L’assistant de création de processus propose une série autorisée et exporte l’association YAML
-à appliquer explicitement. Voir les [exemples de prompts et du wizard](docs/EXEMPLES.md#timesfm--démonstration-et-prompts-opérationnels).
+L’assistant de création de processus propose une série autorisée et enregistre l’association sans redémarrage. La fiche processus permet aussi de gérer les liens
+et d’examiner risques, échéances et qualité réalisée. Le YAML reste un export facultatif. Voir les [exemples de prompts et du wizard](docs/EXEMPLES.md#timesfm--démonstration-et-prompts-opérationnels).

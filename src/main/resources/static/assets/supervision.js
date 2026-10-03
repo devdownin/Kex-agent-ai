@@ -10,6 +10,7 @@ import {
   stateTag, toast,
 } from './core.js';
 import * as forecasts from './forecasts.js';
+import { processForecasts } from './process-forecasts.js';
 
 const BASE = '/api/agent/supervision';
 const PROCESS_FILTER_STORAGE = 'kex.agent.filters.processes';
@@ -979,6 +980,10 @@ function openProcess(row) {
       + 'présence, jamais une absence — l’état est donc inconnu, pas sain.');
     extra.append(banner);
   }
+
+  const forecastHost = el('section', 'process-forecasts');
+  extra.append(forecastHost);
+  processForecasts(row.processId, forecastHost);
 
   extra.append(el('h3', 'drawer-sub', 'Tendance'));
   const trend = el('div');

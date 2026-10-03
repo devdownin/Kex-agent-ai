@@ -87,7 +87,7 @@ masquer les courbes. Les sources ne sont pas reconstruites depuis le nom de mét
 
 Le panneau **Ressources et processus liés** ouvre les groupes/lag du topic sur la même connexion
 KafkaExplorer. Un lien de groupe prépare un diagnostic en lecture seule dans le chat, que
-l’opérateur choisit d’envoyer. Les processus sont des associations explicites configurées dans Kex,
+l’opérateur choisit d’envoyer. Les processus sont des associations explicites configurées ou persistées dans Kex,
 par série et environnement exacts ; seuls les processus actuellement définis sont affichés :
 
 ```yaml
@@ -157,19 +157,46 @@ Kafka, LLM ou TimesFM. Il est inclus dans le job navigateur de la CI. La vérifi
 instance KafkaExplorer déployée demeure nécessaire pour le périmètre MCP de votre installation.
 
 
-## Assistant de création de processus
+## Assistant et associations persistées
 
-Dans **Conversation → Créer avec l’assistant guidé**, la dernière question propose une série
+Dans **Conversation → Créer avec l’assistant guidé**, la septième question propose une série
 TimesFM facultative. Les options affichent environnement, métrique et identifiant exact du
-catalogue autorisé. Un catalogue incomplet, tronqué ou indisponible ne fournit aucun choix de
-série ; la création reste possible sans prévision.
+catalogue autorisé. Le diagnostic détaille la connexion MCP, les cinq outils attendus, la
+couverture du catalogue et le nombre de séries autorisées, avec un accès à **Intégrations**.
+Un catalogue incomplet, tronqué ou indisponible ne fournit aucun choix ; la création reste possible
+sans prévision.
 
-Le choix ajoute la série et son environnement au hint enregistré. L’aperçu final génère aussi
-le bloc `kex.agent.forecasts.process-links` avec l’identifiant de processus que vous validez.
-Après confirmation ADMIN, le YAML reste disponible dans **Configuration proposée du processus**.
-Appliquer le bloc d’association à la configuration existante et redémarrer Kex pour afficher le
-lien ; le wizard ne modifie pas cette configuration. Ne pas dupliquer dans `supervision.processes`
-un processus déjà enregistré. Aucune série n’est activée ou enrôlée par ce parcours.
+Après confirmation ADMIN, le processus et son hint sont enregistrés, puis son association
+série–environnement est persistée sans redémarrage. Si cette seconde écriture échoue, le wizard
+annonce que le processus existe déjà et invite à réessayer depuis sa fiche. Le YAML conservé
+après création est un export facultatif, pas une étape nécessaire. Ne pas dupliquer une
+déclaration déjà persistée.
 
-Voir les [prompts et la démonstration](EXEMPLES.md#timesfm--démonstration-et-prompts-opérationnels)
-et la [configuration du wizard](CONFIGURATION.md#créer-un-processus-depuis-la-conversation).
+Dans la fiche processus, **Associer une prévision** permet aux ADMIN d’ajouter ou de retirer
+jusqu’à quatre associations. Chaque enregistrement exige un processus existant et chaque paire
+exacte dans le catalogue autorisé complet. Une liste vide retire toutes ses associations, même
+si le MCP est indisponible. Les choix persistés remplacent les liens YAML uniquement pour ce
+processus ; une liste vide est un retrait explicite, pas un retour aux liens YAML.
+
+En mono-instance : `kex.agent.forecasts.store-path`, par défaut
+`${user.home}/.kex-agent-ai/forecast-associations.json`, et `/var/lib/kex/forecast-associations.json`
+dans Docker. Sauvegarder le volume. En profil `shared-memory`, la migration V3 crée
+`kex_forecast_association` dans PostgreSQL ; toutes les répliques voient les remplacements
+atomiques par processus. En cas d’écritures concurrentes, la dernière écriture appliquée gagne.
+
+La fiche affiche au plus quatre prévisions et trois risques par série, avec une indication si
+l’aperçu est tronqué. Calcul, échéance, dernière lecture et période de qualité ont des dates
+séparées. Les risques doivent correspondre à la génération et aux empreintes du résultat affiché.
+Une erreur ou une qualité non mesurée reste explicite ; aucune mesure n’est remplacée par zéro.
+Les associations devenues inaccessibles ne divulguent pas leurs identifiants au navigateur.
+
+| Route | Accès / effet |
+|---|---|
+| `GET /api/agent/forecasts/readiness` | OPERATOR/ADMIN ; diagnostic en lecture seule |
+| `GET /api/agent/forecasts/processes/{id}/associations` | OPERATOR/ADMIN ; associations autorisées effectives |
+| `PUT /api/agent/forecasts/processes/{id}/associations` | ADMIN ; remplace avec `{"associations":[{"seriesId":"…","environment":"…"}]}` ; maximum 4, ou `[]` pour retirer |
+| `GET /api/agent/forecasts/processes/{id}` | OPERATOR/ADMIN ; aperçu borné des résultats et risques persistés |
+
+Les liens YAML existants restent pris en compte pour les processus sans remplacement persistant.
+L’administration des séries, leur activation et les calculs restent dans KafkaExplorer.
+Voir les [prompts et la démonstration](EXEMPLES.md#timesfm--démonstration-et-prompts-opérationnels).

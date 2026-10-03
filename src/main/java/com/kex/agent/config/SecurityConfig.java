@@ -106,7 +106,7 @@ class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/api/agent/mcp/servers/*/secret").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/mcp/servers/*").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/agent/supervision/policy",
-                                "/api/agent/charter").hasRole("ADMIN")
+                                "/api/agent/charter", "/api/agent/forecasts/processes/*/associations").hasRole("ADMIN")
                         // Transverse par construction — voir SkillsController.reviewQueue — donc
                         // au même niveau d'accès que trancher elle-même, pas celui d'une lecture
                         // ordinaire de compétences.

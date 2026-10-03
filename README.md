@@ -412,5 +412,6 @@ See the [integration and operator guide](docs/TIMESFM.md) for setup and scope li
 
 The dashboard highlights upcoming risks. In-view help explains modes and quality scores,
 resource links lead to topics, groups and processes, and optional refresh reads results every 60 s.
-The process creation wizard offers an approved series and exports an explicit YAML association
-for operators to apply. See the [prompt and wizard examples](docs/EXEMPLES.md#timesfm--démonstration-et-prompts-opérationnels).
+The process creation wizard offers an approved series and persists the explicit association
+without restarting. Existing process details also support association management and show future
+risks, forecast dates and realised quality; YAML remains an optional export. See the [prompt and wizard examples](docs/EXEMPLES.md#timesfm--démonstration-et-prompts-opérationnels).

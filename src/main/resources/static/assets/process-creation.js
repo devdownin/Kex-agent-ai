@@ -4,6 +4,7 @@
 // Le parcours collecte des faits déclarés par l'opérateur. Les suggestions MCP restent des choix,
 // jamais une preuve que le relevé est exhaustif ni une raison d'inventer une étape manquante.
 import { $, api, el, onCredentialChange, toast } from './core.js';
+import { readinessPanel } from './process-forecasts.js';
 
 const BASE = '/api/agent/supervision/processes';
 const STEPS = [
@@ -28,6 +29,7 @@ let generation = 0;
 let saving = false;
 let forecasts = [];
 let forecastsNote = '';
+let readiness = null;
 
 onCredentialChange(() => {
   ++generation; draft = {}; topics = []; groups = []; forecasts = []; admin = false;
@@ -37,6 +39,7 @@ onCredentialChange(() => {
   $('#process-wizard-note').textContent = '';
   $('#process-wizard-config').hidden = true;
   $('#process-wizard-config-yaml').textContent = '';
+  $('#process-wizard-config-note').textContent = '';
 });
 
 const chosenForecast = () => forecasts.find((metric) => metric.seriesId === draft.forecast);
@@ -76,13 +79,15 @@ function yaml(process) {
 async function loadForecasts(token) {
   forecastsNote = 'Lecture du catalogue TimesFM autorisé…';
   try {
-    const read = await api('/api/agent/forecasts/metrics');
+    const [read, status] = await Promise.all([api('/api/agent/forecasts/metrics'),
+      api('/api/agent/forecasts/readiness').catch(() => null)]);
+    if (token === generation) readiness = status;
     if (token !== generation) return;
     if (read.unavailable || read.truncated || read.coverage?.complete !== true || !Array.isArray(read.data)) {
       forecasts = []; forecastsNote = 'Catalogue absent ou incomplet : continuez sans TimesFM, puis vérifiez la connexion MCP et ses permissions.';
     } else {
       forecasts = read.data.filter((m) => typeof m?.seriesId === 'string' && m.seriesId.length > 0 && typeof m.environment === 'string' && m.environment.length > 0 && typeof m.metricId === 'string');
-      forecastsNote = forecasts.length ? 'Choix facultatif et explicite. Le hint guidera les lectures ; le lien visible exige d’appliquer la configuration proposée. Aucun calcul ni activation n’est lancé.'
+      forecastsNote = forecasts.length ? 'Choix facultatif et explicite. Le choix sera enregistré avec une association persistée après création du processus. Aucun calcul ni activation n’est lancé.'
         : 'Aucune série autorisée. Enrôlez les séries dans KafkaExplorer et autorisez les cinq outils MCP, puis revenez ici.';
     }
   } catch {
@@ -140,7 +145,7 @@ function renderQuestion() {
     select.addEventListener('change', () => { draft.forecast = select.value; draft.hint = ''; renderDraft(); });
     const label = el('label', null, item.question); label.htmlFor = select.id;
     const guide = el('a', 'ghost', 'Consulter les prévisions et leur qualité'); guide.href = '#/forecasts';
-    $('#process-wizard-question').replaceChildren(label, select, guide);
+    $('#process-wizard-question').replaceChildren(readinessPanel(readiness), label, select, guide);
     $('#process-wizard-note').textContent = forecastsNote;
     $('#process-wizard-next').textContent = 'Suivant'; select.focus(); return;
   }
@@ -196,7 +201,7 @@ function renderPreview() {
   const preview = el('pre', 'dump');
   const warnings = el('p', 'hint');
   const forecastNote = el('p', 'hint', chosenForecast()
-    ? 'TimesFM : le hint est enregistré avec le processus. Appliquez séparément le bloc forecasts.process-links pour afficher l’association dans Prévisions. La série reste administrée dans KafkaExplorer.'
+    ? 'TimesFM : le hint et l’association seront enregistrés après confirmation. Le YAML reste disponible pour exporter la configuration. La série reste administrée dans KafkaExplorer.'
     : 'Aucune prévision associée. Vous pourrez ajouter une association par série et environnement ultérieurement.');
   const refresh = () => {
     draft.id = id.value.trim();
@@ -260,7 +265,7 @@ async function open() {
   groups = [];
   topicsNote = '';
   groupsNote = '';
-  forecasts = []; forecastsNote = '';
+  forecasts = []; forecastsNote = ''; readiness = null;
   admin = false;
   existingIds = new Set();
   const token = ++generation;
@@ -313,14 +318,30 @@ export function wireProcessWizard() {
     saving = true;
     const token = generation;
     const proposedYaml = yaml(value());
+    const selected = chosenForecast();
     $('#process-wizard-next').disabled = true;
     try {
       const process = await api(BASE, { method: 'POST', body: value() });
       if (token !== generation) return;
+      let associationNote = 'Processus enregistré. Le YAML est un export ; ne dupliquez pas une déclaration déjà persistée.';
+      if (selected) {
+        try {
+          await api(`/api/agent/forecasts/processes/${encodeURIComponent(process.id)}/associations`, {
+            method: 'PUT', body: { associations: [{ seriesId: selected.seriesId, environment: selected.environment }] },
+          });
+          if (token !== generation) return;
+          associationNote = 'Processus et association TimesFM enregistrés, sans redémarrage. Le YAML est un export facultatif.';
+        } catch (error) {
+          if (token !== generation) return;
+          associationNote = `Processus enregistré, mais association TimesFM non enregistrée : ${error.message}. Réessayez depuis sa fiche, sans recréer le processus.`;
+        }
+      }
       ++generation;
       $('#process-wizard').hidden = true;
       $('#process-wizard-config-yaml').textContent = proposedYaml;
+      $('#process-wizard-config-note').textContent = associationNote;
       $('#process-wizard-config').hidden = false;
+      $('#process-wizard-config').open = true;
       toast(`Processus « ${process.name} » créé. Il sera mesuré au prochain cycle.`, 'success', {
         label: 'Voir le processus',
         run: () => { location.hash = `#/processes?processus=${encodeURIComponent(process.id)}`; },
