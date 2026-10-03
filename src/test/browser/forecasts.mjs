@@ -8,6 +8,7 @@ import { resolve } from 'node:path';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
 const root = resolve('src/main/resources/static');
 let scenario = 'ready';
+let metricReads = 0;
 const now = Date.now();
 const envelope = (data) => ({ data, coverage: { complete: true }, warnings: [], truncated: false, unavailable: null });
 const measured = (value) => envelope({ measured: true, value });
@@ -19,7 +20,7 @@ const history = { seriesId: 's1', inputFingerprint: 'i1', profileFingerprint: 'p
 ] };
 function detail(id) {
   const at = scenario === 'stale' ? now - 1000 : now + 3600000;
-  return { seriesId: id, forecast: measured({ context: history, state: 'READY', strategy: scenario === 'fallback' ? 'LAST_VALUE' : 'TIMESFM',
+  return { seriesId: id, forecast: measured({ context: { ...history, definitionVersion: 'v1' }, state: 'READY', strategy: scenario === 'fallback' ? 'LAST_VALUE' : 'TIMESFM',
     visibility: 'SHADOW', generatedAt: now, forecast: { seriesId: id, outputUnit: 'messages', modelId: 'timesfm', modelRevision: 'pinned', points: [
       { at: now + 600000, central: 6, q10: 4, q50: 6, q90: 8 }, { at, central: 10, q10: 8, q50: 10, q90: 12 },
     ] } }), history: measured({ ...history, inputFingerprint: scenario === 'mismatch' ? 'other' : 'i1' }),
@@ -32,6 +33,15 @@ const server = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (scenario === 'http-error') { res.writeHead(503); res.end('{"detail":"Serveur temporairement indisponible"}'); return; }
     let body;
+    if (req.url.endsWith('/metrics')) metricReads++;
+    if (req.url.endsWith('/resources')) {
+      const id = req.url.split('/').at(-2);
+      body = scenario === 'no-provenance' ? { unavailable: 'Provenance non communiquée' } : {
+        seriesId: id, environment: id === 's1' ? 'prod' : 'dev', definitionVersion: scenario === 'resource-mismatch' ? 'v2' : 'v1',
+        topics: ['orders'], groups: ['orders-consumer'], processes: [{ id: 'order-integration', name: 'Commandes' }],
+      };
+      res.end(JSON.stringify(body)); return;
+    }
     if (req.url.endsWith('/metrics')) body = scenario === 'unavailable' ? { unavailable: 'Outil absent' } : envelope(scenario === 'empty' ? [] : [
       { ...metric, metricId: scenario === 'xss' ? '<img src=x onerror="window.hacked=true">' : metric.metricId },
       { ...metric, seriesId: 's2', environment: 'dev', metricId: 'Lag dev' },
@@ -47,7 +57,7 @@ const server = createServer(async (req, res) => {
   }
   if (req.url === '/') {
     res.setHeader('Content-Type', 'text/html');
-    res.end('<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/assets/console.css"><main style="margin:0;padding:16px;min-width:0"><h1>Prévisions</h1><div id="forecast-content"></div><section><h2>Risques à venir</h2><div id="forecast-dashboard-content"></div></section></main><script type="module">import * as f from "/assets/forecasts.js"; window.forecasts=f; f.view();</script>'); return;
+    res.end('<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/assets/console.css"><main style="margin:0;padding:16px;min-width:0"><h1>Prévisions</h1><label><input type="checkbox" id="forecast-auto-refresh"> Actualiser automatiquement (60 s)</label><p id="forecast-refresh-status"></p><div id="forecast-content"></div><section><h2>Risques à venir</h2><div id="forecast-dashboard-content"></div></section></main><script type="module">import * as f from "/assets/forecasts.js"; window.forecasts=f; f.wire(); f.setActive(true); f.view();</script>'); return;
   }
   try {
     if (!/^\/assets\/[a-z.-]+$/.test(req.url)) throw new Error('path');
@@ -63,6 +73,9 @@ try {
   const base = `http://127.0.0.1:${server.address().port}`;
   async function load(mode) { scenario = mode; await page.goto(base); await page.waitForFunction(() => Boolean(window.forecasts)); await page.waitForFunction(() => !document.body.textContent.includes('Lecture des prévisions existantes…') && !document.body.textContent.includes('Lecture de l’historique et de la qualité…')); }
   await load('ready');
+  assert.equal(await page.getByRole('link', { name: 'Topic : orders', exact: true }).getAttribute('href'), '#/integrations?topic=orders');
+  assert.match(await page.getByRole('link', { name: 'Diagnostiquer le groupe : orders-consumer' }).getAttribute('href'), /#\/chat\?draft=/);
+  assert.equal(await page.getByRole('link', { name: 'Processus : Commandes' }).getAttribute('href'), '#/processes?processus=order-integration');
   assert.match(await page.locator('body').innerText(), /Mode observation/);
   assert.equal(await page.locator('.forecast-band').count(), 1);
   assert.match(await page.locator('body').innerText(), /MAE dernière valeur/);
@@ -117,15 +130,43 @@ try {
   assert.match(await page.locator('#forecast-dashboard-content').innerText(), /Lecture refusée/);
   assert.doesNotMatch(await page.locator('#forecast-dashboard-content').innerText(), /Aucun dépassement/);
   await load('unavailable'); assert.match(await page.locator('body').innerText(), /Outil absent/);
+  await load('no-provenance');
+  assert.match(await page.locator('body').innerText(), /Provenance non communiquée/);
+  assert.equal(await page.getByRole('link', { name: 'Topic : orders', exact: true }).count(), 0);
+  await load('resource-mismatch');
+  assert.match(await page.locator('body').innerText(), /Provenance non vérifiée/);
+  assert.equal(await page.getByRole('link', { name: 'Topic : orders', exact: true }).count(), 0);
   await load('empty'); assert.match(await page.locator('body').innerText(), /Aucune métrique autorisée/);
   await load('http-error'); assert.equal(await page.getByRole('button', { name: 'Réessayer' }).count(), 1);
   await load('breach'); await page.evaluate(() => window.forecasts.dashboard());
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'La vue mobile déborde');
   if (process.env.FORECAST_SCREENSHOT) await page.screenshot({ path: process.env.FORECAST_SCREENSHOT, fullPage: true });
+  await page.clock.install();
+  const initialReads = metricReads;
+  await page.clock.fastForward(60_000);
+  assert.equal(metricReads, initialReads, 'Actualisation désactivée par défaut');
+  await page.locator('#forecast-auto-refresh').check();
+  await page.clock.fastForward(60_000);
+  await page.waitForFunction(() => document.querySelector('#forecast-refresh-status').textContent.includes('dernière lecture :') && !document.querySelector('#forecast-content').textContent.includes('Lecture'));
+  assert.equal(metricReads, initialReads + 1, 'Un cycle par minute');
+  await page.evaluate(() => window.forecasts.setActive(false));
+  await page.clock.fastForward(120_000);
+  assert.equal(metricReads, initialReads + 1, 'Vue quittée : aucune lecture');
+  await page.evaluate(() => { window.forecasts.setActive(true); Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); });
+  await page.clock.fastForward(120_000);
+  assert.equal(metricReads, initialReads + 1, 'Onglet masqué : aucune lecture');
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
+  await page.clock.fastForward(60_000);
+  await page.waitForFunction(() => !document.querySelector('#forecast-content').textContent.includes('Lecture'));
+  assert.equal(metricReads, initialReads + 2, 'Onglet visible : reprise au prochain intervalle');
   await page.evaluate(async () => { const core = await import('/assets/core.js'); core.credentials.set('new-key'); });
   assert.equal(await page.locator('#forecast-content').innerText(), '');
   assert.equal(await page.locator('#forecast-dashboard-content').innerText(), '');
+  assert.equal(await page.locator('#forecast-auto-refresh').isChecked(), false);
+  const afterCredentialChange = metricReads;
+  await page.clock.fastForward(120_000);
+  assert.equal(metricReads, afterCredentialChange, 'Changement de jeton : actualisation arrêtée');
   assert.deepEqual(errors, []);
   console.log('✓ Prévisions : contrat, environnements, valeurs manquantes, fallback, péremption, provenance, XSS, erreurs, mobile et changement de jeton');
 } finally { await browser.close(); await new Promise((resolve) => server.close(resolve)); }

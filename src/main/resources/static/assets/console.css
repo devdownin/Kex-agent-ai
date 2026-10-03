@@ -2124,6 +2124,10 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
 .forecast-help dd { margin: .3rem 0; color: var(--muted); }
 .forecast-threshold-line { stroke: #c87710; stroke-width: 2; stroke-dasharray: 2 3; }
 .forecast-breach-point { fill: #c87710; stroke: currentColor; stroke-width: 1; }
+.forecast-refresh-option { display: flex; align-items: center; gap: .5rem; }
+.forecast-refresh-option input { width: auto; }
+.forecast-resource-links { display: flex; flex-wrap: wrap; gap: .75rem; }
+.forecast-resource-links a { white-space: normal; overflow-wrap: anywhere; }
 
 @media (max-width: 640px) {
   .forecast-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }

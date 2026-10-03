@@ -173,6 +173,8 @@
         <button type="button" class="ghost" id="refresh-forecasts">Actualiser les résultats</button>
       </div>
       <p class="banner">Une prévision est une estimation, pas un incident constaté. Les quantiles ne garantissent pas une probabilité de dépassement. L’activation se gère dans KafkaExplorer.</p>
+      <label class="forecast-refresh-option"><input type="checkbox" id="forecast-auto-refresh"> Actualiser automatiquement (60 s)</label>
+      <p class="hint" id="forecast-refresh-status" role="status">Actualisation automatique désactivée · dernière lecture : aucune</p>
       <div id="forecast-content" aria-live="polite"></div>
     </section>
     <section class="view" id="view-overview" hidden>

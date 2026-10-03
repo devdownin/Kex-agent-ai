@@ -70,8 +70,42 @@ L’analyse guidée demande cinq parties : constat actuel, prévision, qualité,
 proposées. L’historique est daté et ne tient pas lieu de vérification de l’état actuel. Les sources
 et causes ne doivent pas être inventées ; aucune action n’est lancée par le brouillon.
 
-**Actualiser les résultats** relit les résultats existants ; cette vue ne lance pas de sondage
-périodique. L’activation des séries reste dans KafkaExplorer et sa gouvernance opérateur.
+**Actualiser les résultats** relit les résultats existants. L’option **Actualiser automatiquement
+(60 s)** est désactivée par défaut. Elle relit au plus une fois par minute, sans chevaucher une
+lecture en cours, et se suspend lorsque la vue est quittée ou l’onglet masqué. Le retour visible
+reprend au prochain intervalle ; le changement de jeton arrête l’option et annule les requêtes.
+La date de dernière lecture reste distincte de la date de calcul de la prévision. L’activation
+des séries reste dans KafkaExplorer et sa gouvernance opérateur.
+
+## Ressources et processus liés
+
+Le catalogue MCP peut ajouter `sources` : `definitionVersion`, `topics`, `groups`, `complete`.
+Cet enrichissement est fourni par [KafkaExplorer #456](https://github.com/devdownin/Kafkaexplorer/pull/456).
+KafkaExplorer n’annonce que les sources de séries autorisées. Les identifiants masqués par la DLP
+ne deviennent pas des liens ; une provenance incomplète ou absente désactive ce panneau sans
+masquer les courbes. Les sources ne sont pas reconstruites depuis le nom de métrique.
+
+Le panneau **Ressources et processus liés** ouvre les groupes/lag du topic sur la même connexion
+KafkaExplorer. Un lien de groupe prépare un diagnostic en lecture seule dans le chat, que
+l’opérateur choisit d’envoyer. Les processus sont des associations explicites configurées dans Kex,
+par série et environnement exacts ; seuls les processus actuellement définis sont affichés :
+
+```yaml
+kex:
+  agent:
+    forecasts:
+      process-links:
+        - series-id: "<identifiant approuvé de la série>"
+          environment: production
+          process-ids: [order-integration]
+```
+
+Les descriptions, hints LLM et ressemblances de noms ne servent jamais d’association. Le panneau
+refuse une définition de source différente du contexte affiché. La route GET
+`/api/agent/forecasts/series/{seriesId}/resources` exige le catalogue courant complet et refuse
+les identifiants non autorisés ; aucun lien n’est conservé au changement de jeton. Limites :
+128 topics/groupes par série et 50 associations de processus rendues. Le catalogue d’anciennes
+versions de KafkaExplorer reste compatible : le panneau explique que la provenance est absente.
 
 ## Interpréter les états
 
