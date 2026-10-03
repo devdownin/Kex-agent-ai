@@ -7,6 +7,11 @@ Versionnement [sémantique](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- Intégration TimesFM via les cinq outils MCP KafkaExplorer en lecture seule : vue Prévisions
+  par environnement, historique, quantiles, qualité réalisée, baselines et dépassements prédits.
+  Brouillon de conversation contextuel, contrôle de provenance, états SHADOW/expiré/repli,
+  tests de contrat et navigateur, guide `docs/TIMESFM.md`.
+
 - Base de connaissance optionnelle (RAG) : ingestion, recherche et purge par API, recherche
   automatique avant chaque échange. Éteinte par défaut.
 - Événements `tool` dans le flux SSE et champ `tools` sur la réponse bloquante.

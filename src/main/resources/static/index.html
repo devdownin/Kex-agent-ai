@@ -35,6 +35,9 @@
       <a class="nav-item" href="#/overview" data-view="overview" aria-label="Vue d'ensemble">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg>
         Vue d'ensemble</a>
+      <a class="nav-item" href="#/forecasts" data-view="forecasts" aria-label="Prévisions">
+        <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 18V5M4 18h16M6 15l4-5 4 2 6-7"/></svg>
+        Prévisions</a>
       <a class="nav-item" href="#/attention" data-view="attention" aria-label="À traiter">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 21 19H3Z"/><path d="M12 10.3v3.4"/><circle cx="12" cy="16.4" r=".9" fill="currentColor" stroke="none"/></svg>
         À traiter <span class="badge" id="nav-attention" hidden>0</span></a>
@@ -164,6 +167,14 @@
 
 
     <!-- ══ Vue d'ensemble ══ -->
+    <section class="view" id="view-forecasts" hidden>
+      <div class="workspace-heading">
+        <div><h1>Prévisions des métriques</h1><p class="hint">Anticiper les évolutions à partir des résultats calculés par KafkaExplorer.</p></div>
+        <button type="button" class="ghost" id="refresh-forecasts">Actualiser les résultats</button>
+      </div>
+      <p class="banner">Une prévision est une estimation, pas un incident constaté. Les quantiles ne garantissent pas une probabilité de dépassement. L’activation se gère dans KafkaExplorer.</p>
+      <div id="forecast-content" aria-live="polite"></div>
+    </section>
     <section class="view" id="view-overview" hidden>
       <div class="overview-customizer">
         <details id="dashboard-customizer">

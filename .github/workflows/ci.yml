@@ -189,6 +189,7 @@ jobs:
         run: |
           node src/test/browser/actions-menu.mjs
           node src/test/browser/ui-controls.mjs
+          node src/test/browser/forecasts.mjs
           timeout 10m node src/test/browser/console.mjs
 
       - name: Agent logs on failure

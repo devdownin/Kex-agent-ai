@@ -1,0 +1,216 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Kex Agent AI Contributors
+import { $, api, el, empty, errorState, onCredentialChange, stamp } from './core.js';
+
+const BASE = '/api/agent/forecasts';
+let selection = '';
+let environment = '';
+let generation = 0;
+onCredentialChange(() => {
+  selection = '';
+  environment = '';
+  generation++;
+  $('#forecast-content')?.replaceChildren();
+});
+const numeric = (value) => typeof value === 'number' && Number.isFinite(value);
+const BASELINES = { LAST_VALUE: 'dernière valeur', MOVING_AVERAGE: 'moyenne glissante', SEASONAL_NAIVE: 'saisonnalité naïve', LINEAR_TREND: 'tendance linéaire' };
+const number = (value) => numeric(value) ? value.toLocaleString('fr-FR', { maximumFractionDigits: 3 }) : 'Non mesuré';
+const time = (value) => numeric(value) && value > 0 && value <= 8.64e15 ? stamp(new Date(value).toISOString()) : 'Non mesuré';
+const STATES = { READY: 'Disponible', WARMING_UP: 'Historique en cours', STALE: 'Expirée',
+  INVALID_DATA: 'Données invalides', DEGRADED: 'Mode dégradé', UNAVAILABLE: 'Indisponible',
+  INSUFFICIENT_HISTORY: 'Historique insuffisant', SCOPE_CHANGED: 'Sources modifiées' };
+
+function note(read) {
+  if (read?.unavailable) return empty('Lecture indisponible.', read.unavailable);
+  if (!read || read.truncated || read.coverage?.complete !== true) {
+    return empty('Lecture incomplète.', 'La couverture de cette réponse ne permet pas de conclure.');
+  }
+  return null;
+}
+function measured(read) {
+  if (note(read) || read.data?.measured !== true) return null;
+  return read.data.value;
+}
+function field(parent, label, value) {
+  const row = el('div', 'forecast-stat');
+  row.append(el('span', 'hint', label), el('strong', null, value));
+  parent.append(row);
+}
+function section(title) {
+  const panel = el('section', 'panel');
+  panel.append(el('h2', null, title));
+  return panel;
+}
+function readNote(parent, read) {
+  const unavailable = note(read);
+  if (unavailable) parent.append(unavailable);
+  else if (read.data?.measured === false) parent.append(el('p', 'hint', read.data.reason || 'Non mesuré'));
+  for (const warning of read?.warnings || []) {
+    if (warning.message) parent.append(el('p', 'hint', warning.message));
+  }
+}
+
+// Chaque trou interrompt la ligne : relier deux observations ferait inventer un historique.
+function chart(history, forecast, band, unit) {
+  const wrap = el('figure', 'forecast-chart');
+  const samples = [...history.map((p) => ({ at: p.endAt, value: p.value })),
+    ...forecast.map((p) => ({ at: p.at, value: p.central }))];
+  const valid = samples.filter((p) => numeric(p.at) && numeric(p.value));
+  if (!valid.length) return empty('Aucun point mesuré à tracer.');
+  const values = [...valid.map((p) => p.value), ...(band ? forecast.flatMap((p) => [p.q10, p.q90]).filter(numeric) : [])];
+  const min = Math.min(...values); const max = Math.max(...values);
+  const start = Math.min(...valid.map((p) => p.at)); const end = Math.max(...valid.map((p) => p.at));
+  const x = (at) => 65 + 665 * (at - start) / Math.max(1, end - start);
+  const y = (v) => 225 - 185 * (v - min) / Math.max(1, max - min);
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 760 280'); svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', `Historique et prévision en ${unit || 'unité non précisée'}. Valeurs disponibles dans le tableau.`);
+  function shape(tag, attrs, text) {
+    const node = document.createElementNS(svg.namespaceURI, tag);
+    for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
+    if (text) node.textContent = text;
+    svg.append(node);
+  }
+  if (band && forecast.length && forecast.every((p) => numeric(p.q10) && numeric(p.q90))) {
+    const points = [...forecast.map((p) => `${x(p.at)},${y(p.q10)}`),
+      ...forecast.toReversed().map((p) => `${x(p.at)},${y(p.q90)}`)].join(' ');
+    shape('polygon', { points, class: 'forecast-band' });
+  }
+  function line(points, kind) {
+    let path = ''; let contiguous = false;
+    for (const p of points) {
+      if (!numeric(p.at) || !numeric(p.value)) { contiguous = false; continue; }
+      path += `${contiguous ? 'L' : 'M'}${x(p.at)},${y(p.value)} `; contiguous = true;
+      shape('circle', { cx: x(p.at), cy: y(p.value), r: 2, class: kind });
+    }
+    shape('path', { d: path, class: kind, fill: 'none', 'stroke-width': 2 });
+  }
+  line(history.map((p) => ({ at: p.endAt, value: p.value })), 'forecast-history-line');
+  line(forecast.map((p) => ({ at: p.at, value: p.central })), 'forecast-future-line');
+  shape('text', { x: 4, y: 45 }, number(max)); shape('text', { x: 4, y: 225 }, number(min));
+  shape('text', { x: 65, y: 260 }, time(start));
+  shape('text', { x: 730, y: 278, 'text-anchor': 'end' }, time(end));
+  wrap.append(svg, el('figcaption', 'hint', `Historique : trait plein ; prévision : pointillés${band ? ' ; zone : Q10–Q90, intervalle nominal non garanti' : ' ; baseline sans intervalle de confiance'}. Unité : ${unit || 'non précisée'}.`));
+  return wrap;
+}
+
+function details(data, metric) {
+  const wrap = el('div', 'forecast-details');
+  const panel = section(metric.metricId);
+  const record = measured(data.forecast);
+  readNote(panel, data.forecast);
+  if (record) {
+    const forecast = record.forecast;
+    const points = Array.isArray(forecast?.points) ? forecast.points.slice(0, 512) : [];
+    const expired = points.length > 0 && numeric(points.at(-1).at) && points.at(-1).at <= Date.now();
+    const state = expired ? 'STALE' : record.state;
+    const summary = el('div', 'forecast-stats');
+    field(summary, 'État', STATES[state] || 'État inconnu');
+    field(summary, 'Mode', record.visibility || 'Non communiqué');
+    field(summary, 'Stratégie', record.strategy || 'Non communiquée');
+    field(summary, 'Statistique centrale', forecast?.centralStatistic || 'Non communiquée');
+    field(summary, 'Calculée le', time(record.generatedAt));
+    field(summary, 'Échéance', time(points.at(-1)?.at));
+    field(summary, 'Modèle / révision', `${forecast?.modelId || 'Non communiqué'} / ${forecast?.modelRevision || 'Non communiquée'}`);
+    panel.append(summary);
+    if (record.reason) panel.append(el('p', 'hint', record.reason));
+    if (record.visibility === 'SHADOW') panel.append(el('p', 'banner', 'Mode observation : aucune alerte ni action n’est déclenchée.'));
+    if (expired) panel.append(el('p', 'banner', 'Prévision expirée : elle ne représente plus le risque futur.'));
+    const history = measured(data.history);
+    readNote(panel, data.history);
+    // L'historique est lu séparément : ne jamais mélanger deux générations obtenues lors d'un refresh.
+    const matching = history && typeof history.inputFingerprint === 'string' && history.inputFingerprint.length > 0
+      && typeof history.profileFingerprint === 'string' && history.profileFingerprint.length > 0
+      && history.inputFingerprint === record.context?.inputFingerprint
+      && history.profileFingerprint === record.context?.profileFingerprint;
+    const past = matching && Array.isArray(history.points) ? history.points.slice(0, 512) : [];
+    if (history && !matching) panel.append(el('p', 'banner', 'Historique renouvelé entre les lectures. Actualisez pour comparer la même génération.'));
+    const band = record.strategy === 'TIMESFM';
+    panel.append(chart(past, points, band, forecast?.outputUnit || metric.unit));
+    const tableDetails = el('details'); tableDetails.append(el('summary', null, 'Voir les valeurs et les imputations'));
+    const table = el('table', 'grid'); const head = el('tr');
+    ['Date', 'Type', 'Valeur centrale', 'Q10', 'Q50', 'Q90'].forEach((v) => head.append(el('th', null, v)));
+    const thead = el('thead'); thead.append(head); table.append(thead);
+    const body = el('tbody');
+    for (const p of [...past.map((p) => ({ at: p.endAt, central: p.value, type: p.imputed ? 'Historique imputé' : 'Historique' })),
+      ...points.map((p) => ({ ...p, type: 'Prévision' }))]) {
+      const row = el('tr');
+      [time(p.at), p.type, number(p.central), band && p.type === 'Prévision' ? number(p.q10) : '—', band && p.type === 'Prévision' ? number(p.q50) : '—',
+        band && p.type === 'Prévision' ? number(p.q90) : '—'].forEach((v) => row.append(el('td', null, v)));
+      body.append(row);
+    }
+    table.append(body); tableDetails.append(table); panel.append(tableDetails);
+  }
+  const qualityPanel = section('Qualité mesurée après échéance');
+  readNote(qualityPanel, data.quality);
+  const quality = measured(data.quality);
+  if (quality) {
+    const stats = el('div', 'forecast-stats');
+    field(stats, 'Points évalués', number(quality.evaluatedPoints));
+    field(stats, 'Évaluation jusqu’au', time(quality.evaluatedThrough));
+    field(stats, 'MAE TimesFM', number(quality.timesfmMetrics?.mae));
+    field(stats, 'MASE', number(quality.timesfmMetrics?.mase));
+    field(stats, 'Pinball loss', number(quality.timesfmMetrics?.meanPinballLoss));
+    field(stats, 'Couverture Q10–Q90', numeric(quality.timesfmMetrics?.q10Q90Coverage) ? `${number(100 * quality.timesfmMetrics.q10Q90Coverage)} %` : 'Non mesurée');
+    field(stats, 'Largeur moyenne', number(quality.timesfmMetrics?.meanIntervalWidth));
+    for (const [name, score] of Object.entries(quality.baselineMae || {})) field(stats, `MAE ${BASELINES[name] || name}`, number(score));
+    qualityPanel.append(stats);
+  }
+  const analyse = el('a', 'primary', 'Analyser avec l’agent');
+  const prompt = `Analyse la prévision TimesFM de la métrique ${metric.metricId}, série ${metric.seriesId}, environnement ${metric.environment}. Lis kex_forecast_metric, kex_metric_history et kex_get_forecast_quality. Vérifie fraîcheur, mode, stratégie, qualité réalisée et provenance avant de commenter les risques. Distingue prévision et incident constaté ; ne déclenche aucune action.`;
+  analyse.href = `#/chat?draft=${encodeURIComponent(prompt)}`;
+  wrap.append(panel, qualityPanel, analyse);
+  return wrap;
+}
+
+export async function view() {
+  const ticket = ++generation;
+  const host = $('#forecast-content');
+  host.replaceChildren(el('p', 'hint', 'Lecture des prévisions existantes…'));
+  try {
+    const [catalog, breaches] = await Promise.all([api(`${BASE}/metrics`), api(`${BASE}/breaches`)]);
+    if (ticket !== generation) return;
+    const problem = note(catalog);
+    if (problem) { host.replaceChildren(problem); return; }
+    if (!Array.isArray(catalog.data) || !catalog.data.length) {
+      host.replaceChildren(empty('Aucune métrique autorisée.', 'Enrôlez les séries et leurs sources dans KafkaExplorer, puis autorisez les cinq outils sur la connexion MCP.')); return;
+    }
+    const wrap = el('div'); const controls = el('div', 'forecast-controls');
+    const environments = [...new Set(catalog.data.map((m) => m.environment))];
+    if (!environments.includes(environment)) environment = environments[0];
+    const envLabel = el('label', null, 'Environnement'); const env = el('select'); env.id = 'forecast-environment';
+    environments.forEach((name) => { const option = el('option', null, name); option.value = name; env.append(option); });
+    env.value = environment; env.addEventListener('change', () => { environment = env.value; selection = ''; view(); });
+    envLabel.append(env); controls.append(envLabel);
+    const metrics = catalog.data.filter((m) => m.environment === environment);
+    if (!metrics.some((m) => m.seriesId === selection)) selection = metrics[0].seriesId;
+    const metricLabel = el('label', null, 'Métrique'); const select = el('select'); select.id = 'forecast-series';
+    metrics.forEach((m) => { const option = el('option', null, `${m.metricId} · ${m.unit || 'unité non précisée'}`); option.value = m.seriesId; select.append(option); });
+    select.value = selection; select.addEventListener('change', () => { selection = select.value; view(); });
+    metricLabel.append(select); controls.append(metricLabel);
+    wrap.append(controls);
+    const risks = section('Dépassements prédits'); const failed = note(breaches);
+    if (failed) risks.append(failed);
+    else if (!Array.isArray(breaches.data)) risks.append(empty('Réponse de dépassements invalide.'));
+    else {
+      const visible = breaches.data.filter((b) => b.windowEndAt > Date.now() && metrics.some((m) => m.seriesId === b.threshold?.seriesId));
+      if (!visible.length) risks.append(el('p', 'hint', 'Aucun dépassement rendu dans cet environnement. Cela ne prouve pas l’absence de risque.'));
+      for (const b of visible) {
+        const metric = metrics.find((m) => m.seriesId === b.threshold.seriesId);
+        risks.append(el('p', 'banner', `${metric.metricId} · ${b.threshold.direction === 'ABOVE' ? 'au-dessus' : 'au-dessous'} de ${number(b.threshold.threshold)} ${metric.unit || ''} · ${b.threshold.visibility} · fenêtre jusqu’au ${time(b.windowEndAt)}. Quantile nominal, aucune alerte envoyée.`));
+        risks.append(el('p', 'hint', `Qualité historique : ${b.threshold.historyQuality || 'non communiquée'} · définition : ${b.threshold.definitionVersion || 'non communiquée'} · calculée le ${time(b.generatedAt)}.`));
+        const inspect = el('button', 'ghost', 'Voir cette prévision');
+        inspect.type = 'button';
+        inspect.addEventListener('click', () => { selection = metric.seriesId; view(); });
+        risks.append(inspect);
+      }
+    }
+    wrap.append(risks); const detailHost = el('div'); wrap.append(detailHost); host.replaceChildren(wrap);
+    detailHost.append(el('p', 'hint', 'Lecture de l’historique et de la qualité…'));
+    const id = selection; const data = await api(`${BASE}/series/${encodeURIComponent(id)}`);
+    if (ticket !== generation) return;
+    detailHost.replaceChildren(details(data, metrics.find((m) => m.seriesId === id)));
+  } catch (error) {
+    if (ticket === generation) host.replaceChildren(errorState(error, view));
+  }
+}

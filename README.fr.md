@@ -361,3 +361,11 @@ et Docker. Chaque GitHub Action est épinglée par SHA de commit.
 ## 📄 Licence
 
 GPL-3.0 — voir [LICENSE](LICENSE).
+
+## Prévisions TimesFM
+
+**Control Center → Prévisions** lit les prévisions persistées de KafkaExplorer via cinq outils MCP en lecture seule.
+Choisissez l’environnement et la métrique autorisée, consultez historique, Q10/Q50/Q90, qualité réalisée,
+baselines et dépassements prédits, puis préparez une conversation avec l’agent.
+SHADOW, prévisions expirées et replis restent explicites ; Kex ne lance ni inférence ni activation.
+Consultez le [guide d’intégration et d’exploitation](docs/TIMESFM.md) pour la configuration et les limites de portée.
