@@ -9,6 +9,7 @@ import {
   openDrawer, operatorContext, params, percent, registerDrawer, render, report, setOperatorContext, setParams, skeleton, sortable, sparkline, stamp, stateMark,
   stateTag, toast,
 } from './core.js';
+import * as forecasts from './forecasts.js';
 
 const BASE = '/api/agent/supervision';
 const PROCESS_FILTER_STORAGE = 'kex.agent.filters.processes';
@@ -151,6 +152,8 @@ function contextual(data) {
 /* ── Vue d'ensemble ────────────────────────────────────────────────────── */
 
 export async function overview() {
+  // Les risques restent une lecture indépendante de l'état des processus.
+  forecasts.dashboard();
   const host = $('#kpis');
   if (!host.querySelector('.kpis-grid')) host.replaceChildren(skeleton('kpis', 'Analyse des processus…'));
   try {
