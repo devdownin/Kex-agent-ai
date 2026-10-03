@@ -959,6 +959,7 @@ let rendered = null;
 
 async function route() {
   const view = currentView();
+  forecasts.setActive(view === 'forecasts');
   // Un changement de paramètre — filtre, panneau ouvert — n'est pas un changement de vue : le
   // recharger referait une requête et écraserait ce que l'utilisateur vient d'ouvrir.
   if (view !== rendered) {
@@ -1005,6 +1006,7 @@ function reload() {
 supervision.wire();
 supervision.onSnapshot(renderBadges);
 tools.wire();
+forecasts.wire();
 llm.wire();
 skills.wire();
 automations.wire();

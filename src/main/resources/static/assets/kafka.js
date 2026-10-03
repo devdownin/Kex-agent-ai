@@ -4,9 +4,10 @@
 // Vue technique du cluster : topics, puis les groupes qui les lisent et leur retard. Second
 // niveau délibérément — le tableau de bord métier n'a pas à en être saturé.
 
-import { $, ago, api, el, empty, errorState, freshnessTag, openDrawer, render, sortable, stateTag } from './core.js';
+import { $, ago, api, el, empty, errorState, freshnessTag, openDrawer, registerDrawer, render, sortable, stateTag } from './core.js';
 
 const BASE = '/api/agent/kafka';
+registerDrawer('topic', openLag);
 
 // Les verdicts viennent de l'outil. On les traduit pour l'écran, on ne les recalcule pas : c'est
 // lui qui sait qu'un retard sans membre assigné ne se résorbera pas de lui-même.
@@ -196,4 +197,3 @@ function lagRow(label, value) {
   row.append(value);
   return row;
 }
-
