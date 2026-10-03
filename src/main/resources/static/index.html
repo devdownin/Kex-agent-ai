@@ -784,7 +784,7 @@
               <button type="button" class="ghost" id="process-wizard-close">Fermer</button>
             </div>
             <p class="hint" id="process-wizard-progress"></p>
-            <progress id="process-wizard-bar" max="7" value="1" aria-label="Avancement de la création du processus"></progress>
+            <progress id="process-wizard-bar" max="8" value="1" aria-label="Avancement de la création du processus"></progress>
             <form id="process-wizard-form">
               <div id="process-wizard-question"></div>
               <div id="process-wizard-draft" class="process-wizard-draft" aria-label="Déclaration en préparation"></div>
@@ -795,6 +795,12 @@
               </div>
             </form>
           </section>
+          <details id="process-wizard-config" hidden>
+            <summary>Configuration proposée du processus</summary>
+            <p class="hint">Le processus est enregistré. Pour afficher son association TimesFM, intégrer le bloc
+              forecasts.process-links à la configuration existante et redémarrer Kex. Ne pas dupliquer une déclaration déjà persistée.</p>
+            <pre class="dump" id="process-wizard-config-yaml"></pre>
+          </details>
           <form class="composer" id="composer">
             <label class="sr-only" for="prompt">Message</label>
             <textarea id="prompt" rows="1" placeholder="Interroger l'agent… (Entrée pour envoyer, Maj+Entrée pour un saut de ligne)" required></textarea>

@@ -3,7 +3,7 @@
 
 // Le parcours collecte des faits déclarés par l'opérateur. Les suggestions MCP restent des choix,
 // jamais une preuve que le relevé est exhaustif ni une raison d'inventer une étape manquante.
-import { $, api, el, toast } from './core.js';
+import { $, api, el, onCredentialChange, toast } from './core.js';
 
 const BASE = '/api/agent/supervision/processes';
 const STEPS = [
@@ -13,6 +13,7 @@ const STEPS = [
   { key: 'destination', question: 'Quel topic marque sa sortie ?', placeholder: 'orders.validated (facultatif)', options: 'topics' },
   { key: 'group', question: 'Quel consumer group le traite ?', placeholder: 'orders-worker (facultatif)', options: 'groups' },
   { key: 'stages', question: 'Y a-t-il d’autres topics à suivre ?', placeholder: 'orders.checked, orders.enriched (facultatif)' },
+  { key: 'forecast', question: 'Associer une prévision TimesFM à ce processus ?', options: 'forecasts' },
 ];
 
 let step = 0;
@@ -25,6 +26,20 @@ let admin = false;
 let existingIds = new Set();
 let generation = 0;
 let saving = false;
+let forecasts = [];
+let forecastsNote = '';
+
+onCredentialChange(() => {
+  ++generation; draft = {}; topics = []; groups = []; forecasts = []; admin = false;
+  $('#process-wizard').hidden = true;
+  $('#process-wizard-question').replaceChildren();
+  $('#process-wizard-draft').replaceChildren();
+  $('#process-wizard-note').textContent = '';
+  $('#process-wizard-config').hidden = true;
+  $('#process-wizard-config-yaml').textContent = '';
+});
+
+const chosenForecast = () => forecasts.find((metric) => metric.seriesId === draft.forecast);
 
 const slug = (name) => name.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 64);
@@ -36,7 +51,9 @@ function topicNames() {
 
 function hint() {
   const topicsList = topicNames();
-  return `topics [${topicsList.join(', ')}]${draft.group ? `, consumer group ${draft.group}` : ''}`;
+  const metric = chosenForecast();
+  return `topics [${topicsList.join(', ')}]${draft.group ? `, consumer group ${draft.group}` : ''}`
+    + (metric ? `, prévision TimesFM série ${JSON.stringify(metric.seriesId)}, environnement ${JSON.stringify(metric.environment)}` : '');
 }
 
 function value() {
@@ -47,10 +64,32 @@ function value() {
 }
 
 function yaml(process) {
+  const metric = chosenForecast();
   return `kex:\n  agent:\n    supervision:\n      processes:\n        - id: ${JSON.stringify(process.id)}\n`
     + `          name: ${JSON.stringify(process.name)}\n`
     + `          description: ${JSON.stringify(process.description)}\n`
-    + `          hint: ${JSON.stringify(process.hint)}\n`;
+    + `          hint: ${JSON.stringify(process.hint)}\n`
+    + (metric ? `    forecasts:\n      process-links:\n        - series-id: ${JSON.stringify(metric.seriesId)}\n`
+      + `          environment: ${JSON.stringify(metric.environment)}\n          process-ids: [${JSON.stringify(process.id)}]\n` : '');
+}
+
+async function loadForecasts(token) {
+  forecastsNote = 'Lecture du catalogue TimesFM autorisé…';
+  try {
+    const read = await api('/api/agent/forecasts/metrics');
+    if (token !== generation) return;
+    if (read.unavailable || read.truncated || read.coverage?.complete !== true || !Array.isArray(read.data)) {
+      forecasts = []; forecastsNote = 'Catalogue absent ou incomplet : continuez sans TimesFM, puis vérifiez la connexion MCP et ses permissions.';
+    } else {
+      forecasts = read.data.filter((m) => typeof m?.seriesId === 'string' && m.seriesId.length > 0 && typeof m.environment === 'string' && m.environment.length > 0 && typeof m.metricId === 'string');
+      forecastsNote = forecasts.length ? 'Choix facultatif et explicite. Le hint guidera les lectures ; le lien visible exige d’appliquer la configuration proposée. Aucun calcul ni activation n’est lancé.'
+        : 'Aucune série autorisée. Enrôlez les séries dans KafkaExplorer et autorisez les cinq outils MCP, puis revenez ici.';
+    }
+  } catch {
+    if (token !== generation) return;
+    forecasts = []; forecastsNote = 'Lecture TimesFM indisponible. La création du processus reste possible sans prévision.';
+  }
+  if (step === 6) render();
 }
 
 async function loadTopics(token) {
@@ -90,6 +129,21 @@ async function loadGroups(token) {
 
 function renderQuestion() {
   const item = STEPS[step];
+  if (item.options === 'forecasts') {
+    const select = el('select'); select.id = 'process-wizard-answer';
+    const none = el('option', null, 'Continuer sans prévision'); none.value = ''; select.append(none);
+    for (const metric of forecasts) {
+      const option = el('option', null, `${metric.environment} · ${metric.metricId} · ${metric.seriesId}`);
+      option.value = metric.seriesId; select.append(option);
+    }
+    select.value = draft.forecast || '';
+    select.addEventListener('change', () => { draft.forecast = select.value; draft.hint = ''; renderDraft(); });
+    const label = el('label', null, item.question); label.htmlFor = select.id;
+    const guide = el('a', 'ghost', 'Consulter les prévisions et leur qualité'); guide.href = '#/forecasts';
+    $('#process-wizard-question').replaceChildren(label, select, guide);
+    $('#process-wizard-note').textContent = forecastsNote;
+    $('#process-wizard-next').textContent = 'Suivant'; select.focus(); return;
+  }
   const field = el('input');
   field.type = 'text';
   field.id = 'process-wizard-answer';
@@ -141,6 +195,9 @@ function renderPreview() {
   hintLabel.htmlFor = hints.id;
   const preview = el('pre', 'dump');
   const warnings = el('p', 'hint');
+  const forecastNote = el('p', 'hint', chosenForecast()
+    ? 'TimesFM : le hint est enregistré avec le processus. Appliquez séparément le bloc forecasts.process-links pour afficher l’association dans Prévisions. La série reste administrée dans KafkaExplorer.'
+    : 'Aucune prévision associée. Vous pourrez ajouter une association par série et environnement ultérieurement.');
   const refresh = () => {
     draft.id = id.value.trim();
     draft.hint = hints.value.trim();
@@ -155,7 +212,7 @@ function renderPreview() {
   };
   id.addEventListener('input', refresh);
   hints.addEventListener('input', refresh);
-  container.replaceChildren(title, summary, idLabel, id, hintLabel, hints, preview, warnings);
+  container.replaceChildren(title, summary, idLabel, id, hintLabel, hints, preview, warnings, forecastNote);
   refresh();
   $('#process-wizard-note').textContent = admin
     ? 'Confirmez pour enregistrer. Le processus sera visible immédiatement, puis mesuré au prochain cycle.'
@@ -169,6 +226,7 @@ function renderDraft() {
   const known = [
     ['Nom', draft.name], ['Objectif', draft.description], ['Entrée', draft.source],
     ['Sortie', draft.destination], ['Consumer group', draft.group], ['Topics supplémentaires', draft.stages],
+    ['Prévision TimesFM', chosenForecast() ? `${chosenForecast().environment} · ${chosenForecast().metricId}` : ''],
   ].filter(([, text]) => Boolean(text));
   host.replaceChildren(el('strong', null, 'Déclaration en préparation'));
   if (!known.length) {
@@ -193,12 +251,16 @@ function render() {
 }
 
 async function open() {
+  if (saving) return;
+  $('#process-wizard-config').hidden = true;
+  $('#process-wizard-config-yaml').textContent = '';
   draft = {};
   step = 0;
   topics = [];
   groups = [];
   topicsNote = '';
   groupsNote = '';
+  forecasts = []; forecastsNote = '';
   admin = false;
   existingIds = new Set();
   const token = ++generation;
@@ -240,23 +302,31 @@ export function wireProcessWizard() {
       draft[item.key] = $('#process-wizard-answer').value.trim();
       if (item.key === 'name') draft.id = '';
       if (['source', 'destination', 'group', 'stages'].includes(item.key)) draft.hint = '';
+      if (item.key === 'forecast') draft.hint = '';
       step++;
       if (step === 4) loadGroups(generation);
+      if (step === 6) loadForecasts(generation);
       render();
       return;
     }
     if (!admin || saving) return;
     saving = true;
+    const token = generation;
+    const proposedYaml = yaml(value());
     $('#process-wizard-next').disabled = true;
     try {
       const process = await api(BASE, { method: 'POST', body: value() });
+      if (token !== generation) return;
       ++generation;
       $('#process-wizard').hidden = true;
+      $('#process-wizard-config-yaml').textContent = proposedYaml;
+      $('#process-wizard-config').hidden = false;
       toast(`Processus « ${process.name} » créé. Il sera mesuré au prochain cycle.`, 'success', {
         label: 'Voir le processus',
         run: () => { location.hash = `#/processes?processus=${encodeURIComponent(process.id)}`; },
       });
     } catch (error) {
+      if (token !== generation) return;
       $('#process-wizard-note').textContent = `Création impossible : ${error.message}. Corrigez puis réessayez.`;
     } finally {
       saving = false;

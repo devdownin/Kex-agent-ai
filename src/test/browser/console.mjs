@@ -924,6 +924,8 @@ await check('le parcours guidé utilise les suggestions Kafka et demande une con
     await page.fill('#process-wizard-answer', 'orders-worker');
     await page.click('#process-wizard-next');
     await page.click('#process-wizard-next');
+    assert.equal(await page.locator('#process-wizard-answer').evaluate((node) => node.tagName), 'SELECT');
+    await page.click('#process-wizard-next');
     assert.equal(posted.length, 0, 'l’aperçu ne crée rien avant confirmation');
     assert.match(await page.$eval('#process-wizard-question pre', (node) => node.textContent),
       /topics \[orders.in, orders.out\], consumer group orders-worker/);
@@ -936,6 +938,60 @@ await check('le parcours guidé utilise les suggestions Kafka et demande une con
     await page.unroute('**/api/agent/whoami');
     await page.unroute('**/api/agent/kafka/topics');
     await page.unroute('**/api/agent/kafka/topics/orders.in/lag');
+    await page.unroute('**/api/agent/supervision/processes');
+  }
+});
+
+await check('le wizard exporte une association TimesFM explicite et refuse un catalogue partiel', async () => {
+  const posted = [];
+  let complete = true;
+  const seriesId = 'lag/orders"prod';
+  await page.route('**/api/agent/whoami', (route) => route.fulfill({ status: 200,
+    contentType: 'application/json', body: JSON.stringify({ roles: ['ADMIN'] }) }));
+  await page.route('**/api/agent/forecasts/metrics', (route) => route.fulfill({ status: 200,
+    contentType: 'application/json', body: JSON.stringify({ data: [{ seriesId,
+      environment: 'production', metricId: 'consumer-lag' }], coverage: { complete } }) }));
+  await page.route('**/api/agent/supervision/processes', (route) => {
+    const body = route.request().postDataJSON(); posted.push(body);
+    return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  const advance = async () => {
+    await page.click('#start-process-wizard');
+    for (const answer of ['Commandes TimesFM', 'Vers ERP', 'orders.in', 'orders.out', 'orders-worker', '']) {
+      await page.fill('#process-wizard-answer', answer);
+      await page.click('#process-wizard-next');
+    }
+    await page.waitForSelector('#process-wizard-answer option', { state: 'attached' });
+  };
+  try {
+    await page.goto(`${BASE}/#/chat`, { waitUntil: 'domcontentloaded' });
+    await advance();
+    await page.waitForFunction(() => document.querySelector('#process-wizard-answer').options.length === 2);
+    await page.selectOption('#process-wizard-answer', seriesId);
+    await page.click('#process-wizard-next');
+    await page.fill('#process-wizard-id', 'commandes-forecast');
+    const yaml = await page.locator('#process-wizard-question pre').textContent();
+    assert.ok(yaml.includes(`series-id: ${JSON.stringify(seriesId)}`));
+    assert.ok(yaml.includes('environment: "production"'));
+    assert.ok(yaml.includes('process-ids: ["commandes-forecast"]'));
+    assert.equal(posted.length, 0, 'aucun POST avant confirmation TimesFM');
+    await page.click('#process-wizard-next');
+    await page.waitForFunction(() => !document.querySelector('#process-wizard-config').hidden);
+    assert.equal(posted.length, 1, 'un seul POST après confirmation TimesFM');
+    assert.deepEqual(Object.keys(posted[0]).sort(), ['description', 'hint', 'id', 'name']);
+    assert.ok(posted[0].hint.includes(JSON.stringify(seriesId)));
+    assert.equal(await page.locator('#process-wizard-config-yaml').textContent(), yaml, 'le YAML exporté conserve exactement le contenu de l’aperçu');
+    complete = false;
+    await advance();
+    await page.waitForFunction(() => document.querySelector('#process-wizard-note').textContent.includes('incomplet'));
+    assert.equal(await page.locator('#process-wizard-answer option').count(), 1);
+    await page.click('#process-wizard-next');
+    assert.ok(!(await page.locator('#process-wizard-question pre').innerText()).includes('process-links'));
+    await page.click('#process-wizard-close');
+    assert.equal(posted.length, 1);
+  } finally {
+    await page.unroute('**/api/agent/whoami');
+    await page.unroute('**/api/agent/forecasts/metrics');
     await page.unroute('**/api/agent/supervision/processes');
   }
 });
