@@ -12,13 +12,13 @@ import tools.jackson.databind.JsonNode;
 @Service
 public class ForecastResourceService {
     private final ForecastViewService forecasts;
-    private final ForecastLinkProperties properties;
+    private final ForecastAssociationService associations;
     private final SupervisionService supervision;
 
-    ForecastResourceService(ForecastViewService forecasts, ForecastLinkProperties properties,
+    ForecastResourceService(ForecastViewService forecasts, ForecastAssociationService associations,
                             SupervisionService supervision) {
         this.forecasts = forecasts;
-        this.properties = properties;
+        this.associations = associations;
         this.supervision = supervision;
     }
 
@@ -43,9 +43,7 @@ public class ForecastResourceService {
                 return failed(id, "Provenance non communiquée, masquée ou incomplète");
             }
             String environment = metric.path("environment").asText();
-            var ids = properties.processLinks().stream()
-                    .filter(link -> id.equals(link.seriesId()) && environment.equals(link.environment()))
-                    .flatMap(link -> link.processIds().stream()).distinct().limit(50).toList();
+            var ids = associations.processIds(id, environment);
             var processes = ids.isEmpty() ? List.<Process>of() : supervision.processes().stream()
                     .filter(process -> ids.contains(process.id()))
                     .map(process -> new Process(process.id(), process.name())).toList();

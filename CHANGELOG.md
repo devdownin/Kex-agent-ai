@@ -7,6 +7,10 @@ Versionnement [sémantique](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- Associations TimesFM persistées depuis le wizard et les fiches processus (ADMIN), avec
+  validation du catalogue, diagnostic des prérequis et aperçu daté des risques/qualité.
+  Stockage fichier en mono-instance et migration PostgreSQL V3 pour les répliques partagées.
+
 - Wizard de création de processus : choix TimesFM facultatif dans un catalogue complet et
   autorisé, hint contextualisé, export YAML de l’association explicite par série/environnement.
   Documentation MCP/configuration et exemples opérationnels complétés.

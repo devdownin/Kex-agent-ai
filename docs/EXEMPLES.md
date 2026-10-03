@@ -379,11 +379,16 @@ Vérifier l’identifiant et le hint avant de confirmer avec le rôle ADMIN. Les
 sont illustratifs : utiliser les ressources de votre installation. Le choix TimesFM est explicite,
 jamais déduit du nom des topics. Le processus est enregistré seulement après confirmation.
 
-L’aperçu et la section **Configuration proposée du processus**, disponible après création,
-conservent le YAML. Le hint est enregistré immédiatement ; pour afficher le processus dans les
-ressources liées de la prévision, intégrer uniquement l’association `forecasts.process-links`
-à la configuration existante, puis redémarrer Kex. Ne pas recopier une déclaration déjà persistée.
-Voir l’[exemple de configuration](TIMESFM.md#ressources-et-processus-liés).
+L’aperçu et la section **Configuration proposée du processus** conservent le YAML comme export.
+Le processus, son hint et l’association sont enregistrés après confirmation ADMIN, sans
+application manuelle du YAML ni redémarrage. Si l’association échoue, le processus reste créé :
+réessayer **Associer une prévision** depuis sa fiche. Voir le
+[fonctionnement et le stockage](TIMESFM.md#assistant-et-associations-persistées).
+
+Ouvrir ensuite la fiche du processus : comparer les mesures actuelles à l’aperçu des prévisions,
+aux échéances et à la qualité réalisée. Utiliser **Associer une prévision** pour ajouter une autre
+série autorisée ou retirer un lien. Le diagnostic guide vers la connexion MCP et indique les
+outils manquants ; l’agent ne choisit pas automatiquement une série à partir du nom du processus.
 
 Si le catalogue est indisponible, tronqué ou incomplet, le wizard propose de continuer sans
 prévision. Corriger la connexion ou les permissions et relancer le parcours pour choisir une

@@ -945,6 +945,7 @@ await check('le parcours guidé utilise les suggestions Kafka et demande une con
 await check('le wizard exporte une association TimesFM explicite et refuse un catalogue partiel', async () => {
   const posted = [];
   let complete = true;
+  const linked = [];
   const seriesId = 'lag/orders"prod';
   await page.route('**/api/agent/whoami', (route) => route.fulfill({ status: 200,
     contentType: 'application/json', body: JSON.stringify({ roles: ['ADMIN'] }) }));
@@ -954,6 +955,10 @@ await check('le wizard exporte une association TimesFM explicite et refuse un ca
   await page.route('**/api/agent/supervision/processes', (route) => {
     const body = route.request().postDataJSON(); posted.push(body);
     return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.route('**/api/agent/forecasts/processes/*/associations', (route) => {
+    linked.push(route.request().postDataJSON());
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
   const advance = async () => {
     await page.click('#start-process-wizard');
@@ -978,6 +983,8 @@ await check('le wizard exporte une association TimesFM explicite et refuse un ca
     await page.click('#process-wizard-next');
     await page.waitForFunction(() => !document.querySelector('#process-wizard-config').hidden);
     assert.equal(posted.length, 1, 'un seul POST après confirmation TimesFM');
+    assert.deepEqual(linked, [{ associations: [{ seriesId, environment: 'production' }] }]);
+    assert.match(await page.locator('#process-wizard-config-note').textContent(), /association TimesFM enregistrés/);
     assert.deepEqual(Object.keys(posted[0]).sort(), ['description', 'hint', 'id', 'name']);
     assert.ok(posted[0].hint.includes(JSON.stringify(seriesId)));
     assert.equal(await page.locator('#process-wizard-config-yaml').textContent(), yaml, 'le YAML exporté conserve exactement le contenu de l’aperçu');
@@ -992,6 +999,7 @@ await check('le wizard exporte une association TimesFM explicite et refuse un ca
   } finally {
     await page.unroute('**/api/agent/whoami');
     await page.unroute('**/api/agent/forecasts/metrics');
+    await page.unroute('**/api/agent/forecasts/processes/*/associations');
     await page.unroute('**/api/agent/supervision/processes');
   }
 });

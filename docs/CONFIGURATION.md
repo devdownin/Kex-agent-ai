@@ -115,12 +115,16 @@ facultative** du catalogue autorisé (environnement, métrique et identifiant de
 Un catalogue absent, tronqué ou incomplet laisse le parcours utilisable sans prévision. Le choix
 ajoute la série et l’environnement au hint, sans enrôlement ni calcul de prévision.
 
-L’aperçu final et la section **Configuration proposée du processus** après création présentent
-le YAML. L’API enregistre le processus et son hint ; elle ne modifie pas les associations de
-configuration. Pour afficher le lien dans Prévisions, intégrer `kex.agent.forecasts.process-links`
-à la configuration existante et redémarrer Kex. Ne pas ajouter à nouveau un processus déjà
-persisté dans `supervision.processes`. Voir le [guide TimesFM](TIMESFM.md#ressources-et-processus-liés)
-et la [démonstration complète](EXEMPLES.md#créer-un-processus-avec-le-wizard).
+Le diagnostic TimesFM indique connexion, disponibilité des cinq outils, couverture et séries
+avec un lien vers Intégrations. Après confirmation ADMIN, le processus est créé puis son
+association est enregistrée automatiquement, sans redémarrage. Un échec d’association est
+signalé séparément : réessayer depuis la fiche du processus, sans le recréer.
+
+La section **Configuration proposée du processus** conserve le YAML comme export facultatif.
+Dans la fiche processus, **Associer une prévision** ajoute ou retire les associations (ADMIN,
+maximum quatre). Les remplacements persistés prennent priorité sur les liens YAML uniquement
+pour ce processus ; une liste vide les désactive explicitement. Voir le
+[stockage et les API](TIMESFM.md#assistant-et-associations-persistées).
 
 `GET /api/agent/supervision/processes/definitions` rend les déclarations effectives, et
 `POST /api/agent/supervision/processes` (ADMIN) accepte `id`, `name`, `description` et `hint`.

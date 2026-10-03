@@ -371,7 +371,7 @@ Le catalogue est la source des identifiants de séries pour la vue Prévisions e
 Le champ facultatif `sources` annonce une provenance explicite : `definitionVersion`, `topics`,
 `groups`, `complete`. Les ressources liées exigent une provenance complète et autorisée ; les
 identifiants masqués par la DLP ne deviennent pas des liens. Les processus liés proviennent
-uniquement de `kex.agent.forecasts.process-links`, jamais d’une déduction depuis les hints.
+de liens explicites YAML ou persistés depuis la console, jamais d’une déduction depuis les hints.
 
 Une erreur, une série invisible ou une couverture incomplète n’équivaut pas à zéro incident.
 Les dates de lecture, de génération et d’évaluation de qualité ont des sens distincts.

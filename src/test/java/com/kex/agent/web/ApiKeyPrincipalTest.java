@@ -188,6 +188,21 @@ class ApiKeyPrincipalTest {
         }
     }
 
+    @Test
+    void only_admin_can_persist_forecast_associations_and_chat_cannot_read_them() throws Exception {
+        String path = "/api/agent/forecasts/processes/unknown/associations";
+        assertThat(status(path, "Bearer jeton-chat")).isEqualTo(403);
+        for (String token : new String[] {"jeton-ops", "jeton-chat", "jeton-admin"}) {
+            var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                    .header("Authorization", "Bearer " + token).header("Content-Type", "application/json")
+                    .PUT(HttpRequest.BodyPublishers.ofString("{\"associations\":[]}")).build();
+            try (HttpClient client = HttpClient.newHttpClient()) {
+                assertThat(client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode())
+                        .isEqualTo(token.equals("jeton-admin") ? 404 : 403);
+            }
+        }
+    }
+
     private String get(String path, String authorization) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .header("Authorization", authorization)

@@ -17,10 +17,11 @@ import static org.mockito.Mockito.when;
 class ForecastResourceServiceTest {
     private final ForecastViewService forecasts = mock(ForecastViewService.class);
     private final SupervisionService supervision = mock(SupervisionService.class);
-    private final ForecastResourceService resources = new ForecastResourceService(forecasts,
+    private final ForecastAssociationService associations = new ForecastAssociationService(mock(ForecastAssociationRepository.class),
             new ForecastLinkProperties(List.of(
                     new ForecastLinkProperties.ProcessLink("s1", "prod", List.of("orders", "deleted")),
-                    new ForecastLinkProperties.ProcessLink("s1", "dev", List.of("wrong-env")))), supervision);
+                    new ForecastLinkProperties.ProcessLink("s1", "dev", List.of("wrong-env")))), forecasts, supervision);
+    private final ForecastResourceService resources = new ForecastResourceService(forecasts, associations, supervision);
 
     @Test
     void links_only_explicit_current_processes_in_the_exact_environment() {

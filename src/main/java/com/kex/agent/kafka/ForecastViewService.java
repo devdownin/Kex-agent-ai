@@ -67,7 +67,9 @@ public class ForecastViewService {
         return result;
     }
 
-    public Detail detail(String seriesId) {
+    public Detail detail(String seriesId) { return detail(seriesId, null); }
+
+    public Detail detail(String seriesId, String environment) {
         // Un identifiant saisi par le navigateur ne prouve pas l'autorisation de ses sources.
         // On exige sa présence dans le catalogue courant avant chaque lecture détaillée ; le
         // serveur vérifie à nouveau l'environnement, les topics et les groupes sur chaque outil.
@@ -75,7 +77,8 @@ public class ForecastViewService {
         if (metrics.unavailable() != null) return unavailable(seriesId, metrics.unavailable());
         boolean allowed = false;
         for (JsonNode metric : metrics.data()) {
-            if (metric.path("seriesId").asText().equals(seriesId)) allowed = true;
+            if (metric.path("seriesId").asText().equals(seriesId)
+                    && (environment == null || environment.equals(metric.path("environment").asText()))) allowed = true;
         }
         if (!allowed || metrics.truncated()
                 || !metrics.coverage().path("complete").asBoolean(false)) {
