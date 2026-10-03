@@ -66,7 +66,11 @@ export async function processForecasts(processId, host) {
         card.append(el('p', null, `État : ${expired ? 'STALE — prévision expirée' : record.state} · Mode : ${record.visibility} · Stratégie : ${record.strategy}`),
           el('p', 'hint', `Calculée le ${date(record.generatedAt)} · Échéance : ${date(end)}`));
         if (record.visibility === 'SHADOW') card.append(el('p', 'hint', 'SHADOW : observation, sans alerte ni action depuis cette vue.'));
-        const risks = complete(summary.breaches) && Array.isArray(summary.breaches.data) ? summary.breaches.data.filter((risk) =>
+        const coherent = !expired && record.state === 'READY' && record.strategy === 'TIMESFM'
+          && Number.isFinite(record.generatedAt) && typeof record.context?.inputFingerprint === 'string'
+          && record.context.inputFingerprint.length > 0 && typeof record.context?.profileFingerprint === 'string'
+          && record.context.profileFingerprint.length > 0;
+        const risks = coherent && complete(summary.breaches) && Array.isArray(summary.breaches.data) ? summary.breaches.data.filter((risk) =>
           risk.threshold?.seriesId === association.seriesId && risk.windowEndAt > Date.now()
           && risk.generatedAt === record.generatedAt && risk.inputFingerprint === record.context?.inputFingerprint
           && risk.profileFingerprint === record.context?.profileFingerprint) : [];
@@ -116,11 +120,13 @@ async function associationEditor(id, editor, host, ticket) {
       const row = el('p', null, `${association.environment} · ${association.seriesId} `);
       const remove = el('button', 'ghost', 'Retirer'); remove.type = 'button'; controls.push(remove);
       remove.addEventListener('click', () => save(saved.associations.filter((entry) => entry !== association)));
-      remove.disabled = Boolean(saved.unavailable);
+      remove.disabled = Boolean(saved.unavailable) || saved.associations.length > 5;
       row.append(remove); editor.append(row);
     }
-    if (saved.unavailable) {
-      editor.append(el('p', 'banner', `${saved.unavailable}. Réparez le périmètre avant de modifier la liste, ou retirez explicitement toutes les associations.`));
+    if (saved.unavailable || saved.associations.length > 4) {
+      editor.append(el('p', 'banner', saved.unavailable
+        ? `${saved.unavailable}. Réparez le périmètre avant de modifier la liste, ou retirez explicitement toutes les associations.`
+        : 'Plus de quatre liens hérités du YAML : retirez toutes les associations pour choisir une nouvelle liste de quatre séries au maximum.'));
       const clear = el('button', 'ghost', 'Retirer toutes les associations'); clear.type = 'button'; controls.push(clear);
       clear.addEventListener('click', () => save([])); editor.append(clear);
     } else if (complete(catalog) && Array.isArray(catalog.data) && saved.associations.length < 4) {
