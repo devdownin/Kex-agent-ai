@@ -374,9 +374,10 @@ function badge(selector, count) {
 
 /* ── Contexte opérateur et tableau de bord ───────────────────────────── */
 
-const DASHBOARD_DEFAULT = ['hero', 'kpis', 'onboarding', 'visit', 'incidents', 'verification', 'comparison', 'brief', 'operations', 'timeline'];
+const DASHBOARD_DEFAULT = ['hero', 'kpis', 'forecasts', 'onboarding', 'visit', 'incidents', 'verification', 'comparison', 'brief', 'operations', 'timeline'];
 const DASHBOARD_LABELS = {
   hero: 'Synthèse globale', kpis: 'Indicateurs clés', onboarding: 'Configuration restante',
+  forecasts: 'Risques à venir',
   visit: 'Depuis ma dernière visite', incidents: 'Incidents', verification: 'Vérification après action',
   comparison: 'Comparaison de cycles', brief: 'Synthèse de l’agent',
   operations: 'Processus et décisions', timeline: 'Dernier cycle',

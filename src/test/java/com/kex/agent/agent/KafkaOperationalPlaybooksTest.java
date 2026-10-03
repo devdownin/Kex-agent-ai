@@ -21,7 +21,8 @@ class KafkaOperationalPlaybooksTest {
         assertThat(KafkaOperationalPlaybooks.forRequest("Anticiper le lag avec TimesFM"))
                 .contains("kex_list_forecastable_metrics", "kex_metric_history", "kex_get_forecast_quality",
                         "kex_forecast_metric", "kex_list_predicted_threshold_breaches", "SHADOW", "STALE",
-                        "pas une probabilité calibrée", "Ne pas activer, alerter ou corriger");
+                        "pas une probabilité calibrée", "Ne pas activer, alerter ou corriger",
+                        "Constat actuel, Prévision", "Vérifications proposées", "Ne pas inventer les topics");
     }
 
     @Test

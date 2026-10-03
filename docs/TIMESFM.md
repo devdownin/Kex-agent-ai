@@ -39,6 +39,13 @@ pour des périmètres qui doivent rester séparés.
 
 ## Parcours opérateur
 
+Le dashboard présente un bloc personnalisable **Risques à venir**. Il liste les trois prochaines
+échéances de dépassements futurs, avec environnement, génération, mode et qualité réalisée datée.
+Un lien ouvre directement la série dans son environnement. Les lectures restent bornées à deux
+listes et trois détails au maximum par chargement du bloc ; les erreurs et couvertures incomplètes
+ne deviennent pas une absence de risque. La qualité est lue séparément de la prévision : elle
+décrit une période réalisée, pas une garantie sur le risque affiché.
+
 1. Ouvrir **Prévisions** et choisir un environnement puis une métrique du catalogue autorisé.
 2. Lire l’état, le mode, la stratégie, la génération et l’échéance avant d’interpréter la courbe.
 3. Comparer historique, valeur centrale et Q10/Q50/Q90. Les trous interrompent l’historique ;
@@ -50,6 +57,18 @@ pour des périmètres qui doivent rester séparés.
    fenêtre, mode et provenance. Une liste vide ne prouve pas l’absence de risque.
 6. Cliquer **Analyser avec l’agent** pour préparer une conversation sur la série et l’environnement.
    Le prompt est un brouillon : l’opérateur décide de l’envoyer.
+
+La courbe superpose les seuils des dépassements rendus par MCP uniquement lorsque génération et
+empreintes d’entrée/profil correspondent au résultat affiché. Les points futurs dans la fenêtre
+du seuil sont marqués si Q10 dépasse le seuil haut ou Q90 est sous le seuil bas. L’absence de
+trait ne prouve pas l’absence de seuil configuré : le MCP ne rend que les dépassements prédits.
+Un résultat de repli n’a pas de superposition de seuil ni de bande de quantiles.
+
+Les états et modes portent des libellés explicites ; les aides **Comprendre les modes et les
+prévisions** et **Comprendre la qualité** expliquent quantiles, MAE, MASE, pinball loss et baselines.
+L’analyse guidée demande cinq parties : constat actuel, prévision, qualité, limites et vérifications
+proposées. L’historique est daté et ne tient pas lieu de vérification de l’état actuel. Les sources
+et causes ne doivent pas être inventées ; aucune action n’est lancée par le brouillon.
 
 **Actualiser les résultats** relit les résultats existants ; cette vue ne lance pas de sondage
 périodique. L’activation des séries reste dans KafkaExplorer et sa gouvernance opérateur.
