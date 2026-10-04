@@ -172,12 +172,12 @@ function route() {
   if (request) {
     drawDetail();
     if (request.serverId && request.summaryOnly && !request.loadingDetail) {
-      const own = epoch; request.loadingDetail = true;
+      const own = epoch; request.loadingDetail = true; drawDetail();
       api(`/api/agent/workspace/requests/${encodeURIComponent(request.serverId)}`).then(row => {
         if (own !== epoch) return;
         const localId = request.id; Object.assign(request, row, { id: localId, summaryOnly: false });
         save(); if (current === request) { drawDetail(); approvals.request(request); }
-      }).catch(() => { if (own === epoch) $('#notice').textContent = 'Le détail complet n’a pas pu être chargé. Actualisez avant de poursuivre.'; }).finally(() => { request.loadingDetail = false; });
+      }).catch(() => { if (own === epoch) $('#notice').textContent = 'Le détail complet n’a pas pu être chargé. Actualisez avant de poursuivre.'; }).finally(() => { request.loadingDetail = false; if (own === epoch && current === request) drawDetail(); });
     }
   }
   approvals.request(request);
@@ -353,7 +353,7 @@ async function send(message, request = null) {
   const answer = { role: 'agent', text: '', sources: [] }; request.turns.push(answer);
   request.status = 'RUNNING'; request.answerStarted = false; request.updatedAt = new Date().toISOString();
   save(); current = request; location.hash = '#/request/' + request.id; route(); $('#send').disabled = true;
-  let complete = false;
+  let complete = false; let canonical = null;
   const firstCall = request.tools.length;
   try {
     const durable = serverHistory && (!request.conversationId || request.serverId);
@@ -362,6 +362,7 @@ async function send(message, request = null) {
     for await (const event of events(response)) {
       if (ownEpoch !== epoch) return;
       if (event.name === 'request') { const saved = JSON.parse(event.data); request.serverId = saved.id; }
+      else if (event.name === 'snapshot') canonical = JSON.parse(event.data);
       else if (event.name === 'conversation') request.conversationId = event.data;
       else if (event.name === 'token') { answer.text += event.data; request.answerStarted = true; }
       else if (event.name === 'tool') request.tools.push(JSON.parse(event.data));
@@ -374,6 +375,7 @@ async function send(message, request = null) {
     if (request.status !== 'ERROR') request.status = complete && answer.text ? (request.tools.slice(firstCall).some(t => t.failed) ? 'PARTIAL' : 'COMPLETE') : 'PARTIAL';
     answer.completed = complete && !answer.error;
     if (request.status === 'COMPLETE' && parseResponse(answer.text)?.kind === 'clarification') request.status = 'NEEDS_INPUT';
+    if (complete && canonical) { request.updatedAt = canonical.updatedAt; request.revision = canonical.revision; }
     if (!complete && !answer.error) answer.error = 'La fin de la réponse n’a pas été confirmée. Aucun nouvel envoi automatique n’a été effectué.';
   } catch (e) {
     if (ownEpoch !== epoch) return;

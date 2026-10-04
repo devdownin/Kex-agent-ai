@@ -18,7 +18,7 @@ const server = createServer(async (req, res) => {
     if (!request) { request = { id: crypto.randomUUID(), title: input.message, status: 'RUNNING', updatedAt: new Date().toISOString(), conversationId: 'conv-' + posts.length, turns: [], tools: [], context: input.context }; rows.unshift(request); records.set(user, rows); }
     const clarification = input.message === 'Clarifier'; const reply = clarification ? { kind: 'clarification', question: 'Quelle période ?', choices: [{ label: 'Hier', value: 'Hier' }, { label: 'Aujourd’hui', value: 'Depuis ce matin' }] } : { kind: 'result', observations: 'État consulté <img src=x onerror="window.hacked=true">', uncertainties: 'Objectif non vérifié', nextAction: 'Examiner le résultat' };
     request.turns.push({ role: 'user', text: input.message }, { role: 'agent', text: JSON.stringify(reply), completed: true, sources: [] }); request.status = clarification ? 'NEEDS_INPUT' : 'COMPLETE'; request.updatedAt = new Date().toISOString();
-    res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.end(`event: request\ndata: ${JSON.stringify(request)}\n\nevent: conversation\ndata: ${request.conversationId}\n\nevent: token\ndata: ${JSON.stringify(reply)}\n\nevent: done\ndata: response-complete\n\n`); return;
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.end(`event: request\ndata: ${JSON.stringify(request)}\n\nevent: conversation\ndata: ${request.conversationId}\n\nevent: token\ndata: ${JSON.stringify(reply)}\n\nevent: snapshot\ndata: ${JSON.stringify(request)}\n\nevent: done\ndata: response-complete\n\n`); return;
   }
   if (req.url.startsWith('/api/agent/workspace/requests/')) { const id = req.url.split('/').at(-1); const row = rows.find(r => r.id === id); return json(row || {}, row ? 200 : 404); }
   if (req.url.startsWith('/api/')) return json({}, 404);
@@ -40,7 +40,7 @@ try {
     assert.equal(posts[0].context.environment, 'production'); assert.equal(posts[0].context.files[0].name, 'orders.csv');
     assert.match(await page.locator('#completion-summary').innerText(), /ne prouve pas/); assert.equal(await page.locator('#completion-summary img').count(), 0);
     await page.getByRole('link', { name: /^À suivre/ }).click(); await page.locator('#attention-list').getByRole('link', { name: 'Résultat à examiner' }).click();
-    await page.locator('#completion-summary').getByRole('button', { name: 'Marquer ce résultat comme examiné' }).click(); await page.getByRole('link', { name: /^À suivre/ }).click(); await page.locator('#attention-list').getByText('Aucune intervention', { exact: false }).waitFor();
+    await page.locator('#completion-summary').getByRole('button', { name: 'Marquer ce résultat comme examiné' }).click(); await page.getByRole('link', { name: /^À suivre/ }).click(); await page.locator('#refresh-attention').click(); await page.locator('#attention-list').getByText('Aucune intervention', { exact: false }).waitFor();
     await page.getByRole('link', { name: 'Actions prêtes à l’emploi', exact: true }).click(); await page.locator('#skills .action-card').first().waitFor();
     await page.locator('#skill-category').selectOption('report'); assert.match(await page.locator('#skills').innerText(), /bilan/); assert.ok(!(await page.locator('#skills').innerText()).includes('Vérifier les commandes'));
     await page.locator('#skill-search').fill('introuvable'); await page.locator('#skills').getByText('Aucune compétence ne correspond', { exact: false }).waitFor();

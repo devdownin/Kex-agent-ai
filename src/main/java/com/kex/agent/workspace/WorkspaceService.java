@@ -88,9 +88,12 @@ public class WorkspaceService {
         else if (!store.replace(owner, running, previous.revision())) throw new ResponseStatusException(HttpStatus.CONFLICT, "Demande modifiée ailleurs");
         var tools = new ArrayList<>(running.tools()); var sources = new ArrayList<KnowledgeSource>(); var text = new StringBuilder();
         var finalized = new java.util.concurrent.atomic.AtomicBoolean(); int newTools = tools.size();
-        // defer couvre aussi un refus synchrone (budget, fournisseur, politique) après l’enregistrement.
+        // Capturer les droits sur le thread authentifié, avant toute souscription asynchrone.
+        Flux<AgentEvent> source;
+        try { source = agent.stream(ActorIdentity.tenantOf(actor), running.conversationId(), prompt).events(); }
+        catch (RuntimeException ex) { source = Flux.error(ex); }
         return Flux.concat(Flux.just(event("request", json(running)), event("conversation", running.conversationId())),
-                Flux.defer(() -> agent.stream(ActorIdentity.tenantOf(actor), running.conversationId(), prompt).events())
+                source
                         .map(e -> {
                             return switch (e) {
                                 case AgentEvent.Token token -> { if (text.length() + token.text().length() > 64000) throw new IllegalStateException("Réponse trop longue"); text.append(token.text()); yield event("token", token.text()); }
@@ -99,25 +102,36 @@ public class WorkspaceService {
                             };
                         }), Flux.defer(() -> {
                             String status = tools.subList(newTools, tools.size()).stream().anyMatch(AgentEvent.ToolCall::failed) || text.isEmpty() ? "PARTIAL" : clarification(text.toString()) ? "NEEDS_INPUT" : "COMPLETE";
-                            finalized.set(true); finish(owner, running, turns, tools, sources, text.toString(), status, null, true);
-                            return Flux.just(event("done", "response-complete"));
+                            finalized.set(true); var result = finish(owner, running, turns, tools, sources, text.toString(), status, null, true);
+                            return Flux.just(event("snapshot", json(result)), event("done", "response-complete"));
                         }))
                 .onErrorResume(ex -> { if (finalized.compareAndSet(false, true)) finish(owner, running, turns, tools, sources, text.toString(), "ERROR", "Traitement interrompu. Aucun nouvel envoi automatique.", false); return Flux.just(event("error", "Traitement interrompu. Aucun nouvel envoi automatique.")); })
                 .doFinally(signal -> { if (finalized.compareAndSet(false, true)) finish(owner, running, turns, tools, sources, text.toString(), "INTERRUPTED", "Réception non confirmée. Vérifiez les actions déjà engagées avant de poursuivre.", false); });
     }
-    private void finish(String owner, WorkspaceRequest running, List<WorkspaceRequest.Turn> turns,
+    private WorkspaceRequest finish(String owner, WorkspaceRequest running, List<WorkspaceRequest.Turn> turns,
             List<AgentEvent.ToolCall> tools, List<KnowledgeSource> sources, String text, String status, String error, boolean completed) {
         var complete = new ArrayList<>(turns);
         complete.add(new WorkspaceRequest.Turn("agent", text, completed, List.copyOf(sources), error));
         while (complete.size() > 2 && complete.stream().mapToInt(t -> t.text().length()).sum() > 120000) complete.remove(0);
-        if (!store.replace(owner, copy(running, status, List.copyOf(complete), List.copyOf(tools), running.taskId()), running.revision())) throw new ResponseStatusException(HttpStatus.CONFLICT, "Historique modifié ailleurs");
+        var result = copy(running, status, List.copyOf(complete), List.copyOf(tools), running.taskId());
+        if (!store.replace(owner, result, running.revision())) throw new ResponseStatusException(HttpStatus.CONFLICT, "Historique modifié ailleurs");
+        return result;
     }
     private WorkspaceRequest copy(WorkspaceRequest r, String status, List<WorkspaceRequest.Turn> turns, List<AgentEvent.ToolCall> tools, String taskId) {
         return new WorkspaceRequest(r.id(), r.revision() + 1, r.title(), r.conversationId(), status, clock.instant(), turns, tools, r.context(), taskId);
     }
     private boolean clarification(String text) {
-        try { var value = mapper.readTree(text.strip().replaceAll("(?s)^```(?:json)?\\s*|\\s*```$", "")); return value != null && value.path("kind").asText().equals("clarification") && !value.path("question").asText().isBlank() && value.path("choices").isArray() && value.path("choices").size() >= 2 && value.path("choices").size() <= 4; }
+        try {
+            var value = mapper.readTree(text.strip().replaceAll("(?s)^```(?:json)?\\s*|\\s*```$", ""));
+            if (value == null || !value.path("kind").asText().equals("clarification") || !shortText(value.path("question"), 1000)
+                    || !value.path("choices").isArray() || value.path("choices").size() < 2 || value.path("choices").size() > 4) return false;
+            for (var choice : value.path("choices")) if (!shortText(choice.path("label"), 120) || !shortText(choice.path("value"), 2000)) return false;
+            return true;
+        }
         catch (java.io.IOException ex) { return false; }
+    }
+    private static boolean shortText(com.fasterxml.jackson.databind.JsonNode node, int max) {
+        return node.isTextual() && !node.asText().isBlank() && node.asText().length() <= max;
     }
     static String prompt(String message, WorkspaceRequest.Context context) {
         var result = new StringBuilder(message);

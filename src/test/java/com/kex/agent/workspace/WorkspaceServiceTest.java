@@ -48,13 +48,16 @@ class WorkspaceServiceTest {
     WorkspaceRequest.Input input(String id) { return new WorkspaceRequest.Input(id, "Vérifier les commandes", new WorkspaceRequest.Context("orders", "ce matin", "production", List.of(new WorkspaceRequest.Attachment("orders.csv", "id,etat\n1,OK")))); }
     @Test void un_autre_appareil_retrouve_les_faits_sans_rejouer_le_modele() {
         var events = service.stream(alice, input(null)).collectList().block();
-        assertThat(events).extracting(e -> e.event()).containsExactly("request", "conversation", "token", "done");
+        assertThat(events).extracting(e -> e.event()).containsExactly("request", "conversation", "token", "snapshot", "done");
         var history = new WorkspaceService(new WorkspaceStore(mapper, directory), agent, mapper, Clock.fixed(now, ZoneOffset.UTC), tasks);
         var request = history.list(alice).getFirst();
         assertThat(request.status()).isEqualTo("COMPLETE"); assertThat(request.turns().getLast().text()).isEqualTo("Réponse");
         assertThat(request.context().files().getFirst().text()).contains("1,OK");
         assertThat(history.get(alice, request.id()).conversationId()).isEqualTo(request.conversationId());
         assertThat(history.list(bob)).isEmpty();
+        var chat = org.springframework.security.authentication.UsernamePasswordAuthenticationToken.authenticated(alice, null, List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_CHAT")));
+        var operator = org.springframework.security.authentication.UsernamePasswordAuthenticationToken.authenticated(alice, null, List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_OPERATOR")));
+        assertThat(WorkspaceService.owner(chat)).isNotEqualTo(WorkspaceService.owner(operator));
         assertThatThrownBy(() -> history.get(bob, request.id())).isInstanceOf(ResponseStatusException.class);
         assertThatThrownBy(() -> history.get(new ActorIdentity("alice", "other"), request.id())).isInstanceOf(ResponseStatusException.class);
         assertThatThrownBy(() -> history.get(alice, "../../secret")).isInstanceOf(ResponseStatusException.class);
