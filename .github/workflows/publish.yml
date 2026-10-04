@@ -81,15 +81,13 @@ jobs:
           set -euo pipefail
           namespace="${NAMESPACE:-compagnonsdudev}"
           image="${IMAGE:-kex-agent-ai}"
-          if [ -z "${USERNAME}" ]; then
-            echo "::error::La variable DOCKERHUB_USERNAME est vide. Settings → Secrets and variables → Actions → Variables."
-            exit 1
-          fi
+          username="${USERNAME:-$namespace}"
           # GHCR exige des composants de chemin en minuscules ; Docker Hub les tolère mixtes
           # mais les traite comme équivalents, donc les deux gagnent à être cohérents ici.
           owner_lower="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
           image_lower="$(printf '%s' "$image" | tr '[:upper:]' '[:lower:]')"
           echo "dockerhub_repository=${namespace}/${image_lower}" >> "$GITHUB_OUTPUT"
+          echo "dockerhub_username=${username}" >> "$GITHUB_OUTPUT"
           echo "ghcr_repository=ghcr.io/${owner_lower}/${image_lower}" >> "$GITHUB_OUTPUT"
           echo "Docker Hub : ${namespace}/${image_lower}"
           echo "GHCR       : ghcr.io/${owner_lower}/${image_lower}"
@@ -174,16 +172,19 @@ jobs:
       # `docker login` plutôt que docker/login-action : une action de moins à épingler et à suivre
       # pour deux lignes de shell, et le jeton ne transite que par l'entrée standard.
       - name: Log in to Docker Hub
+        id: login-dockerhub
         env:
-          USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          USERNAME: ${{ steps.destination.outputs.dockerhub_username }}
           TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "${TOKEN}" ]; then
-            echo "::error::Le secret DOCKERHUB_TOKEN est vide. Settings → Secrets and variables → Actions → Secrets."
-            exit 1
+            echo "::notice::Le secret DOCKERHUB_TOKEN est vide. La publication Docker Hub sera ignorée."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            printf '%s' "${TOKEN}" | docker login --username "${USERNAME}" --password-stdin
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
-          printf '%s' "${TOKEN}" | docker login --username "${USERNAME}" --password-stdin
 
       # Le jeton d'exécution du workflow suffit : aucun secret à poser pour ce miroir.
       - name: Log in to GHCR
@@ -294,10 +295,10 @@ jobs:
       # tags disponibles, variables d'environnement, sondes. Les captures et les liens relatifs du
       # README, eux, ne mènent nulle part depuis Docker Hub.
       - name: Sync the Docker Hub description
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' && steps.login-dockerhub.outputs.enabled == 'true'
         uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
+          username: ${{ steps.destination.outputs.dockerhub_username }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ steps.destination.outputs.dockerhub_repository }}
           readme-filepath: ./DOCKERHUB.md
