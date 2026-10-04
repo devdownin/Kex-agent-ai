@@ -77,6 +77,12 @@ class SecurityConfig {
                                 "/api/agent/channels/slack/interactivity").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/agent/chat", "/api/agent/chat/structured",
                                 "/api/agent/chat/stream").hasAnyRole("CHAT", "OPERATOR", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/agent/workspace/requests", "/api/agent/workspace/requests/*")
+                                .hasAnyRole("CHAT", "OPERATOR", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/agent/workspace/requests/stream")
+                                .hasAnyRole("CHAT", "OPERATOR", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/agent/workspace/requests/*/plan")
+                                .hasAnyRole("OPERATOR", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/conversations/**")
                                 .hasAnyRole("CHAT", "OPERATOR", "ADMIN")
                         // Lecture pure, sans effet, ouverte à qui peut déjà converser : savoir à
