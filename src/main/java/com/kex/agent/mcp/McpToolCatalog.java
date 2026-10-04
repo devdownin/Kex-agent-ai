@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -65,6 +66,7 @@ public class McpToolCatalog implements AutoCloseable {
     private final Map<String, ArrayDeque<McpHealthSample>> healthHistory = new ConcurrentHashMap<>();
     private final Map<String, Map<String, McpToolInfo>> toolSnapshots = new ConcurrentHashMap<>();
     private final Map<String, McpToolDiff> toolDiffs = new ConcurrentHashMap<>();
+    private final Map<String, McpServerInfo> catalogSnapshots = new ConcurrentHashMap<>();
     private final CircuitBreakerRegistry circuitBreakerRegistry;
     private final ObservationRegistry observationRegistry;
     private final MeterRegistry meterRegistry;
@@ -194,6 +196,7 @@ public class McpToolCatalog implements AutoCloseable {
                 throw ex;
             }
             deactivate(connection);
+            catalogSnapshots.remove(connection);
             if (normalized.enabled()) install(connection, candidate);
             else closeClient(candidate);
             return runtimeView(connection);
@@ -266,6 +269,7 @@ public class McpToolCatalog implements AutoCloseable {
                 install(connection, candidate);
             }
             else closeClient(candidate);
+            catalogSnapshots.remove(connection);
         }
         catch (RuntimeException ex) {
             closeClient(candidate);
@@ -292,6 +296,7 @@ public class McpToolCatalog implements AutoCloseable {
         toolSnapshots.remove(connection);
         toolDiffs.remove(connection);
         circuitBreakers.remove(connection);
+        catalogSnapshots.remove(connection);
     }
 
     public List<McpRuntimeServerView> runtimeServers() {
@@ -300,25 +305,111 @@ public class McpToolCatalog implements AutoCloseable {
 
     /** Inspection ponctuelle : une connexion désactivée reste indisponible pour l'agent. */
     public synchronized McpServerInfo inspect(String connection) {
+        return inspect(connection, false);
+    }
+
+    public synchronized McpServerInfo inspect(String connection, boolean refresh) {
         McpServerRegistration definition = requireDynamic(connection);
-        McpSyncClient candidate = createClient(definition);
+        McpServerInfo previous = catalogSnapshots.get(connection);
+        if (!refresh && previous != null) return visibleSnapshot(connection, previous, true, previous.stale(), previous.refreshError());
+        McpSyncClient candidate = null;
         try {
+            candidate = createClient(definition);
             candidate.initialize();
             McpSchema.Implementation info = candidate.getServerInfo();
             McpSchema.InitializeResult initialization = candidate.getCurrentInitializationResult();
-            List<McpToolInfo> tools = listToolsStrict(candidate);
-            return new McpServerInfo(connection, info == null ? null : info.name(),
+            var capabilities = candidate.getServerCapabilities();
+            List<String> supported = new ArrayList<>();
+            List<McpToolInfo> tools = List.of();
+            List<McpResourceInfo> resources = List.of();
+            List<McpResourceTemplateInfo> templates = List.of();
+            List<McpPromptInfo> prompts = List.of();
+            if (capabilities != null && capabilities.tools() != null) {
+                supported.add("tools");
+                tools = listToolsStrict(candidate);
+            }
+            if (capabilities != null && capabilities.resources() != null) {
+                supported.add("resources");
+                resources = inspectResources(candidate);
+                templates = inspectResourceTemplates(candidate);
+            }
+            if (capabilities != null && capabilities.prompts() != null) {
+                supported.add("prompts");
+                prompts = inspectPrompts(candidate);
+            }
+            McpServerInfo snapshot = new McpServerInfo(connection, info == null ? null : info.name(),
                     info == null ? null : info.version(),
                     initialization == null ? null : initialization.protocolVersion(),
-                    candidate.isInitialized(), null,
-                    tools.stream().filter(tool -> isToolAllowed(connection, tool.name())).toList(), tools.size());
+                    candidate.isInitialized(), null, tools, tools.size(), resources, templates, prompts,
+                    List.copyOf(supported), Instant.now(), false, false, null);
+            catalogSnapshots.put(connection, snapshot);
+            return visibleSnapshot(connection, snapshot, false, false, null);
         }
         catch (RuntimeException ex) {
+            if (previous != null) {
+                McpServerInfo stale = visibleSnapshot(connection, previous, true, true,
+                        "Actualisation impossible. Le dernier catalogue est conservé.");
+                // Conserver aussi l'échec : rouvrir le panneau ne doit pas annoncer des données fraîches.
+                catalogSnapshots.put(connection, new McpServerInfo(previous.connection(), previous.serverName(),
+                        previous.version(), previous.protocolVersion(), previous.initialized(), previous.circuitBreakerState(),
+                        previous.tools(), previous.reportedToolCount(), previous.resources(), previous.resourceTemplates(),
+                        previous.prompts(), previous.supportedCapabilities(), previous.retrievedAt(), true, true, stale.refreshError()));
+                return stale;
+            }
             throw new McpServerUnavailableException(connection, ex);
         }
         finally {
-            closeClient(candidate);
+            if (candidate != null) closeClient(candidate);
         }
+    }
+
+    private McpServerInfo visibleSnapshot(String connection, McpServerInfo snapshot,
+                                          boolean cached, boolean stale, String error) {
+        return new McpServerInfo(connection, snapshot.serverName(), snapshot.version(), snapshot.protocolVersion(),
+                snapshot.initialized(), snapshot.circuitBreakerState(),
+                snapshot.tools().stream().filter(tool -> isToolAllowed(connection, tool.name())).toList(),
+                snapshot.reportedToolCount(), snapshot.resources(), snapshot.resourceTemplates(), snapshot.prompts(),
+                snapshot.supportedCapabilities(), snapshot.retrievedAt(), cached, stale, error);
+    }
+
+    private static List<McpResourceInfo> inspectResources(McpSyncClient client) {
+        return catalogPages(client::listResources, McpSchema.ListResourcesResult::resources,
+                McpSchema.ListResourcesResult::nextCursor).stream()
+                .map(resource -> new McpResourceInfo(resource.uri(), resource.name(), resource.description(),
+                        resource.mimeType(), resource.size())).toList();
+    }
+
+    private static List<McpResourceTemplateInfo> inspectResourceTemplates(McpSyncClient client) {
+        return catalogPages(client::listResourceTemplates, McpSchema.ListResourceTemplatesResult::resourceTemplates,
+                McpSchema.ListResourceTemplatesResult::nextCursor).stream()
+                .map(template -> new McpResourceTemplateInfo(template.uriTemplate(), template.name(),
+                        template.description(), template.mimeType())).toList();
+    }
+
+    private static List<McpPromptInfo> inspectPrompts(McpSyncClient client) {
+        return catalogPages(client::listPrompts, McpSchema.ListPromptsResult::prompts,
+                McpSchema.ListPromptsResult::nextCursor).stream()
+                .map(prompt -> new McpPromptInfo(prompt.name(), prompt.description(),
+                        prompt.arguments() == null ? List.of() : prompt.arguments().stream()
+                                .map(argument -> new McpPromptInfo.Argument(argument.name(), argument.description(),
+                                        Boolean.TRUE.equals(argument.required()))).toList())).toList();
+    }
+
+    private static <T, R> List<T> catalogPages(Function<String, R> fetch, Function<R, List<T>> items,
+                                              Function<R, String> nextCursor) {
+        List<T> result = new ArrayList<>();
+        Set<String> cursors = new HashSet<>();
+        String cursor = null;
+        for (int page = 0; page < 100; page++) {
+            R response = fetch.apply(cursor);
+            List<T> rows = items.apply(response);
+            if (rows == null) throw new IllegalStateException("Réponse de catalogue MCP invalide");
+            result.addAll(rows);
+            cursor = nextCursor.apply(response);
+            if (!StringUtils.hasText(cursor)) return List.copyOf(result);
+            if (!cursors.add(cursor)) throw new IllegalStateException("Curseur MCP répété");
+        }
+        throw new IllegalStateException("Catalogue MCP trop paginé");
     }
 
     /** Conservé pour les clients de la première API runtime. */
@@ -869,7 +960,8 @@ public class McpToolCatalog implements AutoCloseable {
 
     private List<McpToolInfo> listToolsStrict(McpSyncClient client) {
         if (client == null || !client.isInitialized()) return List.of();
-        return client.listTools().tools().stream()
+        return catalogPages(cursor -> cursor == null ? client.listTools() : client.listTools(cursor),
+                McpSchema.ListToolsResult::tools, McpSchema.ListToolsResult::nextCursor).stream()
                 .map(tool -> {
                     // Les annotations sont des déclarations du serveur, distinctes de la politique Kex.
                     var declared = objectMapper.valueToTree(tool.annotations());

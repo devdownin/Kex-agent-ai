@@ -23,6 +23,10 @@ assert.equal(discoveryState({ tools: [] }, 'error').label, 'Échec de connexion'
 assert.equal(discoveryState({ tools: [], reportedToolCount: 2 }, 'ready').label, 'Aucun service autorisé');
 assert.equal(discoveryState({ tools: [], reportedToolCount: 0 }, 'ready').label, 'Aucun service exposé');
 assert.equal(discoveryState({ tools: [{ name: 'search' }] }, 'ready').label, 'Informations récupérées');
+assert.equal(discoveryState({ tools: [], resources: [{ name: 'orders' }] }, 'ready').label, 'Informations récupérées');
+assert.equal(discoveryState({ tools: [], prompts: [{ name: 'triage' }], cached: true }, 'ready').label, 'Dernier catalogue conservé');
+assert.match(discoveryState({ stale: true }, 'ready').label, /actualisation en échec/);
+assert.match(discoveryState({ retrievedAt: '2026-10-04T19:00:00Z' }, 'error').label, /catalogue conservé/);
 const prompt = servicePrompt({ connection: 'my-mcp' }, { name: 'search', description: 'Rechercher les topics', inputSchema: schema });
 assert.match(prompt, /my-mcp/); assert.match(prompt, /search/); assert.match(prompt, /"topic": "orders"/);
 assert.match(prompt, /\[à compléter\]/); assert.match(prompt, /validations Kex/);

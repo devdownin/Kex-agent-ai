@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 package com.kex.agent.mcp;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -17,7 +18,16 @@ import java.util.List;
  */
 public record McpServerInfo(String connection, String serverName, String version, String protocolVersion,
                             boolean initialized, String circuitBreakerState, List<McpToolInfo> tools,
-                            int reportedToolCount) {
+                            int reportedToolCount, List<McpResourceInfo> resources,
+                            List<McpResourceTemplateInfo> resourceTemplates, List<McpPromptInfo> prompts,
+                            List<String> supportedCapabilities, Instant retrievedAt,
+                            boolean cached, boolean stale, String refreshError) {
+    public McpServerInfo(String connection, String serverName, String version, String protocolVersion,
+                          boolean initialized, String circuitBreakerState, List<McpToolInfo> tools,
+                          int reportedToolCount) {
+        this(connection, serverName, version, protocolVersion, initialized, circuitBreakerState,
+                tools, reportedToolCount, List.of(), List.of(), List.of(), List.of(), null, false, false, null);
+    }
     public McpServerInfo(String connection, String serverName, String version, String protocolVersion,
                           boolean initialized, String circuitBreakerState, List<McpToolInfo> tools) {
         this(connection, serverName, version, protocolVersion, initialized, circuitBreakerState,

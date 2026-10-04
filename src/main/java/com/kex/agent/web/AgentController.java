@@ -221,8 +221,9 @@ class AgentController {
     }
 
     @GetMapping("/mcp/servers/{connection}/preview")
-    McpServerInfo previewServer(@PathVariable String connection) {
-        return toolCatalog.inspect(connection);
+    McpServerInfo previewServer(@PathVariable String connection,
+                                @RequestParam(defaultValue = "false") boolean refresh) {
+        return refresh ? toolCatalog.inspect(connection, true) : toolCatalog.inspect(connection);
     }
 
     @GetMapping("/mcp/configuration")

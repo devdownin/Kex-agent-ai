@@ -42,11 +42,15 @@ export function toolEffects(tool) {
 
 export function discoveryState(server, phase) {
   if (phase === 'loading') return { state: 'PENDING', label: 'Récupération des informations…' };
-  if (phase === 'error') return { state: 'ERROR', label: 'Échec de connexion' };
+  if (phase === 'error') return { state: server.retrievedAt ? 'WARNING' : 'ERROR',
+    label: server.retrievedAt ? 'Échec de connexion · catalogue conservé' : 'Échec de connexion' };
+  if (server.stale) return { state: 'WARNING', label: 'Catalogue conservé · actualisation en échec' };
   if (phase === 'ready' || server.initialized) {
-    if (!server.tools?.length) return { state: 'WARNING', label: server.reportedToolCount > 0
+    if (![server.tools, server.resources, server.resourceTemplates, server.prompts].some(rows => rows?.length)) {
+      return { state: 'WARNING', label: server.reportedToolCount > 0
       ? 'Aucun service autorisé' : 'Aucun service exposé' };
-    return { state: 'OK', label: 'Informations récupérées' };
+    }
+    return { state: 'OK', label: server.cached ? 'Dernier catalogue conservé' : 'Informations récupérées' };
   }
   return { state: 'UNKNOWN', label: 'Informations non récupérées' };
 }

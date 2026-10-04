@@ -137,6 +137,88 @@ class McpStreamableHttpIntegrationTest {
     }
 
     @Test
+    void conserve_le_catalogue_date_et_ses_ressources_et_prompts_apres_un_echec() throws IOException {
+        try (FakeMcpServer source = new FakeMcpServer()
+                .withCapabilities("{\"tools\":{},\"resources\":{},\"prompts\":{}}")
+                .withCatalogResult("resources/templates/list", """
+                        {"resourceTemplates":[{"uriTemplate":"test://topics/{topic}","name":"Topic",
+                         "description":"Métadonnées d'un topic","mimeType":"application/json"}]}
+                        """)
+                .withCatalogResult("prompts/list", """
+                        {"prompts":[{"name":"triage","description":"Analyser une anomalie",
+                         "arguments":[{"name":"topic","description":"Topic concerné","required":true}]}],"nextCursor":"second"}
+                        """)
+                .withCatalogResult("prompts/list:second", "{\"prompts\":[{\"name\":\"bilan\",\"arguments\":[]}]}")) {
+            String connection = "preview-cache";
+            catalog.register(new McpServerRegistration(connection, "HTTP",
+                    "http://127.0.0.1:" + source.port(), "/mcp", FakeMcpServer.TOKEN,
+                    Map.of(), null, List.of(), Map.of(), false, Set.of(), Map.of()));
+            try {
+                McpServerInfo first = catalog.inspect(connection);
+                assertThat(first.retrievedAt()).isNotNull();
+                assertThat(first.cached()).isFalse();
+                assertThat(first.resources()).extracting(McpResourceInfo::uri).containsExactly("test://ressource");
+                assertThat(first.resourceTemplates()).extracting(McpResourceTemplateInfo::uriTemplate)
+                        .containsExactly("test://topics/{topic}");
+                assertThat(first.prompts()).extracting(McpPromptInfo::name).containsExactly("triage", "bilan");
+                assertThat(first.prompts()).first().satisfies(prompt -> {
+                    assertThat(prompt.name()).isEqualTo("triage");
+                    assertThat(prompt.arguments()).containsExactly(new McpPromptInfo.Argument("topic", "Topic concerné", true));
+                });
+                int requests = source.methods().size();
+                assertThat(catalog.inspect(connection).cached()).isTrue();
+                assertThat(source.methods()).hasSize(requests);
+                source.failMethod("resources/list");
+                McpServerInfo stale = catalog.inspect(connection, true);
+                assertThat(stale.stale()).isTrue();
+                assertThat(stale.retrievedAt()).isEqualTo(first.retrievedAt());
+                assertThat(stale.resources()).isEqualTo(first.resources());
+                assertThat(stale.prompts()).isEqualTo(first.prompts());
+                assertThat(stale.refreshError()).isNotBlank();
+                assertThat(catalog.inspect(connection).stale()).isTrue();
+                source.failMethod(null);
+                source.withToolsList("{\"tools\":[]}");
+                McpServerInfo updated = catalog.inspect(connection, true);
+                assertThat(updated.stale()).isFalse();
+                assertThat(updated.tools()).isEmpty();
+                assertThat(updated.retrievedAt()).isAfterOrEqualTo(first.retrievedAt());
+                assertThat(source.methods()).doesNotContain("resources/read", "prompts/get");
+            }
+            finally {
+                catalog.unregister(connection);
+            }
+        }
+    }
+
+    @Test
+    void decouvre_un_serveur_sans_outils_et_refuse_une_pagination_cyclique() throws IOException {
+        try (FakeMcpServer source = new FakeMcpServer().withCapabilities("{\"prompts\":{}}")) {
+            String connection = "preview-prompts";
+            catalog.register(new McpServerRegistration(connection, "HTTP",
+                    "http://127.0.0.1:" + source.port(), "/mcp", FakeMcpServer.TOKEN,
+                    Map.of(), null, List.of(), Map.of(), false, Set.of(), Map.of()));
+            try {
+                int before = source.methods().size();
+                McpServerInfo first = catalog.inspect(connection);
+                assertThat(first.supportedCapabilities()).containsExactly("prompts");
+                assertThat(source.methods().subList(before, source.methods().size()))
+                        .doesNotContain("tools/list", "resources/list");
+                source.withCatalogResult("prompts/list", "{\"prompts\":[],\"nextCursor\":\"same\"}");
+                assertThat(catalog.inspect(connection, true).stale()).isTrue();
+                // L'invalidation empêche aussi de réutiliser un catalogue après changement d'identité/adresse.
+                catalog.unregister(connection);
+                catalog.register(new McpServerRegistration(connection, "HTTP",
+                        "http://127.0.0.1:" + source.port(), "/mcp", FakeMcpServer.TOKEN,
+                        Map.of(), null, List.of(), Map.of(), false, Set.of(), Map.of()));
+                assertThatThrownBy(() -> catalog.inspect(connection)).isInstanceOf(McpServerUnavailableException.class);
+            }
+            finally {
+                catalog.unregister(connection);
+            }
+        }
+    }
+
+    @Test
     void administre_une_connexion_runtime_et_applique_les_permissions() {
         McpServerRegistration registration = new McpServerRegistration(
                 "runtime-faux", "HTTP", "http://127.0.0.1:" + SERVER.port(), "/mcp",
