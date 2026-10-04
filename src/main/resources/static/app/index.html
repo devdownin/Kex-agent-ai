@@ -21,6 +21,7 @@
   <a href="#/actions" data-page="actions">Actions prêtes à l’emploi</a>
   <a href="#/approvals" data-page="approvals" id="approvals-link" hidden>Plans à valider</a>
   <a href="#/requests" data-page="requests">Mes demandes</a>
+  <a href="#/notifications" data-page="notifications">Notifications <span id="notification-count"></span></a>
 </nav>
 <main id="main">
   <p id="notice" role="status"></p>
@@ -53,6 +54,23 @@
     <h1 id="requests-title">Mes demandes</h1>
     <p class="muted">Historique de cet onglet. Il reste disponible en passant à la console experte ; il ne constitue pas un journal partagé.</p>
     <div id="request-list"></div>
+  </section>
+  <section id="notifications" hidden aria-labelledby="notifications-title">
+    <h1 id="notifications-title">Notifications</h1>
+    <p class="intro">Retrouvez ce qui demande votre attention. Une notification ouvre la demande ou les plans, sans lancer d’action.</p>
+    <form id="notification-preferences" class="panel">
+      <h2>Mes préférences</h2>
+      <label><input id="notify-result" type="checkbox"> Résultat disponible</label>
+      <label><input id="notify-input" type="checkbox"> Précision nécessaire</label>
+      <label><input id="notify-approval" type="checkbox"> Approbation attendue</label>
+      <label><input id="notify-desktop" type="checkbox"> Alertes du navigateur lorsque cet onglet est masqué</label>
+      <button id="enable-notifications" type="button">Autoriser les alertes du navigateur</button>
+      <p id="notification-permission" role="status"></p>
+      <p class="muted">Préférences conservées sur ce navigateur pour votre compte et votre espace. Les alertes fonctionnent tant que cette page reste ouverte ; les plans sont vérifiés environ toutes les 30 secondes. Aucun détail de votre demande n’apparaît dans les alertes du navigateur.</p>
+    </form>
+    <p id="notification-live" role="status" aria-live="polite"></p>
+    <button id="read-notifications" type="button">Tout marquer comme lu</button>
+    <div id="notification-list"></div>
   </section>
   <section id="detail" hidden aria-labelledby="detail-title">
     <a href="#/requests">Toutes mes demandes</a>

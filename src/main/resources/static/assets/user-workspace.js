@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 import { $, api, credentials, el, failure, headers } from './core.js';
+import { userNotifications } from './user-notifications.js';
 import { userApprovals } from './user-approvals.js';
 import { events } from './user-stream.js';
 import { activity, parameterFields, parseResponse, responsePrompt, skillSignature } from './user-experience.js';
@@ -22,7 +23,8 @@ let preparedSkill = null;
 let preparing = false;
 let preparedDraft = null;
 let favorites = [];
-const approvals = userApprovals({ onPlan(requestId, taskId) {
+const notifications = userNotifications();
+const approvals = userApprovals({ onTasks: tasks => notifications.tasks(tasks), onPlan(requestId, taskId) {
   const request = history.find(r => r.id === requestId);
   if (request) { request.taskId = taskId; save(); if (current === request) drawDetail(); }
 } });
@@ -105,8 +107,8 @@ function date(at) { return at ? new Date(at).toLocaleString('fr-FR') : 'Date non
 function route() {
   const name = location.hash.slice(2) || 'new';
   const request = name.startsWith('request/') ? history.find(r => r.id === name.slice(8)) : null;
-  const page = request ? 'detail' : ['new', 'actions', 'requests', 'approvals'].includes(name) ? name : 'new';
-  ['new', 'actions', 'requests', 'approvals', 'detail'].forEach(id => { $('#' + id).hidden = id !== page; });
+  const page = request ? 'detail' : ['new', 'actions', 'requests', 'approvals', 'notifications'].includes(name) ? name : 'new';
+  ['new', 'actions', 'requests', 'approvals', 'notifications', 'detail'].forEach(id => { $('#' + id).hidden = id !== page; });
   document.querySelectorAll('[data-page]').forEach(a => {
     if (a.dataset.page === (page === 'detail' ? 'requests' : page)) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
@@ -235,7 +237,7 @@ async function skills() {
 function clearIdentity() {
   // Invalide toutes les réponses tardives avant de changer l'espace affiché.
   epoch++; skillEpoch++; active?.controller.abort(); active = null;
-  identity = null; history = []; current = null; selected = null; preparedSkill = null; preparedDraft = null; favorites = []; approvals.reset(); drawFavorites();
+  identity = null; history = []; current = null; selected = null; preparedSkill = null; preparedDraft = null; favorites = []; notifications.reset(); approvals.reset(); drawFavorites();
   $('#turns').replaceChildren(); $('#request-list').replaceChildren(); $('#skills').replaceChildren();
   $('#identity').textContent = ''; $('#prompt').value = ''; $('#followup').value = '';
   $('#selected-action').hidden = true; $('#send').disabled = true;
@@ -249,7 +251,7 @@ async function authenticate() {
   try {
     const me = await api('/api/agent/whoami');
     if (ownEpoch !== epoch) return false;
-    identity = JSON.stringify([me.tenant, me.name]); load(); loadFavorites(); approvals.reset(me.roles || []); drawFavorites();
+    identity = JSON.stringify([me.tenant, me.name]); load(); loadFavorites(); notifications.reset(identity, me.roles || []); approvals.reset(me.roles || []); drawFavorites();
     $('#prompt').value = draft;
     $('#identity').textContent = `Connecté : ${me.name}`; $('#account').textContent = 'Mon accès';
     $('#send').disabled = false; $('#notice').textContent = ''; route(); skills(); return true;
@@ -297,7 +299,7 @@ async function send(message, request = null) {
     if (e.status === 401) $('#notice').textContent = 'Votre accès a été refusé. Reconnectez-vous avant de poursuivre.';
   } finally {
     if (ownEpoch === epoch) {
-      active = null; save(); $('#send').disabled = !identity; if (current === request) { drawDetail(); approvals.request(request); } drawHistory();
+      notifications.request(request); active = null; save(); $('#send').disabled = !identity; if (current === request) { drawDetail(); approvals.request(request); } drawHistory();
     }
   }
 }

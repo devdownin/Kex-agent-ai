@@ -6,7 +6,7 @@ const BASE = '/api/agent/tasks';
 const STATES = { DRAFT: 'Votre décision est attendue', APPROVED: 'Plan approuvé — à lancer', RUNNING: 'Traitement en cours', VERIFIED: 'Critère final confirmé', COMPLETED: 'Étapes terminées — objectif non vérifié', FAILED: 'Critère non satisfait', PAUSED: 'Traitement en pause', NEEDS_RECONCILIATION: 'Résultat incertain — examen nécessaire', CANCELLED: 'Plan refusé ou annulé' };
 
 // Only server-owned plans enter this flow; model answers never supply approval identifiers.
-export function userApprovals({ onPlan }) {
+export function userApprovals({ onPlan, onTasks = () => {} }) {
   let generation = 0; let roles = []; let tasks = []; let bindings = {}; let linked = null;
   let loading = false; let refreshQueued = false; let timer = null; let confirmation = null; let planning = null;
   const pending = new Set();
@@ -75,8 +75,8 @@ export function userApprovals({ onPlan }) {
     try {
       const [rows, configured] = await Promise.all([api(BASE), api(`${BASE}/bindings`)]);
       if (own !== generation) return;
-      tasks = rows; bindings = configured; message(''); draw();
-      if (tasks.some(t => t.status === 'RUNNING') && !document.hidden) timer = setTimeout(refresh, 5000);
+      tasks = rows; bindings = configured; message(''); draw(); onTasks(tasks);
+      timer = setTimeout(refresh, tasks.some(t => t.status === 'RUNNING') && !document.hidden ? 5000 : 30000);
     } catch (error) {
       if (own !== generation) return;
       // Stale approval controls must disappear when the server or authorization is unavailable.
@@ -132,7 +132,7 @@ export function userApprovals({ onPlan }) {
     } catch (error) { if (own === generation) $('#plan-error').textContent = 'Préparation non confirmée. Aucun nouvel envoi automatique. ' + error.message; }
     finally { if (own === generation) $('#plan-submit').disabled = false; }
   });
-  document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (!document.hidden && canOperate()) refresh(); });
+  document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (canOperate()) refresh(); });
   addEventListener('pagehide', () => clearTimeout(timer));
   return { reset, refresh, show, request(request) { planning = request; $('#prepare-plan').disabled = !request || !!request.taskId || request.status === 'RUNNING'; show(request?.taskId); } };
 }
