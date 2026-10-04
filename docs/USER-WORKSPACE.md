@@ -190,3 +190,12 @@ regroupements indicatifs : vérifier/surveiller, comprendre/rechercher, prépare
 besoins. Les cartes indiquent les informations à préparer et un exemple de résultat attendu issu
 des vérifications déclarées. Ces regroupements ne remplacent pas la revue de la procédure ni sa
 revalidation avant envoi.
+
+
+## Premier usage accompagné
+
+Dans **Nouvelle demande**, le guide explique trois étapes : décrire le besoin, examiner le résultat et décider avant une action nécessitant un plan. Le texte d’approbation tient compte des droits actuels : les utilisateurs de chat sont orientés vers une personne autorisée, les opérateurs retrouvent la distinction entre approbation et lancement.
+
+Après connexion, trois exemples sont proposés à partir des compétences actuellement disponibles, en diversifiant les besoins. Si le catalogue contient moins de trois compétences, les demandes guidées complètent la sélection ; en cas d’indisponibilité, ce repli est expliqué. **Préparer cet exemple** revérifie la compétence et ouvre son formulaire. Il ne lance ni prompt ni outil ; le lancement reste explicite.
+
+**J’ai compris** masque le guide pour le compte et le locataire sur ce navigateur. **Guide de démarrage** permet de le rouvrir à tout moment. Changer de compte efface les exemples affichés, et un chargement tardif du catalogue précédent est ignoré.

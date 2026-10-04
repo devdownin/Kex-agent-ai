@@ -199,6 +199,7 @@ jobs:
           node src/test/browser/user-workspace.mjs
           node src/test/browser/user-approvals-favorites.mjs
           node src/test/browser/user-context-history.mjs
+          node src/test/browser/user-onboarding.mjs
           timeout 10m node src/test/browser/console.mjs
 
       - name: Agent logs on failure

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 import { $, api, credentials, el, failure, headers } from './core.js';
+import { userOnboarding } from './user-onboarding.js';
 import { userNotifications } from './user-notifications.js';
 import { userApprovals } from './user-approvals.js';
 import { readAttachments, contextText, skillCategory, summary } from './user-context.js';
@@ -74,6 +75,7 @@ function drawAttention() {
   $('#attention-count').textContent = count ? `(${count})` : '';
   if (!count) host.append(el('p', 'muted', identity ? 'Aucune intervention attendue dans les éléments disponibles.' : 'Connectez-vous pour consulter les interventions attendues.'));
 }
+const onboarding = userOnboarding({ prepare: prepareFavorite });
 const notifications = userNotifications();
 const approvals = userApprovals({ onTasks: tasks => { attentionTasks = tasks; notifications.tasks(tasks); drawAttention(); if (current) drawDetail(); }, onPlan(requestId, taskId) {
   const request = history.find(r => r.id === requestId);
@@ -298,22 +300,24 @@ function openAction(action, draft = null) {
 }
 async function skills() {
   const version = ++skillEpoch; const ownEpoch = epoch;
-  availableSkills = [];
+  availableSkills = []; $('#onboarding-examples').replaceChildren();
+  if (identity) $('#onboarding-note').textContent = 'Chargement des exemples disponibles…';
   const host = $('#skills'); host.replaceChildren(el('p', 'muted', identity ? 'Chargement des compétences…' : 'Connectez-vous pour consulter les compétences de votre équipe.'));
   if (!identity) return;
   try {
     const rows = await api('/api/agent/skills/available');
     if (version !== skillEpoch || ownEpoch !== epoch) return;
-    availableSkills = rows; drawSkillCatalogue();
+    availableSkills = rows; drawSkillCatalogue(); onboarding.examples(rows, STARTERS);
   } catch (e) {
     if (version !== skillEpoch || ownEpoch !== epoch) return;
+    onboarding.examples([], STARTERS, true);
     host.replaceChildren(el('p', 'muted', e.status === 404 ? 'Les compétences ne sont pas activées sur ce serveur. Les demandes guidées restent disponibles.' : 'Les compétences ne sont pas disponibles. Réessayez ou contactez votre administrateur.'));
   }
 }
 function clearIdentity() {
   // Invalide toutes les réponses tardives avant de changer l'espace affiché.
   clearTimeout(historyTimer); epoch++; skillEpoch++; historyVersion++; contextVersion++; contextLoading = false; serverHistory = false; attentionTasks = []; examined = []; availableSkills = []; restoreContext(null); $('#context-error').textContent = ''; $('#skill-search').value = ''; $('#skill-category').value = 'all'; drawAttention(); active?.controller.abort(); active = null;
-  identity = null; history = []; current = null; selected = null; preparedSkill = null; preparedDraft = null; favorites = []; $('#process-options').replaceChildren(); notifications.reset(); approvals.reset(); drawFavorites(); drawAttention(); $('#completion-summary').replaceChildren(); $('#saved-context-content').replaceChildren(); $('#saved-context').hidden = true;
+  identity = null; history = []; current = null; selected = null; preparedSkill = null; preparedDraft = null; favorites = []; $('#process-options').replaceChildren(); onboarding.reset(); notifications.reset(); approvals.reset(); drawFavorites(); drawAttention(); $('#completion-summary').replaceChildren(); $('#saved-context-content').replaceChildren(); $('#saved-context').hidden = true;
   $('#turns').replaceChildren(); $('#request-list').replaceChildren(); $('#skills').replaceChildren();
   $('#identity').textContent = ''; $('#prompt').value = ''; $('#followup').value = '';
   $('#selected-action').hidden = true; $('#send').disabled = true;
@@ -327,7 +331,7 @@ async function authenticate() {
   try {
     const me = await api('/api/agent/whoami');
     if (ownEpoch !== epoch) return false;
-    identity = JSON.stringify([me.tenant, me.name]); roleScope = JSON.stringify((me.roles || []).slice().sort()); load(); loadFavorites(); notifications.reset(identity + '|' + roleScope, me.roles || []); approvals.reset(me.roles || []);
+    identity = JSON.stringify([me.tenant, me.name]); roleScope = JSON.stringify((me.roles || []).slice().sort()); load(); loadFavorites(); onboarding.reset(identity, me.roles || []); notifications.reset(identity + '|' + roleScope, me.roles || []); approvals.reset(me.roles || []);
     try { examined = JSON.parse(localStorage.getItem(examinedKey()) || '[]'); if (!Array.isArray(examined)) examined = []; } catch { examined = []; }
     await refreshHistory(); if (ownEpoch !== epoch) return false; drawFavorites();
     $('#prompt').value = draft;

@@ -446,3 +446,6 @@ Preferences in the notification center control alerts for results, clarification
 
 
 The user workspace supports explicit process/period/environment context and previewed text attachments, an attention queue, completion summaries, private server history across devices, and searchable skills grouped by user need. Server history follows authenticated account/tenant/authority boundaries, uses atomic local files or the shared-memory JDBC store, and never resumes a prompt automatically.
+
+
+First-time users see a dismissible startup guide explaining requests, results and approvals, with three examples drawn from available team skills and guided starters. Examples prepare the existing form without running it. The guide can be reopened and its dismissal is scoped to the account and tenant on this browser.

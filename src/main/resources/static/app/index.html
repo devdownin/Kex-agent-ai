@@ -29,6 +29,17 @@
   <section id="new" aria-labelledby="new-title">
     <h1 id="new-title">Que souhaitez-vous faire ?</h1>
     <p class="intro">Décrivez votre besoin ou choisissez une action prête à l’emploi.</p>
+    <button id="open-onboarding" type="button">Guide de démarrage</button>
+    <section id="onboarding" class="panel" aria-labelledby="onboarding-title">
+      <h2 id="onboarding-title" tabindex="-1">Votre première demande, pas à pas</h2>
+      <ol class="onboarding-steps">
+        <li><strong>Décrivez votre besoin</strong><p>Choisissez un exemple ou écrivez votre demande. Précisez le processus, la période et le résultat attendu, puis sélectionnez Lancer.</p></li>
+        <li><strong>Suivez et examinez le résultat</strong><p>Kex peut demander une précision. Consultez les faits, les sources et les limites : une réponse reçue ne signifie pas que l’objectif est vérifié.</p></li>
+        <li><strong>Décidez avant d’agir</strong><p id="onboarding-approval"></p></li>
+      </ol>
+      <h3>Trois exemples pour commencer</h3><p id="onboarding-note" role="status"></p><div id="onboarding-examples" class="actions-grid"></div>
+      <button id="dismiss-onboarding" type="button">J’ai compris</button>
+    </section>
     <form id="request-form" class="panel">
       <label for="prompt">Votre demande</label>
       <textarea id="prompt" rows="4" required maxlength="24000" placeholder="Exemple : vérifie que les commandes arrivent bien dans notre système."></textarea>
