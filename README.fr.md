@@ -403,3 +403,6 @@ Le centre de notifications propose des préférences pour les résultats, préci
 
 
 L’espace utilisateur propose un contexte processus/période/environnement avec aperçu des fichiers texte, une vue des interventions attendues, un bilan de fin, un historique serveur privé entre appareils et un catalogue de compétences organisé par besoin. L’historique respecte le compte, le locataire et les autorités authentifiées ; il utilise des fichiers locaux atomiques ou JDBC avec le profil shared-memory. Retrouver une demande ne relance jamais son prompt.
+
+
+Un guide de premier usage explique demande, résultat et approbation, avec trois exemples choisis parmi les compétences disponibles et les demandes guidées. Chaque exemple prépare le formulaire sans le lancer. Le guide peut être rouvert ; son masquage est conservé par compte et locataire sur ce navigateur.
