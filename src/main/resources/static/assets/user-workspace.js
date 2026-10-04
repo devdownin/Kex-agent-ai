@@ -212,7 +212,7 @@ function drawDetail() {
   $('#run-status').textContent = LABELS[current.status] || 'État non disponible';
   drawRunActivity(current);
   const running = active?.request === current;
-  $('#stop').hidden = !running;
+  $('#stop').hidden = !running; $('#refresh-current').disabled = !!active;
   $('#followup-send').disabled = !!active || current.status === 'RUNNING' || !!current.loadingDetail || !identity || !current.conversationId;
   $('#followup-form').hidden = !current.conversationId;
   $('#open-expert').disabled = !current.conversationId || !!active;
@@ -469,7 +469,7 @@ $('#context-files').addEventListener('change', async () => {
   finally { if (own === epoch && version === contextVersion) { contextLoading = false; $('#send').disabled = !!active || !identity; } }
 });
 $('#refresh-work').addEventListener('click', async () => { await refreshHistory(); await approvals.refresh(); drawOverview(); });
-$('#refresh-current').addEventListener('click', async () => { await refreshHistory(); if (current?.serverId) { current.summaryOnly = true; } route(); });
+$('#refresh-current').addEventListener('click', async () => { if (active) return; await refreshHistory(); if (current?.serverId) { current.summaryOnly = true; } route(); });
 const activityTimer = setInterval(() => { if (current?.status === 'RUNNING' && !document.hidden) drawRunActivity(current); }, 15000);
 $('#refresh-requests').addEventListener('click', async () => { await refreshHistory(); route(); });
 $('#refresh-attention').addEventListener('click', async () => { await refreshHistory(); await approvals.refresh(); drawAttention(); });
