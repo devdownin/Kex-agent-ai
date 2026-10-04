@@ -36,7 +36,9 @@ class LlmProviderTest {
     void anthropic_quand_la_propriete_le_designe() {
         context.withPropertyValues("spring.ai.model.chat=anthropic").run(ctx -> {
             assertThat(ctx).hasSingleBean(ChatModel.class).hasSingleBean(ChatClient.class);
-            assertThat(ctx).hasSingleBean(AnthropicChatModel.class);
+            assertThat(ctx).hasSingleBean(BudgetedChatModel.class);
+            assertThat(org.springframework.test.util.ReflectionTestUtils.getField(ctx.getBean(ChatModel.class), "delegate"))
+                    .isInstanceOf(AnthropicChatModel.class);
             assertThat(ctx).doesNotHaveBean(OpenAiChatModel.class);
         });
     }
@@ -45,7 +47,9 @@ class LlmProviderTest {
     void openai_bascule_le_client_vers_openrouter() {
         context.withPropertyValues("spring.ai.model.chat=openai").run(ctx -> {
             assertThat(ctx).hasSingleBean(ChatModel.class).hasSingleBean(ChatClient.class);
-            assertThat(ctx).hasSingleBean(OpenAiChatModel.class);
+            assertThat(ctx).hasSingleBean(BudgetedChatModel.class);
+            assertThat(org.springframework.test.util.ReflectionTestUtils.getField(ctx.getBean(ChatModel.class), "delegate"))
+                    .isInstanceOf(OpenAiChatModel.class);
             assertThat(ctx).doesNotHaveBean(AnthropicChatModel.class);
         });
     }

@@ -145,6 +145,18 @@ class SkillCuratorTest {
         }
 
         @Override
+        public boolean replace(LearningEntry replacement, String expectedStatus) {
+            for (int i = 0; i < entries.size(); i++) {
+                var entry = entries.get(i);
+                if (entry.id().equals(replacement.id()) && entry.owner().equals(replacement.owner())
+                        && entry.status().equals(expectedStatus)) {
+                    entries.set(i, replacement); return true;
+                }
+            }
+            return false;
+        }
+
+        @Override
         public boolean delete(String owner, String id) {
             return entries.removeIf(entry -> entry.owner().equals(owner) && entry.id().equals(id));
         }

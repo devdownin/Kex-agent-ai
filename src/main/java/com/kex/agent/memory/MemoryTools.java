@@ -42,7 +42,7 @@ public class MemoryTools {
                 () -> memory.remember(MemoryIdentity.from(toolContext), content, replaces, conversationId(toolContext)));
     }
 
-    @Tool(name = "recall_facts", description = "Relit les faits retenus lors de conversations "
+    @Tool(name = "recall_facts", description = "Relit les faits déclarés, non vérifiés, avec provenance et validité, lors de conversations "
             + "précédentes, avec leur identifiant. À appeler en début d'échange si un souvenir "
             + "pourrait éviter de redemander une information déjà établie.")
     public List<MemoryFact> recallFacts(ToolContext toolContext) {

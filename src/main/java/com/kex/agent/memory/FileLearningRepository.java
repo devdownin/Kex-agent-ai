@@ -55,6 +55,21 @@ public final class FileLearningRepository implements LearningRepository {
     }
 
     @Override
+    public synchronized boolean replace(LearningEntry replacement, String expectedStatus) {
+        List<LearningEntry> next = new ArrayList<>(entries);
+        for (int i = 0; i < next.size(); i++) {
+            LearningEntry prior = next.get(i);
+            if (prior.id().equals(replacement.id()) && prior.owner().equals(replacement.owner())
+                    && prior.status().equals(expectedStatus)) {
+                next.set(i, replacement);
+                save(next);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
     public synchronized boolean delete(String owner, String id) {
         List<LearningEntry> next = entries.stream()
                 .filter(entry -> !(entry.id().equals(id) && entry.owner().equals(owner))).toList();

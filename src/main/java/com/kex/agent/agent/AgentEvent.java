@@ -5,6 +5,10 @@ package com.kex.agent.agent;
 /** Ce qui peut sortir d'un échange en flux : du texte, ou un outil qui vient de s'exécuter. */
 public sealed interface AgentEvent {
 
+    record Sources(java.util.List<com.kex.agent.knowledge.KnowledgeSource> sources) implements AgentEvent {
+        public Sources { sources = java.util.List.copyOf(sources); }
+    }
+
     record Token(String text) implements AgentEvent {
     }
 

@@ -401,6 +401,10 @@ public class McpToolCatalog implements AutoCloseable {
 
     /** Invocation directe avec permission, observation, réessai et disjoncteur par connexion. */
     public McpToolResult call(String connection, String tool, Map<String, Object> arguments) {
+        return call(connection, tool, arguments, Map.of());
+    }
+
+    public McpToolResult call(String connection, String tool, Map<String, Object> arguments, Map<String, Object> budgetContext) {
         if (!isToolAllowed(connection, tool)) throw new McpToolForbiddenException(connection, tool);
         toolPolicy.check(callbackPrefix(connection) + "__" + tool, arguments);
         CircuitBreaker circuitBreaker = circuitBreakerFor(connection);
@@ -408,6 +412,7 @@ public class McpToolCatalog implements AutoCloseable {
                 .lowCardinalityKeyValue("connection", connection)
                 .lowCardinalityKeyValue("tool", tool)
                 .observe(() -> {
+                    com.kex.agent.agent.TokenBudgetService.chargeTool(budgetContext, connection + ":" + tool);
                     McpSchema.CallToolResult result = invokeTool(connection, tool, arguments);
                     List<String> content = textOf(result.content());
                     toolPolicy.checkOutput(tool, String.join("\n", content));

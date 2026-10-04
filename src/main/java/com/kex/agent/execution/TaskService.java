@@ -40,6 +40,15 @@ public class TaskService {
     private final Clock clock;
     private final SupervisionService supervision;
     private final Semaphore workers;
+    private com.kex.agent.memory.LongTermMemoryService learning;
+    private com.kex.agent.agent.TokenBudgetService budgets;
+    @org.springframework.beans.factory.annotation.Autowired
+    void budgets(com.kex.agent.agent.TokenBudgetService service) { budgets = service; }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void learning(org.springframework.beans.factory.ObjectProvider<com.kex.agent.memory.LongTermMemoryService> provider) {
+        learning = provider.getIfAvailable();
+    }
 
     public TaskService(TaskRepository repository, TaskProperties properties, TaskGateway gateway,
             ObjectMapper mapper, Clock clock, SupervisionService supervision) {
@@ -184,7 +193,7 @@ public class TaskService {
                     if (!binding.readOnly() && binding.idempotencyArgument() != null && !binding.idempotencyArgument().isBlank()) {
                         arguments.put(binding.idempotencyArgument(), task.id() + ":" + step.id());
                     }
-                    result = call(binding, arguments, task.leaseUntil());
+                    result = call(binding, arguments, task);
                     // An explicit tool error proves failure; transport errors prove no absence of effect.
                     if (result.error()) {
                         task = setStep(task, i, DurableTask.StepStatus.FAILED, result, "L'outil a signalé un échec");
@@ -214,7 +223,7 @@ public class TaskService {
                     return finish(task, FAILED, "Objectif non atteint ; aucune mutation rejouée", actor);
                 }
                 task = setStep(task, i, expectation == null ? DurableTask.StepStatus.COMPLETED : DurableTask.StepStatus.VERIFIED,
-                        result, expectation == null ? "Lecture terminée ; objectif non évalué" : "Postcondition vérifiée");
+                        result, expectation == null ? "Lecture terminée ; objectif non évalué" : "Postcondition vérifiée : " + expectation.pointer() + " = " + expectation.expected());
                 audit(actor, task, "Étape " + step.id() + " : " + task.results().get(i).status());
             } catch (TaskConflictException ex) {
                 return get(task.owner(), task.id());
@@ -239,15 +248,17 @@ public class TaskService {
         Map<String, Object> args = new LinkedHashMap<>(verifier.arguments() == null ? Map.of() : verifier.arguments());
         // Trusted verifier arguments use explicit placeholders, never interpolate arbitrary tool output.
         args.replaceAll((key, value) -> "$taskId".equals(value) ? task.id() : "$stepId".equals(value) ? step.id() : value);
-        return call(read, args, task.leaseUntil());
+        return call(read, args, task);
     }
 
-    private McpToolResult call(TaskProperties.Binding binding, Map<String, Object> arguments, Instant deadline) {
-        long remaining = java.time.Duration.between(clock.instant(), deadline).toMillis();
+    private McpToolResult call(TaskProperties.Binding binding, Map<String, Object> arguments, DurableTask task) {
+        long remaining = java.time.Duration.between(clock.instant(), task.leaseUntil()).toMillis();
         long timeout = Math.min(properties.callTimeout().toMillis(), remaining);
         if (timeout <= 0) throw new IllegalStateException("Budget de durée épuisé");
         TaskContracts.validate(gateway.schema(binding.connection(), binding.tool()), arguments);
-        FutureTask<McpToolResult> future = new FutureTask<>(() -> gateway.call(binding.connection(), binding.tool(), arguments));
+        FutureTask<McpToolResult> future = new FutureTask<>(() -> {
+            return gateway.call(binding.connection(), binding.tool(), arguments, budgets, task.owner(), task.id());
+        });
         Thread.ofVirtual().start(future);
         try { return future.get(timeout, TimeUnit.MILLISECONDS); }
         catch (InterruptedException ex) { Thread.currentThread().interrupt(); future.cancel(true); throw new IllegalStateException("Appel interrompu", ex); }
@@ -405,7 +416,9 @@ public class TaskService {
     }
     private DurableTask finish(DurableTask task, DurableTask.Status status, String detail, String actor) {
         var next = copy(task, status, task.results(), task.approvedBy(), task.policyVersion(), null, null, detail);
-        save(next, task); audit(actor, next, detail); return next;
+        save(next, task); audit(actor, next, detail);
+        if (learning != null && status == VERIFIED) learning.recordVerifiedTask(next);
+        return next;
     }
     private DurableTask copy(DurableTask task, DurableTask.Status status, List<DurableTask.StepResult> results,
             String approvedBy, String policyVersion, String worker, Instant leaseUntil, String detail) {

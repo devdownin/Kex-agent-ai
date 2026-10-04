@@ -22,7 +22,7 @@ class LlmRoutingConfig {
 
     @Bean
     @Primary
-    RoutingChatModel routingChatModel(LlmRoutingProperties properties, ObservationRegistry observations) {
+    RoutingChatModel routingChatModel(LlmRoutingProperties properties, ObservationRegistry observations, com.kex.agent.agent.TokenBudgetService budgets) {
         Map<String, ChatModel> models = new LinkedHashMap<>();
         properties.endpoints().forEach((name, endpoint) -> {
             // Disable SDK retries: each explicitly configured destination gets one bounded attempt.
@@ -35,7 +35,7 @@ class LlmRoutingConfig {
                             .baseUrl(endpoint.baseUrl()).apiKey(endpoint.apiKey()).model(endpoint.model())
                             .timeout(endpoint.timeout()).maxRetries(0).maxTokens(endpoint.maxTokens())
                             .temperature(endpoint.temperature()).build()).observationRegistry(observations).build();
-            models.put(name, model);
+            models.put(name, new BudgetedChatModel(model, () -> budgets));
         });
         return new RoutingChatModel(properties, models);
     }

@@ -210,14 +210,13 @@ class AgentServiceTest {
      * n'aurait aucun frein à sa dépense.
      */
     @Test
-    void compte_les_jetons_consommes_dans_le_budget() {
+    void ne_double_pas_le_comptage_effectue_a_la_frontiere_du_modele() {
         blockingCall();
-        AgentUsage usage = new AgentUsage(100, 200);
         given(callSpec.chatResponse()).willReturn(response("pong", "end_turn", new DefaultUsage(100, 200)));
 
         service(Duration.ofSeconds(10)).ask("conv-1", "ping");
 
-        verify(tokenBudget).record(usage);
+        org.mockito.Mockito.verify(tokenBudget, org.mockito.Mockito.never()).record(org.mockito.ArgumentMatchers.any());
     }
 
     /** Les compteurs à zéro d'{@link EmptyUsage} diraient « rien consommé » là où rien n'est su. */

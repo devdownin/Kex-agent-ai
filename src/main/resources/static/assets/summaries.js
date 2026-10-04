@@ -50,6 +50,15 @@ function summaryCard(row) {
   head.append(el('span', 'muted', ago(row.createdAt)));
   card.append(head);
   card.append(definition('Conversation', el('span', 'mono', row.conversationId || '—')));
+  const labels = { VERIFIED: 'Résultat vérifié', UNVERIFIED: 'Réponse terminée — objectif non vérifié',
+    FAILED: 'Échec observé', CONTRADICTED: 'Résultat contredit', READY: 'Ancien résumé — preuve non structurée' };
+  card.append(definition('État', el('span', null, row.status === 'VERIFIED' && row.verification?.validUntil && Date.parse(row.verification.validUntil) <= Date.now()
+    ? 'Preuve expirée — hors contexte' : labels[row.status] || row.status)));
+  if (row.verification) {
+    card.append(definition('Source', el('span', 'mono', row.verification.sourceId || '—')));
+    card.append(definition('Observé', el('span', null, row.verification.observedAt || '—')));
+    card.append(definition('Valide jusqu’au', el('span', null, row.verification.validUntil || '—')));
+  }
   card.append(el('pre', 'dump muted', row.markdown));
 
   const actions = el('div', 'card-actions');

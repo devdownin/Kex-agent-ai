@@ -59,6 +59,11 @@ public class AgentService {
     private final TokenBudgetService tokenBudget;
     private final LongTermMemoryService longTermMemory;
     private final ToolSelectionService toolSelection;
+    private com.kex.agent.knowledge.KnowledgeService knowledge;
+    @Autowired
+    void knowledge(org.springframework.beans.factory.ObjectProvider<com.kex.agent.knowledge.KnowledgeService> provider) {
+        knowledge = provider.getIfAvailable();
+    }
 
     @Autowired
     AgentService(ChatClient chatClient, ChatMemory chatMemory, AgentProperties properties,
@@ -126,11 +131,10 @@ public class AgentService {
         ChatResponse response = bounded(conversation, execution, CircuitBreaker.decorateSupplier(modelCircuitBreaker,
                 () -> request(conversation, message, recorder, execution).call().chatResponse()));
         AgentUsage usage = AgentUsage.from(response);
-        tokenBudget.record(usage);
         if (longTermMemory != null) {
             longTermMemory.recordSuccessfulTask(conversation.owner(), conversation.id(), message, text(response), recorder.calls());
         }
-        return new AgentAnswer(conversation.id(), text(response), recorder.calls(), usage, finishReason(response));
+        return new AgentAnswer(conversation.id(), text(response), recorder.calls(), usage, finishReason(response), conversation.sources());
     }
 
     public AgentStructuredAnswer askStructured(String conversationId, String message,
@@ -162,12 +166,11 @@ public class AgentService {
                         () -> request(conversation, message, recorder, execution).call()
                                 .responseEntity(new JsonSchemaOutputConverter(schema))));
         AgentUsage usage = AgentUsage.from(answer.response());
-        tokenBudget.record(usage);
         if (longTermMemory != null) {
             longTermMemory.recordSuccessfulTask(conversation.owner(), conversation.id(), message, text(answer.response()), recorder.calls());
         }
         return new AgentStructuredAnswer(conversation.id(), answer.entity(), recorder.calls(),
-                usage, finishReason(answer.response()));
+                usage, finishReason(answer.response()), conversation.sources());
     }
 
     /**
@@ -227,7 +230,8 @@ public class AgentService {
                     tools.tryEmitComplete();
                 });
 
-        return new AgentStream(id, Flux.merge(tools.asFlux(), tokens));
+        return new AgentStream(id, Flux.concat(Flux.defer(() -> conversation.sources().isEmpty() ? Flux.empty()
+                : Flux.just(new AgentEvent.Sources(conversation.sources()))), Flux.merge(tools.asFlux(), tokens)));
     }
 
     public void clear(String conversationId) {
@@ -235,7 +239,7 @@ public class AgentService {
     }
 
     public void clear(String owner, String conversationId) {
-        chatMemory.clear(memoryId(owner, conversationId));
+        chatMemory.clear(knowledgeMemoryId(memoryId(owner, conversationId), com.kex.agent.knowledge.KnowledgeAccess.current(owner)));
     }
 
     private ChatClient.ChatClientRequestSpec request(Conversation conversation, String message,
@@ -245,6 +249,8 @@ public class AgentService {
         context.put(CONVERSATION_ID_CONTEXT_KEY, conversation.id());
         context.put(AgentExecution.CONTEXT_KEY, execution);
         context.put("kex.owner", conversation.owner());
+        context.put(TokenBudgetService.CONTEXT_KEY, tokenBudget);
+        context.put(TokenBudgetService.TASK_KEY, UUID.randomUUID().toString());
         context.put("kex.model-task", conversation.task());
         if (conversation.allowedTools() != null) {
             context.put(TaskToolPolicy.ALLOWED_TOOLS, conversation.allowedTools());
@@ -259,12 +265,16 @@ public class AgentService {
         }
         String kafkaProcedure = KafkaOperationalPlaybooks.forRequest(message);
         String durable = longTermMemory == null ? "" : longTermMemory.context(conversation.owner());
-        if (!kafkaProcedure.isBlank() || !durable.isBlank()) {
+        java.util.List<com.kex.agent.knowledge.KnowledgeMatch> matches = knowledge == null ? java.util.List.of()
+                : knowledge.search(message, null, conversation.knowledgeAccess());
+        conversation.evidence().set(matches.stream().map(com.kex.agent.knowledge.KnowledgeSource::from).toList());
+        String references = knowledge == null ? "" : knowledge.contextFrom(matches);
+        if (!kafkaProcedure.isBlank() || !durable.isBlank() || !references.isBlank()) {
             // system(...) remplace le prompt du ChatClient ; conserver la gouvernance avant les références.
-            request = request.system(systemPrompt + "\n\n" + kafkaProcedure + "\n\n" + durable);
+            request = request.system(systemPrompt + "\n\n" + kafkaProcedure + "\n\n" + durable + "\n\n" + references);
         }
         return request.toolContext(context)
-                .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, conversation.memoryId()));
+                .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, knowledgeMemoryId(conversation.memoryId(), conversation.knowledgeAccess())));
     }
 
     /**
@@ -292,7 +302,7 @@ public class AgentService {
                         Thread.currentThread().interrupt();
                     }
                     finally {
-                        chatMemory.clear(conversation.memoryId());
+                        chatMemory.clear(knowledgeMemoryId(conversation.memoryId(), conversation.knowledgeAccess()));
                     }
                 });
             }
@@ -319,13 +329,15 @@ public class AgentService {
      */
     private void discardIfUnreachable(Conversation conversation) {
         if (conversation.generated()) {
-            chatMemory.clear(conversation.memoryId());
+            chatMemory.clear(knowledgeMemoryId(conversation.memoryId(), conversation.knowledgeAccess()));
         }
     }
 
     /** @param generated l'appelant n'a pas fourni d'identifiant : celui-ci a été tiré ici */
     private record Conversation(String id, String memoryId, boolean generated, String owner,
-                                String task, Set<String> allowedTools) {
+                                String task, Set<String> allowedTools, com.kex.agent.knowledge.KnowledgeAccess knowledgeAccess,
+                                java.util.concurrent.atomic.AtomicReference<java.util.List<com.kex.agent.knowledge.KnowledgeSource>> evidence) {
+        java.util.List<com.kex.agent.knowledge.KnowledgeSource> sources() { return evidence.get(); }
     }
 
     private static Conversation conversation(String owner, String conversationId) {
@@ -339,7 +351,7 @@ public class AgentService {
         }
         boolean generated = !StringUtils.hasText(conversationId);
         String id = generated ? UUID.randomUUID().toString() : conversationId;
-        return new Conversation(id, memoryId(owner, id), generated, owner, route, allowedTools);
+        return new Conversation(id, memoryId(owner, id), generated, owner, route, allowedTools, com.kex.agent.knowledge.KnowledgeAccess.current(owner), new java.util.concurrent.atomic.AtomicReference<>(java.util.List.of()));
     }
 
     private static String memoryId(String owner, String conversationId) {
@@ -354,6 +366,10 @@ public class AgentService {
         catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 indisponible", ex);
         }
+    }
+
+    private String knowledgeMemoryId(String id, com.kex.agent.knowledge.KnowledgeAccess access) {
+        return knowledge == null ? id : memoryId(id, "knowledge:" + access.roles().stream().sorted().collect(java.util.stream.Collectors.joining(",")));
     }
 
     private static String text(ChatResponse response) {

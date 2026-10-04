@@ -888,14 +888,11 @@ défaut restent la référence pour tous les autres.
 
 ### Une note de connaissance citée, jamais vérifiée mécaniquement
 
-Le `ChatClient` qui sert le cycle de supervision porte déjà le `QuestionAnswerAdvisor` de la base
-de connaissance quand `kex.agent.knowledge.enabled` l'active — un document ingéré pèse donc déjà
-sur l'analyse. Rien ne disait en revanche sur quel document elle s'était appuyée : une
-recommandation fondée restait aussi opaque qu'une recommandation inventée. Le schéma d'anomalie
-porte désormais `knowledgeReference`, que le prompt demande d'omettre plutôt que d'inventer une
-citation. Rapportée telle quelle sur `Anomaly`/`Alert` : ni vérifiée, ni retrouvée mécaniquement
-dans le magasin vectoriel — un modèle qui l'invente reste possible, au même titre que le reste de
-sa sortie structurée (voir « Un éval, pas un test » plus bas).
+La récupération documentaire de `KnowledgeService` filtre les droits, le locataire,
+l'environnement et la fraîcheur avant le classement. `AgentService` injecte les références datées
+et expose les sources effectivement récupérées ; l'advisor global sans filtre est retiré.
+Le schéma d'anomalie conserve `knowledgeReference`, renseigné par le modèle : cette référence
+libre n'est pas une preuve mécanique de justesse. Voir [Connaissance](CONNAISSANCE.md).
 
 ### La tendance d'un processus, pas seulement celle de l'agent
 
@@ -1078,19 +1075,13 @@ Trois précautions y sont prises, et ce sont elles qui comptent :
 
 ### Un budget de jetons journalier, pour un cycle qui part sans clic
 
-`TokenBudgetService` (`kex.agent.token-budget.daily-limit`, `0` = illimité) accumule ce que chaque
-échange bloquant a coûté — `AgentAnswer.usage()`/`AgentStructuredAnswer.usage()`, donc le cycle de
-supervision comme le chat. Le flux SSE n'y participe pas : la métadonnée d'usage arrive dans le
-dernier fragment, que `stream()` ne collecte pas, comme documenté dans `OBSERVABILITE.md`.
-
-Un humain qui clique voit la facture. Un cycle qui part seul (`SupervisionScheduler`) n'a que ce
-plafond comme frein — d'où sa vérification *avant* d'appeler le modèle, dans `cycle()` : un budget
-épuisé ne coûte rien de plus qu'une lecture. Épuisé, `diagnose()` dégrade l'état de l'agent, dans la
-même famille qu'une clé de fournisseur manquante : dans les deux cas l'agent ne peut rien observer
-de plus pour l'instant, sans être en panne pour autant.
-
-Tenu en mémoire par instance, comme le seau de `rate-limit` : en multi-instance, chaque réplique a
-son propre budget, à diviser le seuil en conséquence plutôt que d'y voir un budget partagé.
+`TokenBudgetService` réserve les jetons et coûts avant chaque tentative de fournisseur, et les
+coûts configurés avant chaque outil. `BudgetedChatModel` couvre les tours intermédiaires,
+les destinations de secours et le streaming. Une interruption conserve la réservation.
+Les limites journalières globales et par locataire ainsi que les limites par tâche sont débitées
+ensemble : fichier atomique en instance unique, transactions JDBC sous `shared-memory`.
+Voir [Mémoire vérifiée et budgets partagés](VERIFIED-LEARNING-BUDGETS.md) pour les tarifs,
+les estimations et la différence entre usage d'une réponse et dépense totale d'une tâche.
 
 ### Ce qui peut diverger entre répliques, et ce qui ne le peut pas
 

@@ -44,8 +44,8 @@ class KnowledgeEnabledTest {
     int port;
 
     @Test
-    void branche_l_advisor_de_connaissance() {
-        assertThat(context.getBeanNamesForType(QuestionAnswerAdvisor.class)).isNotEmpty();
+    void branche_la_recuperation_filtree_sans_advisor_global() {
+        assertThat(context.getBeanNamesForType(QuestionAnswerAdvisor.class)).isEmpty();
         assertThat(context.getBeanNamesForType(KnowledgeService.class)).isNotEmpty();
     }
 

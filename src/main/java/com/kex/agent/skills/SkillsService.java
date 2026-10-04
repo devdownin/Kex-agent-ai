@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.kex.agent.memory.LearningEntry;
+import com.kex.agent.memory.LearningEvidence;
 import com.kex.agent.memory.LearningRepository;
 import com.kex.agent.memory.MemoryIdentity;
 
@@ -23,12 +24,17 @@ public final class SkillsService {
     }
 
     public LearningEntry propose(String owner, String title, String markdown, String evidence, String conversationId) {
+        return propose(owner, title, markdown, evidence, conversationId, null);
+    }
+
+    public LearningEntry propose(String owner, String title, String markdown, String evidence,
+            String conversationId, LearningEvidence verification) {
         MemoryIdentity.require(owner);
         requireText(title, 200, "titre");
         requireText(markdown, 12000, "procédure Markdown");
         requireText(evidence, 4000, "preuve de réussite / provenance");
         LearningEntry entry = new LearningEntry(UUID.randomUUID().toString(), owner, "SKILL", title.strip(),
-                markdown.strip(), evidence.strip(), conversationId, clock.instant(), "PENDING", null, null, null);
+                markdown.strip(), evidence.strip(), conversationId, clock.instant(), "PENDING", null, null, null, verification);
         repository.add(entry);
         return entry;
     }
@@ -39,7 +45,8 @@ public final class SkillsService {
 
     public List<LearningEntry> approved(String owner) {
         return list(owner).stream().filter(entry -> entry.status().equals("APPROVED")
-                && entry.reviewedBy() != null && entry.reviewedAt() != null).toList();
+                && entry.reviewedBy() != null && entry.reviewedAt() != null
+                && (entry.verification() == null || entry.verification().usable(clock.instant()))).toList();
     }
 
     /**
@@ -66,10 +73,11 @@ public final class SkillsService {
             throw new IllegalArgumentException("Motif de retrait requis et limité à 2000 caractères");
         }
         String owner = ownerOrFail(id, "Compétence inconnue ou non approuvée");
-        if (approved(owner).stream().noneMatch(entry -> entry.id().equals(id))) {
+        if (list(owner).stream().noneMatch(entry -> entry.id().equals(id) && entry.status().equals("APPROVED"))) {
             throw new IllegalStateException("Compétence inconnue ou non approuvée");
         }
-        if (!repository.delete(owner, id)) {
+        LearningEntry entry = list(owner).stream().filter(e -> e.id().equals(id)).findFirst().orElseThrow();
+        if (!repository.replace(entry.reviewed("RETIRED", actor, clock.instant(), reason), "APPROVED")) {
             throw new IllegalStateException("Compétence inconnue ou non approuvée");
         }
     }
@@ -90,6 +98,11 @@ public final class SkillsService {
         if (reason == null) reason = "";
         if (reason.length() > 2000) throw new IllegalArgumentException("Motif limité à 2000 caractères");
         String owner = ownerOrFail(id, "Compétence inconnue ou déjà examinée");
+        LearningEntry candidate = list(owner).stream().filter(e -> e.id().equals(id)).findFirst()
+                .orElseThrow(() -> new IllegalStateException("Compétence inconnue ou déjà examinée"));
+        if (approve && candidate.verification() != null && !candidate.verification().usable(clock.instant())) {
+            throw new IllegalStateException("La preuve est expirée ou contredite ; une nouvelle proposition est requise");
+        }
         if (!repository.review(owner, id, approve ? "APPROVED" : "REJECTED", actor, clock.instant(), reason)) {
             throw new IllegalStateException("Compétence inconnue ou déjà examinée");
         }

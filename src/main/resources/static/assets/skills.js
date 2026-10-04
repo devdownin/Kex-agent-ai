@@ -121,7 +121,7 @@ async function reviewQueue() {
     const rows = await api(`${SKILLS_BASE}/review-queue`);
     host.replaceChildren(rows.length ? reviewQueueList(rows)
       : empty('Aucune compétence en attente.',
-        'Chaque échange réussi peut en proposer une ; rien n’attend de décision pour l’instant.'));
+        'Une tâche aux résultats vérifiés peut en proposer une ; rien n’attend de décision pour l’instant.'));
   }
   catch (error) {
     host.replaceChildren(el('p', 'state error', error.message));
@@ -144,6 +144,11 @@ function reviewQueueCard(row) {
   card.append(definition('Propriétaire', el('span', null, row.owner)));
   card.append(definition('Proposée', el('span', null, ago(row.createdAt))));
   card.append(definition('Preuve', el('span', 'muted', row.evidence)));
+  if (row.verification) {
+    card.append(definition('Version', el('span', 'mono', row.verification.version || '—')));
+    card.append(definition('Source', el('span', 'mono', row.verification.sourceId || '—')));
+    card.append(definition('Validité', el('span', null, row.verification.validUntil || '—')));
+  }
   card.append(el('pre', 'dump muted', row.markdown));
 
   const actions = el('div', 'card-actions');

@@ -14,5 +14,10 @@ import java.util.List;
  *                     réponse complète.
  */
 public record AgentAnswer(String conversationId, String content, List<AgentEvent.ToolCall> tools,
-                          AgentUsage usage, String finishReason) {
+                          AgentUsage usage, String finishReason, List<com.kex.agent.knowledge.KnowledgeSource> sources) {
+    public AgentAnswer(String conversationId, String content, List<AgentEvent.ToolCall> tools,
+            AgentUsage usage, String finishReason) {
+        this(conversationId, content, tools, usage, finishReason, List.of());
+    }
+    public AgentAnswer { sources = List.copyOf(sources); }
 }

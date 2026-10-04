@@ -7,9 +7,16 @@ import java.time.Instant;
 /** Markdown content stays inert data until a named human approves a SKILL. */
 public record LearningEntry(String id, String owner, String kind, String title, String markdown,
                             String evidence, String conversationId, Instant createdAt,
-                            String status, String reviewedBy, Instant reviewedAt, String reviewReason) {
+                            String status, String reviewedBy, Instant reviewedAt, String reviewReason,
+                            LearningEvidence verification) {
+    public LearningEntry(String id, String owner, String kind, String title, String markdown,
+            String evidence, String conversationId, Instant createdAt, String status,
+            String reviewedBy, Instant reviewedAt, String reviewReason) {
+        this(id, owner, kind, title, markdown, evidence, conversationId, createdAt, status,
+                reviewedBy, reviewedAt, reviewReason, null);
+    }
     public LearningEntry reviewed(String status, String actor, Instant at, String reason) {
         return new LearningEntry(id, owner, kind, title, markdown, evidence, conversationId, createdAt,
-                status, actor, at, reason);
+                status, actor, at, reason, verification);
     }
 }

@@ -42,14 +42,16 @@ public class DynamicMcpToolCallbackProvider implements ToolCallbackProvider {
                         + (capability == null ? "" : " [capacité: " + capability + "]"))
                 .inputSchema(json(tool.inputSchema()))
                 .build();
-        return new ToolCallback() {
+        return new BudgetedMcpCallback() {
             @Override
             public ToolDefinition getToolDefinition() {
                 return definition;
             }
 
             @Override
-            public String call(String input) {
+            public String call(String input) { return call(input, null); }
+
+            @Override public String call(String input, org.springframework.ai.chat.model.ToolContext context) {
                 Map<String, Object> arguments;
                 try {
                     arguments = objectMapper.readValue(input, new TypeReference<>() { });
@@ -57,7 +59,7 @@ public class DynamicMcpToolCallbackProvider implements ToolCallbackProvider {
                 catch (Exception ex) {
                     throw new IllegalArgumentException("Arguments MCP invalides", ex);
                 }
-                return String.join("\n", catalog.call(connection, tool.name(), arguments).content());
+                return String.join("\n", catalog.call(connection, tool.name(), arguments, context == null ? Map.of() : context.getContext()).content());
             }
         };
     }

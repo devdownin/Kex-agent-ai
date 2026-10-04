@@ -28,37 +28,76 @@ public final class LongTermMemoryService {
         this.clock = clock;
     }
 
-    /** Call only after a normally completed response, never on error, timeout or stream cancellation. */
+    /** A completed response is not proof that its operational objective was achieved. */
     public void recordSuccessfulTask(String owner, String conversationId, String request, String answer,
                                      List<AgentEvent.ToolCall> calls) {
         MemoryIdentity.require(owner);
-        if (answer == null || answer.isBlank() || calls.stream().anyMatch(AgentEvent.ToolCall::failed)) return;
-        String summary = "Demande : " + bounded(request, 600) + "\nRésultat : " + bounded(answer, 1400);
+        if (answer == null || answer.isBlank()) return;
+        boolean failed = calls.stream().anyMatch(AgentEvent.ToolCall::failed);
         repository.add(new LearningEntry(UUID.randomUUID().toString(), owner, "SUMMARY",
-                bounded(request, 160), summary, "Échange terminé normalement", conversationId,
-                clock.instant(), "READY", null, null, null));
-        List<String> tools = calls.stream().map(AgentEvent.ToolCall::tool)
-                .filter(name -> !name.equals("remember_fact") && !name.equals("recall_facts")
-                        && !name.equals("propose_skill")).distinct().limit(20).toList();
-        if (tools.isEmpty()) return;
-        StringBuilder procedure = new StringBuilder("# Procédure proposée\n\n## Quand l'utiliser\n")
-                .append(bounded(request, 600))
-                .append("\n\n## Préconditions\nVérifier les accès, les paramètres et la politique d'autonomie. "
-                        + "Faire approuver chaque action qui l'exige.\n\n## Étapes observées\n");
-        for (int i = 0; i < tools.size(); i++) {
-            procedure.append(i + 1).append(". Utiliser `").append(tools.get(i))
-                    .append("` avec les paramètres adaptés à la tâche ; vérifier le résultat avant de poursuivre.\n");
+                bounded(request, 160), "Demande : " + bounded(request, 600) + "\nRéponse : " + bounded(answer, 1400),
+                "Réponse terminée ; objectif métier non vérifié", conversationId, clock.instant(),
+                failed ? "FAILED" : "UNVERIFIED", null, null, null,
+                new LearningEvidence(failed ? "FAILED" : "UNVERIFIED", conversationId,
+                        clock.instant(), clock.instant().plus(properties.retention()), List.of(), null,
+                        java.util.Map.of(), List.of(), List.of())));
+    }
+
+    /** Called only by the executor after independently measured postconditions. */
+    public void recordVerifiedTask(com.kex.agent.execution.DurableTask task) {
+        if (task.status() != com.kex.agent.execution.DurableTask.Status.VERIFIED) return;
+        MemoryIdentity.require(task.owner());
+        var results = task.results();
+        if (results.isEmpty() || results.stream().anyMatch(r -> r.observedAt() == null || r.evidenceHash() == null
+                || r.status() != com.kex.agent.execution.DurableTask.StepStatus.VERIFIED)) return;
+        if (repository.list(task.owner(), "SUMMARY", java.time.Instant.EPOCH).stream()
+                .anyMatch(e -> task.id().equals(e.conversationId()))) return;
+        var parameters = new java.util.LinkedHashMap<String, Object>();
+        task.plan().steps().forEach(step -> parameters.put(step.id(), step.arguments()));
+        List<String> checks = results.stream().map(r -> r.id() + " @ " + r.observedAt()
+                + " sha256=" + r.evidenceHash() + " : " + r.detail()).toList();
+        LearningEvidence proof = new LearningEvidence("VERIFIED", "task:" + task.id(), task.updatedAt(),
+                clock.instant().plus(properties.retention()), List.of(), task.bindingFingerprint(), parameters,
+                task.plan().preconditions(), checks);
+        String evidence = bounded(String.join("\n", checks), 4000);
+        StringBuilder procedure = new StringBuilder("# ").append(task.plan().objective())
+                .append("\n\n## Version\n").append(task.bindingFingerprint())
+                .append("\n\n## Paramètres observés\n").append(parameters)
+                .append("\n\n## Préconditions\n").append(String.join("\n", task.plan().preconditions()))
+                .append("\n\n## Étapes\n");
+        task.plan().steps().forEach(step -> procedure.append("- ").append(step.binding()).append(": ")
+                .append(step.description()).append("\n"));
+        procedure.append("\n## Vérifications observées\n").append(evidence);
+        String markdown = bounded(procedure.toString(), 12000);
+        repository.add(new LearningEntry(UUID.randomUUID().toString(), task.owner(), "SUMMARY",
+                bounded(task.plan().objective(), 160), markdown, evidence, task.id(), clock.instant(),
+                "VERIFIED", null, null, null, proof));
+        skills.propose(task.owner(), bounded(task.plan().objective(), 160), markdown, evidence, task.id(), proof);
+    }
+
+    public LearningEntry contradict(String owner, String id, String actor, String sourceId, String reason) {
+        MemoryIdentity.require(owner);
+        MemoryIdentity.require(actor);
+        if (sourceId == null || sourceId.isBlank() || sourceId.length() > 255
+                || reason == null || reason.isBlank() || reason.length() > 2000) {
+            throw new IllegalArgumentException("Source et motif de contradiction requis");
         }
-        procedure.append("\n## Vérification\nComparer les résultats à l'objectif. "
-                + "Arrêter et demander une revue en cas d'échec.\n");
-        String evidence = "Conversation : " + bounded(conversationId, 255)
-                + "\nOutils réussis : " + bounded(String.join(", ", tools), 1200)
-                + "\nRésultat observé : " + bounded(answer, 2000);
-        // A repeated procedure already in review or approved does not create another review item.
-        if (skills.list(owner).stream().noneMatch(entry -> entry.markdown().equals(procedure.toString())
-                && !entry.status().equals("REJECTED"))) {
-            skills.propose(owner, bounded(request, 160), procedure.toString(), evidence, conversationId);
+        LearningEntry prior = repository.list(owner, "SUMMARY", java.time.Instant.EPOCH).stream()
+                .filter(e -> id.equals(e.id())).findFirst().orElseThrow(() -> new IllegalStateException("Résumé inconnu"));
+        LearningEvidence proof = prior.verification();
+        LearningEvidence invalid = new LearningEvidence("CONTRADICTED", sourceId, clock.instant(), clock.instant(),
+                List.of(id), proof == null ? null : proof.version(), proof == null ? null : proof.parameters(),
+                proof == null ? null : proof.preconditions(), List.of(reason));
+        LearningEntry next = new LearningEntry(prior.id(), owner, prior.kind(), prior.title(), prior.markdown(),
+                prior.evidence(), prior.conversationId(), prior.createdAt(), "CONTRADICTED", actor, clock.instant(), reason, invalid);
+        if (!repository.replace(next, prior.status())) throw new IllegalStateException("Résumé modifié ; relire");
+        for (LearningEntry skill : skills.list(owner)) {
+            if (prior.conversationId() != null && java.util.Objects.equals(skill.conversationId(), prior.conversationId())
+                    && ("APPROVED".equals(skill.status()) || "PENDING".equals(skill.status()))) {
+                repository.replace(skill.reviewed("RETIRED", actor, clock.instant(), reason), skill.status());
+            }
         }
+        return next;
     }
 
     public List<LearningEntry> summaries(String owner) {
@@ -80,7 +119,8 @@ public final class LongTermMemoryService {
         if (charter.present()) {
             result.append("\nCharte d'exploitation :\n").append(bounded(charter.markdown(), 8000)).append('\n');
         }
-        summaries(owner).stream().limit(5).forEach(entry -> result.append("\nRésumé antérieur :\n")
+        summaries(owner).stream().filter(e -> e.verification() != null && e.verification().usable(clock.instant()))
+                .limit(5).forEach(entry -> result.append("\nRésumé antérieur :\n")
                 .append(entry.markdown()).append('\n'));
         // `ranked` et pas `approved` : la troncature reste, mais elle porte désormais sur un ordre
         // explicite — la plus récemment approuvée d'abord — au lieu de l'ordre de stockage du dépôt.

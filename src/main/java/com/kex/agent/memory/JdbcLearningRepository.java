@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /** Schéma posé par {@code db/migration/V1__baseline.sql}, index compris. */
 public final class JdbcLearningRepository implements LearningRepository {
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
     private final JdbcTemplate jdbc;
     private final int capacity;
 
@@ -23,11 +24,11 @@ public final class JdbcLearningRepository implements LearningRepository {
     public void add(LearningEntry entry) {
         jdbc.update("""
                 INSERT INTO kex_agent_learning (id, owner, kind, title, markdown, evidence, conversation_id,
-                  created_at, status, reviewed_by, reviewed_at, review_reason)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                  created_at, status, reviewed_by, reviewed_at, review_reason, verification)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 entry.id(), entry.owner(), entry.kind(), entry.title(), entry.markdown(), entry.evidence(),
                 entry.conversationId(), Timestamp.from(entry.createdAt()), entry.status(), entry.reviewedBy(),
-                entry.reviewedAt() == null ? null : Timestamp.from(entry.reviewedAt()), entry.reviewReason());
+                entry.reviewedAt() == null ? null : Timestamp.from(entry.reviewedAt()), entry.reviewReason(), encode(entry.verification()));
         jdbc.update("""
                 DELETE FROM kex_agent_learning WHERE kind = ? AND id NOT IN (
                   SELECT id FROM kex_agent_learning WHERE kind = ? ORDER BY created_at DESC, id DESC LIMIT ?)
@@ -44,7 +45,7 @@ public final class JdbcLearningRepository implements LearningRepository {
                             rs.getString("title"), rs.getString("markdown"), rs.getString("evidence"),
                             rs.getString("conversation_id"), rs.getTimestamp("created_at").toInstant(),
                             rs.getString("status"), rs.getString("reviewed_by"),
-                            reviewedAt == null ? null : reviewedAt.toInstant(), rs.getString("review_reason"));
+                            reviewedAt == null ? null : reviewedAt.toInstant(), rs.getString("review_reason"), decode(rs.getString("verification")));
                 }, owner, kind, Timestamp.from(since));
     }
 
@@ -54,6 +55,24 @@ public final class JdbcLearningRepository implements LearningRepository {
                 UPDATE kex_agent_learning SET status = ?, reviewed_by = ?, reviewed_at = ?, review_reason = ?
                 WHERE id = ? AND owner = ? AND kind = 'SKILL' AND status = 'PENDING'""",
                 status, actor, Timestamp.from(at), reason, id, owner) == 1;
+    }
+
+    @Override
+    public boolean replace(LearningEntry entry, String expectedStatus) {
+        return jdbc.update("""
+                UPDATE kex_agent_learning SET status = ?, reviewed_by = ?, reviewed_at = ?, review_reason = ?, verification = ?
+                WHERE id = ? AND owner = ? AND status = ?""",
+                entry.status(), entry.reviewedBy(), entry.reviewedAt() == null ? null : Timestamp.from(entry.reviewedAt()),
+                entry.reviewReason(), encode(entry.verification()), entry.id(), entry.owner(), expectedStatus) == 1;
+    }
+
+    private static String encode(LearningEvidence evidence) {
+        try { return evidence == null ? null : JSON.writeValueAsString(evidence); }
+        catch (Exception ex) { throw new IllegalArgumentException("Preuve non sérialisable", ex); }
+    }
+    private static LearningEvidence decode(String value) {
+        try { return value == null ? null : JSON.readValue(value, LearningEvidence.class); }
+        catch (Exception ex) { throw new IllegalStateException("Preuve persistée illisible", ex); }
     }
 
     @Override
@@ -77,7 +96,7 @@ public final class JdbcLearningRepository implements LearningRepository {
                             rs.getString("title"), rs.getString("markdown"), rs.getString("evidence"),
                             rs.getString("conversation_id"), rs.getTimestamp("created_at").toInstant(),
                             rs.getString("status"), rs.getString("reviewed_by"),
-                            reviewedAt == null ? null : reviewedAt.toInstant(), rs.getString("review_reason"));
+                            reviewedAt == null ? null : reviewedAt.toInstant(), rs.getString("review_reason"), decode(rs.getString("verification")));
                 }, kind);
     }
 }

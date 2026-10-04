@@ -96,6 +96,8 @@ class RecordingToolCallbackProvider implements ToolCallbackProvider {
                 AgentExecution.ensureActive(toolContext);
                 TaskToolPolicy.check(name, toolContext);
                 policy.check(name, toolInput);
+                if (!(delegate instanceof com.kex.agent.mcp.BudgetedMcpCallback)) com.kex.agent.agent.TokenBudgetService.chargeTool(toolContext == null ? null : toolContext.getContext(), name);
+                AgentExecution.ensureActive(toolContext);
                 return policy.boundResult(name, protect(() -> delegate.call(toolInput, toolContext)));
             };
             return wrapUntrusted(name, recordCalls ? ToolCallRecorder.timed(toolContext, name, invocation)
