@@ -67,6 +67,7 @@ try {
     await page.getByRole('button', { name: /Procédure commandes/ }).click();
     await page.locator('#action-subject').fill('commandes'); await page.locator('#skill-parameter-0').fill('orders-live');
     await page.locator('#prepare').click();
+    await page.locator('#action-dialog').waitFor({ state: 'hidden' });
     assert.match(await page.locator('#prompt').inputValue(), /check \/ topic : orders-live/);
     assert.equal(posts.length, 0);
     await page.getByRole('link', { name: 'Actions prêtes à l’emploi', exact: true }).click();
