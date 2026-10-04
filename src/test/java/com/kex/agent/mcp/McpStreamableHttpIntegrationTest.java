@@ -182,6 +182,10 @@ class McpStreamableHttpIntegrationTest {
                 assertThat(updated.stale()).isFalse();
                 assertThat(updated.tools()).isEmpty();
                 assertThat(updated.retrievedAt()).isAfterOrEqualTo(first.retrievedAt());
+                source.withCatalogResult("resources/list", "{\"resources\":[{\"uri\":\"test://rotated\",\"name\":\"Nouveau contexte\"}]}");
+                catalog.rotateSecret(connection, new McpSecretRotation(FakeMcpServer.TOKEN, Map.of(), Map.of()));
+                assertThat(catalog.inspect(connection).resources()).extracting(McpResourceInfo::uri)
+                        .containsExactly("test://rotated");
                 assertThat(source.methods()).doesNotContain("resources/read", "prompts/get");
             }
             finally {
