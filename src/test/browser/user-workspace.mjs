@@ -71,7 +71,7 @@ try {
     assert.match(await page.locator('#prompt').inputValue(), /check \/ topic : orders-live/);
     assert.equal(posts.length, 0);
     await page.getByRole('link', { name: 'Actions prêtes à l’emploi', exact: true }).click();
-    await page.getByRole('button', { name: /Vérifier un processus/ }).click();
+    await page.locator('#guided').getByRole('button', { name: /Vérifier un processus/ }).click();
     await page.locator('#action-subject').fill('commandes'); await page.locator('#prepare').click();
     await page.locator('#send').click(); await page.getByText('Réponse reçue', { exact: true }).waitFor();
     assert.match(await page.locator('#progress').innerText(), /reste à vérifier/);
