@@ -1396,7 +1396,11 @@ await check('un canal actif se distingue d’un canal inactif', async () => {
   // Un aller-retour de vue plutôt qu'un rechargement complet : la même adresse ne redéclenche pas
   // route(), donc pas channels.status() — voir CLAUDE.md.
   await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  // Une navigation de fragment ne garantit pas que hashchange a été traité. Sans cette
+  // attente, le retour immédiat à agent peut supprimer le changement de vue attendu.
+  await page.locator('#view-overview').waitFor({ state: 'visible' });
   await page.goto(`${BASE}/#/agent`, { waitUntil: 'domcontentloaded' });
+  await page.locator('#view-agent').waitFor({ state: 'visible' });
   await page.click('[data-agent-tab="notifications"]');
   await page.waitForFunction(() =>
     document.querySelector('#channels-status').textContent.includes('boutons intégrés'));

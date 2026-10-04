@@ -19,6 +19,7 @@
 <nav aria-label="Navigation utilisateur">
   <a href="#/new" data-page="new">Nouvelle demande</a>
   <a href="#/actions" data-page="actions">Actions prêtes à l’emploi</a>
+  <a href="#/approvals" data-page="approvals" id="approvals-link" hidden>Plans à valider</a>
   <a href="#/requests" data-page="requests">Mes demandes</a>
 </nav>
 <main id="main">
@@ -37,10 +38,16 @@
   <section id="actions" hidden aria-labelledby="actions-title">
     <h1 id="actions-title">Actions prêtes à l’emploi</h1>
     <p class="intro">Choisissez un objectif, puis précisez votre besoin.</p>
+    <h2>Mes favoris</h2><p class="muted">Conservés sur ce navigateur pour votre compte et votre espace. Un favori prépare une demande, sans la lancer.</p><div id="favorites" class="actions-grid"></div>
     <h2>Demandes guidées</h2><p class="muted">Ces modèles préparent votre demande. Ils ne lancent aucune action directement.</p>
     <div id="guided" class="actions-grid"></div>
     <h2>Compétences de votre équipe</h2><p class="muted">Procédures approuvées et encore valides, proposées pour votre espace.</p>
     <div id="skills" class="actions-grid"></div><button id="refresh-skills" type="button">Actualiser les compétences</button>
+  </section>
+  <section id="approvals" hidden aria-labelledby="approvals-title">
+    <h1 id="approvals-title">Plans à valider</h1>
+    <p class="intro">Plans enregistrés dans votre espace, avec leurs actions et paramètres exacts. Approuver et lancer sont deux décisions distinctes.</p>
+    <button id="refresh-approvals" type="button">Actualiser les plans</button><p id="approval-note" role="status"></p><div id="approval-list"></div>
   </section>
   <section id="requests" hidden aria-labelledby="requests-title">
     <h1 id="requests-title">Mes demandes</h1>
@@ -53,6 +60,8 @@
     <p id="run-status" role="status"></p>
     <ol id="progress" aria-label="Déroulement du traitement"></ol>
     <div class="row"><button id="stop" type="button" hidden>Arrêter la réception</button><button id="open-expert" type="button">Examiner dans la console experte</button></div>
+    <div class="row"><button id="favorite-request" type="button">Ajouter cette demande aux favoris</button><button id="reprepare-request" type="button">Préparer une nouvelle demande</button><button id="prepare-plan" type="button" hidden>Préparer un plan à valider</button></div>
+    <section id="linked-plan-section" hidden aria-label="Plan associé à cette demande"><h2>Plan associé</h2><button id="refresh-linked-plan" type="button">Actualiser ce plan</button><p id="linked-plan-note" role="status"></p><div id="linked-plan"></div></section>
     <div id="turns"></div>
     <form id="followup-form" class="panel"><label for="followup">Préciser ou poursuivre votre demande</label><textarea id="followup" rows="2" required maxlength="24000"></textarea><button class="primary" id="followup-send" type="submit">Envoyer</button></form>
   </section>
@@ -72,5 +81,7 @@
   <details id="skill-details" hidden><summary>Consulter la procédure approuvée</summary><pre id="skill-procedure"></pre></details>
   <p id="action-error" role="alert"></p><div class="row"><button class="primary" id="prepare" type="submit">Préparer ma demande</button><button id="close-action" type="button">Annuler</button></div>
 </form></dialog>
+<dialog id="plan-dialog"><form id="plan-form"><h2>Préparer un plan à examiner</h2><p>La préparation propose les étapes sans exécuter d’outil. Vérifiez ensuite les cibles, paramètres et conditions avant d’approuver.</p><label for="plan-objective">Objectif à planifier</label><textarea id="plan-objective" required maxlength="2000" rows="4"></textarea><p id="plan-error" role="alert"></p><div class="row"><button id="plan-submit" type="submit" class="primary">Préparer le plan</button><button id="plan-close" type="button">Annuler</button></div></form></dialog>
+<dialog id="review-dialog"><form id="review-form"><h2 id="review-title"></h2><div id="review-content"></div><h3>Conséquence de votre décision</h3><p id="review-consequence"></p><p id="review-error" role="alert"></p><div class="row"><button id="review-accept" type="submit" class="primary">Confirmer</button><button id="review-close" type="button">Revenir au suivi</button></div></form></dialog>
 </body>
 </html>

@@ -438,3 +438,5 @@ Both interfaces link to each other. See [the user workspace guide](docs/USER-WOR
 for permissions, history scope and completion semantics.
 
 Guided clarifications offer selectable answers; completed results separate observations, uncertainties and next actions. Skill forms display declared parameters, prerequisites and expected checks. Technical execution details remain expandable.
+
+The user workspace also offers server-backed plans for OPERATOR/ADMIN review, with separate approval and launch confirmations. Account-scoped favorites persist on this browser; prepared relaunches recheck skills and create a new conversation only after sending.
