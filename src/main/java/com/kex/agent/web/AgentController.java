@@ -109,7 +109,9 @@ class AgentController {
                 : agentService.streamForTask(tenant(principal), request.conversationId(), request.message(), request.task());
         return Flux.concat(
                         Flux.just(event("conversation", stream.conversationId())),
-                        stream.events().map(AgentController::event))
+                        stream.events().map(AgentController::event),
+                        // Une fermeture TCP seule ne prouve pas que la réponse est complète.
+                        Flux.just(event("done", "response-complete")))
                 .onErrorResume(ex -> Flux.just(event("error", streamErrorMessage(ex))));
     }
 

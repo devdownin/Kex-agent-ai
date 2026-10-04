@@ -5,7 +5,8 @@
 // comprendre ce qui se passe.
 
 import {
-  $, ago, api, busy, dismissDrawer, el, empty, failure, headers, openDrawer, registerDrawer, report,
+  $, ago, api, busy, credentials, dismissDrawer, el, empty, failure, headers, onCredentialChange,
+  openDrawer, registerDrawer, report,
   params, setDrawerParam, setParams,
 } from './core.js';
 import { wireProcessWizard } from './process-creation.js';
@@ -48,6 +49,30 @@ let contextualPayload = '';
 let contextualTitle = '';
 let activeContextId = null;
 let contextualConversationId = null;
+let workspaceTransfer = null;
+const isolatedConversationIds = new Set();
+
+// Une demande transférée conserve le stockage isolé de l'espace utilisateur. Elle ne doit pas
+// entrer dans l'ancien historique global de la console, lisible sous un autre compte.
+function workspaceRequest(update) {
+  if (!workspaceTransfer) return null;
+  const key = `kex.agent.user.requests.${encodeURIComponent(workspaceTransfer.identity)}`;
+  try {
+    const rows = JSON.parse(sessionStorage.getItem(key) || '[]');
+    const row = rows.find(r => r.id === workspaceTransfer.requestId);
+    if (row && update) { update(row); sessionStorage.setItem(key, JSON.stringify(rows)); }
+    return row;
+  } catch { return null; }
+}
+
+onCredentialChange(() => {
+  if (!workspaceTransfer) return;
+  inFlight?.abort();
+  workspaceTransfer = null;
+  conversationId = null;
+  $('#transcript')?.replaceChildren();
+  if ($('#conversation-id')) $('#conversation-id').textContent = '—';
+});
 
 try {
   conversationId = sessionStorage.getItem(CONVERSATION_STORAGE);
@@ -59,6 +84,7 @@ function setConversation(id) {
   conversationId = id || null;
   $('#conversation-id').textContent = id || '—';
   $('#clear-conversation').disabled = !id;
+  if (workspaceTransfer) return;
   try {
     if (id) sessionStorage.setItem(CONVERSATION_STORAGE, id);
     else sessionStorage.removeItem(CONVERSATION_STORAGE);
@@ -85,6 +111,11 @@ function writeIndex(list) {
 
 function touchIndex(id, label) {
   if (!id) return;
+  if (isolatedConversationIds.has(id) && workspaceTransfer?.conversationId !== id) return;
+  if (workspaceTransfer?.conversationId === id) {
+    workspaceRequest(row => { row.updatedAt = new Date().toISOString(); });
+    return;
+  }
   const list = readIndex();
   const existing = list.find((entry) => entry.id === id);
   const remaining = list.filter((entry) => entry.id !== id);
@@ -133,6 +164,8 @@ function rememberContextConversation(contextId, id) {
 }
 
 function readTranscript(id) {
+  if (workspaceTransfer?.conversationId === id) return workspaceRequest()?.turns || workspaceTransfer.turns;
+  if (isolatedConversationIds.has(id)) return [];
   try {
     return JSON.parse(localStorage.getItem(TRANSCRIPT_PREFIX + id) || '[]');
   } catch {
@@ -142,6 +175,15 @@ function readTranscript(id) {
 
 function appendTranscript(id, turn) {
   if (!id) return;
+  if (isolatedConversationIds.has(id) && workspaceTransfer?.conversationId !== id) return;
+  if (workspaceTransfer?.conversationId === id) {
+    workspaceRequest(row => {
+      row.turns = [...row.turns, turn].slice(-MAX_TURNS_STORED);
+      row.updatedAt = new Date().toISOString();
+      row.status = turn.role === 'agent' ? 'PARTIAL' : 'RUNNING';
+    });
+    return;
+  }
   const turns = readTranscript(id);
   turns.push(turn);
   try {
@@ -460,6 +502,7 @@ async function* serverSentEvents(response) {
 }
 
 async function sendStreaming(message) {
+  const requestCredential = credentials.get();
   const controller = new AbortController();
   inFlight = controller;
   const response = await fetch('/api/agent/chat/stream', {
@@ -481,6 +524,7 @@ async function sendStreaming(message) {
   let accumulatedText = '';
   try {
     for await (const event of serverSentEvents(response)) {
+      if (requestCredential !== credentials.get()) throw new DOMException('Accès modifié', 'AbortError');
       if (event.name === 'conversation') {
         setConversation(event.data);
         ownConversationId = event.data;
@@ -518,7 +562,9 @@ async function sendStreaming(message) {
 }
 
 async function sendBlocking(message) {
+  const requestCredential = credentials.get();
   const answer = await api('/api/agent/chat', { method: 'POST', body: { conversationId, message } });
+  if (requestCredential !== credentials.get()) return;
   setConversation(answer.conversationId);
   appendTranscript(answer.conversationId, { role: 'user', text: message });
   touchIndex(answer.conversationId, message.slice(0, 48));
@@ -606,7 +652,29 @@ function openHistory() {
 }
 
 /** Reprend un diagnostic contextuel préparé depuis une alerte ou un processus. */
-export function prefill() {
+export async function prefill() {
+  const transferred = params().get('userConversation');
+  if (transferred) {
+    // Le transfert reste local à l'onglet et doit appartenir au compte actuellement authentifié.
+    // Une URL seule ne permet jamais d'importer la transcription d'un autre utilisateur.
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('kex.agent.user.handoff') || 'null');
+      const ownCredential = credentials.get();
+      const me = await api('/api/agent/whoami');
+      if (saved?.conversationId === transferred
+          && ownCredential === credentials.get()
+          && saved.identity === JSON.stringify([me.tenant, me.name]) && Array.isArray(saved.turns)) {
+        inFlight?.abort();
+        workspaceTransfer = saved;
+        isolatedConversationIds.add(transferred);
+        setConversation(transferred);
+        touchIndex(transferred, saved.title);
+        replay(transferred);
+      }
+      sessionStorage.removeItem('kex.agent.user.handoff');
+    } catch (error) { report(error); }
+    setParams({ userConversation: null }, true);
+  }
   if (params().get('creation') === 'process') {
     setParams({ creation: null }, true);
     $('#start-process-wizard').click();

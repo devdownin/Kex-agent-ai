@@ -52,6 +52,13 @@ class ApiKeyPrincipalTest {
     }
 
     @Test
+    void le_chat_lit_uniquement_le_catalogue_utilisable() throws Exception {
+        assertThat(status("/api/agent/skills/available", "Bearer jeton-chat")).isEqualTo(200);
+        assertThat(status("/api/agent/skills", "Bearer jeton-chat")).isEqualTo(403);
+        assertThat(status("/api/agent/skills/review-queue", "Bearer jeton-chat")).isEqualTo(403);
+    }
+
+    @Test
     void un_operateur_ne_peut_pas_invoquer_directement_un_outil_mcp() throws Exception {
         assertThat(postStatus("/api/agent/mcp/servers/inconnu/tools/x", "Bearer jeton-ops")).isEqualTo(403);
         assertThat(postStatus("/api/agent/mcp/servers/inconnu/tools/x", "Bearer jeton-admin")).isEqualTo(404);

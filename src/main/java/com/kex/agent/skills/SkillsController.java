@@ -36,6 +36,12 @@ class SkillsController {
         return skills.list(tenant(principal));
     }
 
+    /** Lecture seule pour les utilisateurs de chat : aucune proposition en attente ni revue transverse. */
+    @GetMapping("/available")
+    List<LearningEntry> available(Principal principal) {
+        return skills.ranked(tenant(principal));
+    }
+
     /**
      * Ce qu'un administrateur a le droit de trancher, tous locataires confondus, sans en connaître
      * les identifiants à l'avance. {@code review}/{@code reject} restent volontairement transverses

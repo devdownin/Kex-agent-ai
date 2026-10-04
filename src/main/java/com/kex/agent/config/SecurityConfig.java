@@ -64,7 +64,8 @@ class SecurityConfig {
                         // raison : l'authentifier la rendrait inutilisable sans rien protéger. Les
                         // chemins sont énumérés plutôt que laissés à un joker de racine, pour
                         // qu'une future route servie ici n'hérite pas de l'ouverture.
-                        .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/", "/index.html", "/app", "/app/",
+                                "/app/index.html", "/assets/**").permitAll()
                         // Le rappel de messagerie ne porte pas de bearer : Slack ou Teams n'en
                         // émettent pas. Ni l'une ni l'autre route n'est ouverte pour autant — l'une
                         // n'existe que si kex.agent.channels.inbound.enabled, l'autre que si
@@ -80,7 +81,7 @@ class SecurityConfig {
                                 .hasAnyRole("CHAT", "OPERATOR", "ADMIN")
                         // Lecture pure, sans effet, ouverte à qui peut déjà converser : savoir à
                         // quel locataire on écrit n'est pas un privilège de plus.
-                        .requestMatchers(HttpMethod.GET, "/api/agent/whoami")
+                        .requestMatchers(HttpMethod.GET, "/api/agent/whoami", "/api/agent/skills/available")
                                 .hasAnyRole("CHAT", "OPERATOR", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/agent/supervision/cycles",
                                 "/api/agent/supervision/processes/*/maintenance",
