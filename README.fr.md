@@ -397,3 +397,6 @@ la portée de l’historique et la distinction entre réponse reçue et réussit
 Les clarifications guidées proposent des réponses au choix ; les résultats distinguent constats, incertitudes et prochaine action. Les formulaires de compétences affichent les paramètres, préconditions et vérifications attendues. Les détails techniques du traitement restent dépliables.
 
 L’espace utilisateur permet aussi aux rôles OPERATOR/ADMIN de valider des plans enregistrés par le serveur, avec approbation et lancement séparés. Les favoris sont isolés par compte et conservés sur ce navigateur ; une relance préparée revérifie les compétences et crée une nouvelle conversation uniquement après envoi.
+
+
+Le centre de notifications propose des préférences pour les résultats, précisions nécessaires et approbations attendues. Les alertes du navigateur nécessitent une autorisation explicite et ne contiennent aucun détail de demande. Elles fonctionnent tant que la page reste ouverte.

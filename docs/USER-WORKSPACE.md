@@ -135,3 +135,12 @@ rejoué. Seul **Lancer** crée une nouvelle demande et une nouvelle conversation
 Le parcours `src/test/browser/user-approvals-favorites.mjs` vérifie confirmations, conflit de
 révision, séparation approbation/lancement, droits, refus, association serveur, favoris persistants,
 compétence retirée, reprise des paramètres, nouvelle conversation et isolation du compte.
+
+
+## Notifications utiles
+
+Le centre **Notifications** signale les résultats reçus (y compris partiels, sans affirmer la réussite), les précisions nécessaires et les plans serveur en attente d’approbation. Un lien ouvre la demande ou la liste des plans ; il n’approuve ni ne lance aucune action. Les événements sont dédupliqués dans cet onglet et les 50 derniers sont conservés dans son historique. Les préférences sont isolées par compte et espace sur ce navigateur.
+
+Les trois catégories peuvent être désactivées indépendamment. Les alertes du navigateur sont facultatives, nécessitent un clic explicite pour demander l’autorisation puis l’activation de la préférence, et apparaissent uniquement lorsque l’onglet est masqué. Leur contenu reste générique. Un refus d’autorisation laisse le centre interne accessible. Changer de compte ferme les alertes ouvertes et efface les informations affichées.
+
+La page doit rester ouverte et le navigateur doit autoriser son exécution en arrière-plan. Il ne s’agit pas de notifications push après fermeture. Les plans sont consultés environ toutes les 30 secondes avec les droits OPERATOR/ADMIN existants (5 secondes pour un plan actif dans un onglet visible) ; un serveur indisponible arrête ces consultations jusqu’à l’actualisation. Aucun courriel ni message externe n’est envoyé.

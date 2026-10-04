@@ -87,9 +87,17 @@ try {
     available = false; await page.locator('#favorites').getByRole('button', { name: 'Préparer', exact: true }).click(); await page.locator('#notice').getByText('La compétence de cette demande a changé', { exact: false }).waitFor(); assert.equal(chats.length, 1);
     available = true; await page.locator('#favorites').getByRole('button', { name: 'Préparer', exact: true }).click(); await page.locator('#action-dialog').waitFor({ state: 'visible' }); await page.locator('#prepare').click(); await page.locator('#action-dialog').waitFor({ state: 'hidden' }); await page.locator('#send').click(); await page.locator('#run-status').getByText('Réponse reçue', { exact: true }).waitFor();
     assert.equal(chats.length, 2); assert.equal(chats[1].conversationId, null, 'relaunch creates a new conversation');
+    await page.getByRole('link', { name: /^Notifications/ }).click(); await page.locator('#notifications').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#notification-list a').filter({ hasText: 'Résultat disponible' }).count(), 2, 'actual completed streams notify once each');
+    assert.ok(await page.locator('#notification-list a').filter({ hasText: 'Approbation attendue' }).count() >= 2, 'server drafts request attention');
+    await page.locator('#read-notifications').click(); assert.equal(await page.locator('#notification-count').textContent(), '');
+    await page.locator('#notify-result').uncheck(); await page.reload(); await page.getByText('Connecté : alpha', { exact: true }).waitFor();
+    assert.equal(await page.locator('#notify-result').isChecked(), false, 'notification preferences persist');
+    const resultCount = await page.locator('#notification-list a').filter({ hasText: 'Résultat disponible' }).count(); assert.equal(resultCount, 2, 'reload does not replay completed streams');
     await page.locator('#approvals-link').click(); await page.locator('#approvals').waitFor({ state: 'visible' }); await page.waitForFunction(() => document.querySelector('#approval-note').textContent === '');
     let release; hold = new Promise(resolve => { release = resolve; }); await page.locator('#refresh-approvals').click(); await page.locator('#approval-note').getByText('Actualisation des plans…', { exact: true }).waitFor();
     await login('beta'); release(); await page.waitForLoadState('networkidle'); await page.getByRole('link', { name: 'Actions prêtes à l’emploi', exact: true }).click(); await page.locator('#favorites').getByText('Ajoutez une action', { exact: false }).waitFor();
+    assert.equal(await page.locator('#notification-count').textContent(), ''); assert.equal(await page.locator('#notify-result').isChecked(), true); assert.equal(await page.locator('#notification-list a').count(), 0, 'account changes isolate notifications');
     assert.equal(await page.locator('#approvals-link').isVisible(), false); assert.equal(await page.locator('#approval-list').innerText(), ''); assert.equal(await page.locator('#linked-plan').innerText(), '');
     assert.equal(await page.locator('#review-content').textContent(), ''); assert.equal(await page.locator('#plan-objective').inputValue(), '', 'account changes also clear closed dialog contents');
     assert.equal(await page.evaluate(() => window.hacked), undefined); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)); assert.deepEqual(errors, []);

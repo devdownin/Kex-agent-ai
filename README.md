@@ -440,3 +440,6 @@ for permissions, history scope and completion semantics.
 Guided clarifications offer selectable answers; completed results separate observations, uncertainties and next actions. Skill forms display declared parameters, prerequisites and expected checks. Technical execution details remain expandable.
 
 The user workspace also offers server-backed plans for OPERATOR/ADMIN review, with separate approval and launch confirmations. Account-scoped favorites persist on this browser; prepared relaunches recheck skills and create a new conversation only after sending.
+
+
+Preferences in the notification center control alerts for results, clarification requests and pending approvals. Browser alerts require explicit permission and contain no request details. Notifications work while the page stays open.
