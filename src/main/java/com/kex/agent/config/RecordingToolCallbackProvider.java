@@ -8,6 +8,8 @@ import java.util.function.Supplier;
 import com.kex.agent.agent.AgentExecution;
 import com.kex.agent.agent.TaskToolPolicy;
 import com.kex.agent.agent.ToolCallRecorder;
+import com.kex.agent.tools.ToolControlProperties;
+import com.kex.agent.tools.ToolInvocationPolicy;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
@@ -38,20 +40,36 @@ class RecordingToolCallbackProvider implements ToolCallbackProvider {
 
     private final ToolCallbackProvider delegate;
     private final CircuitBreaker circuitBreaker;
+    private final ToolInvocationPolicy policy;
+    private final boolean recordCalls;
 
     RecordingToolCallbackProvider(ToolCallbackProvider delegate, CircuitBreaker circuitBreaker) {
+        this(delegate, circuitBreaker, new ToolInvocationPolicy(ToolControlProperties.defaults(),
+                new com.fasterxml.jackson.databind.ObjectMapper()));
+    }
+
+    RecordingToolCallbackProvider(ToolCallbackProvider delegate, CircuitBreaker circuitBreaker,
+                                  ToolInvocationPolicy policy) {
+        this(delegate, circuitBreaker, policy, true);
+    }
+
+    RecordingToolCallbackProvider(ToolCallbackProvider delegate, CircuitBreaker circuitBreaker,
+                                  ToolInvocationPolicy policy, boolean recordCalls) {
         this.delegate = delegate;
         this.circuitBreaker = circuitBreaker;
+        this.policy = policy;
+        this.recordCalls = recordCalls;
     }
 
     @Override
     public ToolCallback[] getToolCallbacks() {
         return Arrays.stream(delegate.getToolCallbacks())
-                .map(callback -> new RecordingToolCallback(callback, circuitBreaker))
+                .map(callback -> new RecordingToolCallback(callback, circuitBreaker, policy, recordCalls))
                 .toArray(ToolCallback[]::new);
     }
 
-    private record RecordingToolCallback(ToolCallback delegate, CircuitBreaker circuitBreaker)
+    private record RecordingToolCallback(ToolCallback delegate, CircuitBreaker circuitBreaker,
+                                         ToolInvocationPolicy policy, boolean recordCalls)
             implements ToolCallback {
 
         @Override
@@ -66,18 +84,22 @@ class RecordingToolCallbackProvider implements ToolCallbackProvider {
 
         @Override
         public String call(String toolInput) {
-            return wrapUntrusted(getToolDefinition().name(), protect(() -> delegate.call(toolInput)));
+            String name = getToolDefinition().name();
+            policy.check(name, toolInput);
+            return wrapUntrusted(name, policy.boundResult(name, protect(() -> delegate.call(toolInput))));
         }
 
         @Override
         public String call(String toolInput, ToolContext toolContext) {
             String name = getToolDefinition().name();
-            return wrapUntrusted(name, ToolCallRecorder.timed(toolContext, name,
-                    () -> {
-                        AgentExecution.ensureActive(toolContext);
-                        TaskToolPolicy.check(name, toolContext);
-                        return protect(() -> delegate.call(toolInput, toolContext));
-                    }));
+            Supplier<String> invocation = () -> {
+                AgentExecution.ensureActive(toolContext);
+                TaskToolPolicy.check(name, toolContext);
+                policy.check(name, toolInput);
+                return policy.boundResult(name, protect(() -> delegate.call(toolInput, toolContext)));
+            };
+            return wrapUntrusted(name, recordCalls ? ToolCallRecorder.timed(toolContext, name, invocation)
+                    : invocation.get());
         }
 
         private String protect(Supplier<String> call) {

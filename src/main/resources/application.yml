@@ -165,6 +165,9 @@ kex:
           base-url: ${KEX_MCP_CATALOG_OFFICIAL_REGISTRY_BASE_URL:https://registry.modelcontextprotocol.io}
 
   agent:
+    tasks:
+      enabled: ${KEX_AGENT_TASKS_ENABLED:false}
+      store-path: ${KEX_AGENT_TASKS_STORE_PATH:${user.home}/.kex-agent-ai/tasks}
     request-timeout: 120s
 
     # Bearer historique, sous le principal anonyme "kex-agent-api". Vide, /api/** répond 503.

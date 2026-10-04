@@ -8,8 +8,7 @@ import java.util.List;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kex.agent.mcp.McpRuntimeProperties;
 import com.kex.agent.mcp.McpToolCatalog;
-import com.kex.agent.memory.MemoryTools;
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import com.kex.agent.tools.ToolInvocationPolicy;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryRegistry;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -26,7 +25,6 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.mcp.ToolContextToMcpMetaConverter;
-import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
@@ -70,9 +68,10 @@ class AgentConfig {
                                   RetryRegistry retryRegistry,
                                   MeterRegistry meterRegistry,
                                   ObjectMapper objectMapper,
-                                  McpRuntimeProperties runtimeProperties) {
+                                  McpRuntimeProperties runtimeProperties,
+                                  ToolInvocationPolicy policy) {
         return new McpToolCatalog(mcpSyncClients.getIfAvailable(List::of), observationRegistry,
-                circuitBreakerRegistry, retryRegistry, meterRegistry, objectMapper, runtimeProperties);
+                circuitBreakerRegistry, retryRegistry, meterRegistry, objectMapper, runtimeProperties, policy);
     }
 
     /**
@@ -107,11 +106,8 @@ class AgentConfig {
     @Bean
     ChatClient agentChatClient(ChatClient.Builder builder,
                                ChatMemory chatMemory,
-                               ObjectProvider<ToolCallbackProvider> toolCallbackProviders,
-                               ObjectProvider<MemoryTools> memoryTools,
                                ObjectProvider<Advisor> declaredAdvisors,
-                               AgentProperties properties,
-                               CircuitBreakerRegistry circuitBreakerRegistry) {
+                               AgentProperties properties) {
 
         List<Advisor> advisors = new ArrayList<>();
         advisors.add(MessageChatMemoryAdvisor.builder(chatMemory).build());
@@ -122,17 +118,10 @@ class AgentConfig {
             advisors.add(new SimpleLoggerAdvisor());
         }
 
-        // Disjoncteur partagé entre connexions, pas un par serveur comme McpToolCatalog.call : le
-        // callback que Spring AI construit ici (SyncMcpToolCallback) n'expose pas la connexion dont
-        // il vient, donc pas moyen de router vers le disjoncteur propre à ce serveur à cet endroit.
-        CircuitBreaker mcpCircuitBreaker = circuitBreakerRegistry.circuitBreaker("mcp-tool");
+        // Les callbacks sont fournis par AgentService par requête : une liste restreinte ou vide
+        // ne doit jamais être complétée par des outils implicites du ChatClient.
         return builder
                 .defaultSystem(properties.systemPrompt())
-                .defaultToolCallbacks(toolCallbackProviders.stream()
-                        .map(provider -> new RecordingToolCallbackProvider(provider, mcpCircuitBreaker))
-                        .toArray(ToolCallbackProvider[]::new))
-                // ObjectProvider : absent quand kex.agent.memory.enabled=false, pas d'outil à ajouter.
-                .defaultTools(memoryTools.stream().toArray())
                 .defaultAdvisors(advisors)
                 .build();
     }

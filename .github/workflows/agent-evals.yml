@@ -1,0 +1,76 @@
+name: Agent reliability evaluations (paid opt-in)
+
+on:
+  workflow_dispatch:
+    inputs:
+      acknowledge_provider_cost:
+        description: 'I authorize real provider calls for this evaluation'
+        type: boolean
+        required: true
+        default: false
+      provider:
+        description: 'Provider'
+        type: choice
+        options: [anthropic, openai]
+        default: anthropic
+      baseline_model:
+        description: 'Explicit baseline model ID (same provider and code)'
+        type: string
+        required: true
+      candidate_model:
+        description: 'Explicit candidate model ID'
+        type: string
+        required: true
+      repetitions:
+        description: 'Trials per scenario, 2 through 10'
+        type: choice
+        options: ['2', '3', '5', '10']
+        default: '3'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-evals-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    # No PR trigger, pull_request_target, arbitrary code ref, or provider keys on work branches.
+    if: github.ref == 'refs/heads/main' && inputs.acknowledge_provider_cost
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      KEX_AGENT_LLM_PROVIDER: ${{ inputs.provider }}
+      KEX_EVAL_REPETITIONS: ${{ inputs.repetitions }}
+      KEX_EVAL_REVISION: ${{ github.sha }}
+      BASELINE_MODEL: ${{ inputs.baseline_model }}
+      CANDIDATE_MODEL: ${{ inputs.candidate_model }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v4
+        with:
+          java-version: '25'
+          distribution: temurin
+          cache: maven
+      - name: Validate corpus and scoring offline
+        run: ./mvnw -B --no-transfer-progress test -Dtest=AgentEvalScoringTest
+      - name: Evaluate baseline
+        id: baseline
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: bash scripts/evals-run.sh "$BASELINE_MODEL" target/agent-evals/baseline.json
+      - name: Evaluate candidate and compare every scenario
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: bash scripts/evals-run.sh "$CANDIDATE_MODEL" target/agent-evals/candidate.json target/agent-evals/baseline.json
+      - name: Retain reports including failed and interrupted runs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: agent-evaluations-${{ github.run_id }}
+          path: target/agent-evals/*.json
+          retention-days: 30

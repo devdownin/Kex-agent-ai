@@ -245,7 +245,12 @@ class McpToolCatalogTest {
                 .retryExceptions(McpServerUnavailableException.class)
                 .build());
         McpToolCatalog catalog = new McpToolCatalog(List.of(client), ObservationRegistry.NOOP,
-                CircuitBreakerRegistry.ofDefaults(), retryRegistry, new SimpleMeterRegistry());
+                CircuitBreakerRegistry.ofDefaults(), retryRegistry, new SimpleMeterRegistry(), new ObjectMapper(),
+                new McpRuntimeProperties(".kex/mcp-servers.enc", "", Duration.ofSeconds(30), 50, List.of()),
+                new com.kex.agent.tools.ToolInvocationPolicy(new com.kex.agent.tools.ToolControlProperties(
+                        false, 12, 12000, 32000,
+                        Map.of("kex_list_topics", new com.kex.agent.tools.ToolControlProperties.Rule(
+                                false, true, Map.of(), Map.of())), List.of()), new ObjectMapper()));
 
         McpToolResult result = catalog.call("kafka-explorer", "kex_list_topics", Map.of());
 

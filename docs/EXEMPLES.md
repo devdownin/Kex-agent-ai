@@ -393,3 +393,17 @@ outils manquants ; l’agent ne choisit pas automatiquement une série à partir
 Si le catalogue est indisponible, tronqué ou incomplet, le wizard propose de continuer sans
 prévision. Corriger la connexion ou les permissions et relancer le parcours pour choisir une
 série ; l’administration et l’enrôlement des séries restent dans KafkaExplorer.
+
+## Plans durables et preuves de réussite
+
+Ouvrir **Tâches** après activation du parcours et déclaration de liaisons par l'administrateur.
+Exemples d'objectifs :
+
+- « Contrôler orders-consumer, distinguer les mesures manquantes et confirmer le critère de reprise déclaré. »
+- « Préparer un diagnostic du flux commandes en trois lectures, sans action de remédiation. »
+- « Après cet échec, proposer un nouveau plan à examiner en utilisant les preuves disponibles. »
+
+Examiner les outils, les paramètres et les préconditions, approuver le plan puis le lancer.
+Une action nécessite ADMIN ; le plan n'élargit pas la politique de supervision.
+Une tâche terminée sans critère final ne porte pas le statut de résultat confirmé.
+Voir [les contrats et exemples de configuration](DURABLE-TASKS.md).

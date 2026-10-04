@@ -26,6 +26,8 @@ import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kex.agent.isolation.IsolatedStdioCommand;
+import com.kex.agent.tools.ToolControlProperties;
+import com.kex.agent.tools.ToolInvocationPolicy;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -69,6 +71,7 @@ public class McpToolCatalog implements AutoCloseable {
     private final Retry retry;
     private final ObjectMapper objectMapper;
     private final McpRuntimeProperties properties;
+    private final ToolInvocationPolicy toolPolicy;
     private final EncryptedMcpServerStore store;
     private final Map<McpSyncClient, IsolatedStdioCommand> isolatedProcesses = new ConcurrentHashMap<>();
 
@@ -84,6 +87,15 @@ public class McpToolCatalog implements AutoCloseable {
                           CircuitBreakerRegistry circuitBreakerRegistry, RetryRegistry retryRegistry,
                           MeterRegistry meterRegistry, ObjectMapper objectMapper,
                           McpRuntimeProperties properties) {
+        this(clients, observationRegistry, circuitBreakerRegistry, retryRegistry, meterRegistry,
+                objectMapper, properties, new ToolInvocationPolicy(ToolControlProperties.defaults(), objectMapper));
+    }
+
+    public McpToolCatalog(List<McpSyncClient> clients, ObservationRegistry observationRegistry,
+                          CircuitBreakerRegistry circuitBreakerRegistry, RetryRegistry retryRegistry,
+                          MeterRegistry meterRegistry, ObjectMapper objectMapper,
+                          McpRuntimeProperties properties, ToolInvocationPolicy toolPolicy) {
+        this.toolPolicy = toolPolicy;
         this.clients = new CopyOnWriteArrayList<>(clients);
         this.staticConnections = clients.stream().map(McpToolCatalog::connectionName).collect(Collectors.toSet());
         this.circuitBreakerRegistry = circuitBreakerRegistry;
@@ -372,7 +384,12 @@ public class McpToolCatalog implements AutoCloseable {
         return Map.of("encryptedPersistence", store.enabled(), "configuredServers", definitions.size());
     }
 
+    public boolean isReadOnly(String connection, String tool) {
+        return isToolAllowed(connection, tool) && toolPolicy.isReadOnly(callbackPrefix(connection) + "__" + tool);
+    }
+
     public boolean isToolAllowed(String connection, String tool) {
+        if (toolPolicy.isDenied(callbackPrefix(connection) + "__" + tool)) return false;
         McpServerRegistration definition = definitions.get(connection);
         return definition == null || definition.allowedTools().isEmpty() || definition.allowedTools().contains(tool);
     }
@@ -385,17 +402,28 @@ public class McpToolCatalog implements AutoCloseable {
     /** Invocation directe avec permission, observation, réessai et disjoncteur par connexion. */
     public McpToolResult call(String connection, String tool, Map<String, Object> arguments) {
         if (!isToolAllowed(connection, tool)) throw new McpToolForbiddenException(connection, tool);
+        toolPolicy.check(callbackPrefix(connection) + "__" + tool, arguments);
         CircuitBreaker circuitBreaker = circuitBreakerFor(connection);
         Supplier<McpToolResult> invocation = () -> Observation.createNotStarted("kex.mcp.tool.call", observationRegistry)
                 .lowCardinalityKeyValue("connection", connection)
                 .lowCardinalityKeyValue("tool", tool)
                 .observe(() -> {
                     McpSchema.CallToolResult result = invokeTool(connection, tool, arguments);
+                    List<String> content = textOf(result.content());
+                    toolPolicy.checkOutput(tool, String.join("\n", content));
+                    if (result.structuredContent() != null) {
+                        try {
+                            toolPolicy.checkOutput(tool, objectMapper.writeValueAsString(result.structuredContent()));
+                        }
+                        catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
+                            throw new IllegalStateException("Résultat MCP non sérialisable");
+                        }
+                    }
                     return new McpToolResult(connection, tool, Boolean.TRUE.equals(result.isError()),
-                            textOf(result.content()), result.structuredContent());
+                            content, result.structuredContent());
                 });
         Supplier<McpToolResult> resilient = CircuitBreaker.decorateSupplier(circuitBreaker,
-                Retry.decorateSupplier(retry, invocation));
+                isReadOnly(connection, tool) ? Retry.decorateSupplier(retry, invocation) : invocation);
         try {
             return resilient.get();
         }

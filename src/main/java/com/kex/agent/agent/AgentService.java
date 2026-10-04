@@ -19,6 +19,7 @@ import java.util.function.Supplier;
 
 import com.kex.agent.config.AgentProperties;
 import com.kex.agent.memory.LongTermMemoryService;
+import com.kex.agent.tools.ToolSelectionService;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
@@ -53,33 +54,45 @@ public class AgentService {
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;
     private final Duration timeout;
+    private final String systemPrompt;
     private final CircuitBreaker modelCircuitBreaker;
     private final TokenBudgetService tokenBudget;
     private final LongTermMemoryService longTermMemory;
+    private final ToolSelectionService toolSelection;
 
     @Autowired
     AgentService(ChatClient chatClient, ChatMemory chatMemory, AgentProperties properties,
                 CircuitBreakerRegistry circuitBreakerRegistry, TokenBudgetService tokenBudget,
-                org.springframework.beans.factory.ObjectProvider<LongTermMemoryService> longTermMemory) {
+                org.springframework.beans.factory.ObjectProvider<LongTermMemoryService> longTermMemory,
+                ToolSelectionService toolSelection) {
         this(chatClient, chatMemory, properties, circuitBreakerRegistry, tokenBudget,
-                longTermMemory.getIfAvailable());
+                longTermMemory.getIfAvailable(), toolSelection);
+    }
+
+    AgentService(ChatClient chatClient, ChatMemory chatMemory, AgentProperties properties,
+                 CircuitBreakerRegistry circuitBreakerRegistry, TokenBudgetService tokenBudget,
+                 org.springframework.beans.factory.ObjectProvider<LongTermMemoryService> longTermMemory) {
+        this(chatClient, chatMemory, properties, circuitBreakerRegistry, tokenBudget,
+                longTermMemory.getIfAvailable(), null);
     }
 
     /** Compatibility constructor for focused unit tests and minimal embedding applications. */
     AgentService(ChatClient chatClient, ChatMemory chatMemory, AgentProperties properties,
                  CircuitBreakerRegistry circuitBreakerRegistry, TokenBudgetService tokenBudget) {
-        this(chatClient, chatMemory, properties, circuitBreakerRegistry, tokenBudget, (LongTermMemoryService) null);
+        this(chatClient, chatMemory, properties, circuitBreakerRegistry, tokenBudget, (LongTermMemoryService) null, null);
     }
 
     private AgentService(ChatClient chatClient, ChatMemory chatMemory, AgentProperties properties,
                          CircuitBreakerRegistry circuitBreakerRegistry, TokenBudgetService tokenBudget,
-                         LongTermMemoryService longTermMemory) {
+                         LongTermMemoryService longTermMemory, ToolSelectionService toolSelection) {
         this.chatClient = chatClient;
         this.chatMemory = chatMemory;
         this.timeout = properties.requestTimeout();
+        this.systemPrompt = properties.systemPrompt();
         this.modelCircuitBreaker = circuitBreakerRegistry.circuitBreaker("agent-model");
         this.tokenBudget = tokenBudget;
         this.longTermMemory = longTermMemory;
+        this.toolSelection = toolSelection;
     }
 
     /**
@@ -127,10 +140,21 @@ public class AgentService {
 
     public AgentStructuredAnswer askStructured(String owner, String conversationId, String message,
                                                Map<String, Object> schema) {
+        return askStructured(conversation(owner, conversationId, "DIAGNOSTIC", null), message, schema);
+    }
+
+    /** La liste vient du serveur ; vide, elle empêche tout appel pendant la planification. */
+    public AgentStructuredAnswer askStructuredReadOnly(String owner, String conversationId, String message,
+                                                       Map<String, Object> schema, Set<String> allowedTools) {
+        return askStructured(conversation(owner, conversationId, "DIAGNOSTIC", Set.copyOf(allowedTools)),
+                message, schema);
+    }
+
+    private AgentStructuredAnswer askStructured(Conversation conversation, String message,
+                                                Map<String, Object> schema) {
         if (CollectionUtils.isEmpty(schema)) {
             throw new InvalidJsonSchemaException("Un schéma JSON non vide est requis");
         }
-        Conversation conversation = conversation(owner, conversationId, "DIAGNOSTIC", null);
         ToolCallRecorder recorder = new ToolCallRecorder();
         AgentExecution execution = new AgentExecution();
         ResponseEntity<ChatResponse, Map<String, Object>> answer = bounded(conversation, execution,
@@ -226,11 +250,18 @@ public class AgentService {
             context.put(TaskToolPolicy.ALLOWED_TOOLS, conversation.allowedTools());
         }
         ChatClient.ChatClientRequestSpec request = chatClient.prompt().user(message);
+        if (toolSelection != null) {
+            var selected = toolSelection.select(message, conversation.allowedTools());
+            request = request.toolCallbacks(selected.toArray(org.springframework.ai.tool.ToolCallback[]::new));
+            // Une seconde garde limite aussi les tours suivants et les appels issus d'une ancienne mémoire.
+            context.put(TaskToolPolicy.ALLOWED_TOOLS, selected.stream()
+                    .map(tool -> tool.getToolDefinition().name()).collect(java.util.stream.Collectors.toSet()));
+        }
         String kafkaProcedure = KafkaOperationalPlaybooks.forRequest(message);
-        if (!kafkaProcedure.isBlank()) request = request.system(kafkaProcedure);
-        if (longTermMemory != null) {
-            String durable = longTermMemory.context(conversation.owner());
-            if (!durable.isBlank()) request = request.system(durable);
+        String durable = longTermMemory == null ? "" : longTermMemory.context(conversation.owner());
+        if (!kafkaProcedure.isBlank() || !durable.isBlank()) {
+            // system(...) remplace le prompt du ChatClient ; conserver la gouvernance avant les références.
+            request = request.system(systemPrompt + "\n\n" + kafkaProcedure + "\n\n" + durable);
         }
         return request.toolContext(context)
                 .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, conversation.memoryId()));

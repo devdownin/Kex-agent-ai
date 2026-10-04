@@ -415,3 +415,15 @@ resource links lead to topics, groups and processes, and optional refresh reads 
 The process creation wizard offers an approved series and persists the explicit association
 without restarting. Existing process details also support association management and show future
 risks, forecast dates and realised quality; YAML remains an optional export. See the [prompt and wizard examples](docs/EXEMPLES.md#timesfm--démonstration-et-prompts-opérationnels).
+
+## Reliability and durable tasks
+
+- [Agent evaluations and regression thresholds](docs/AGENT-EVALUATIONS.md)
+- [Independent action verification](docs/ACTION-VERIFICATION.md)
+- [Durable plans, approvals and recovery](docs/DURABLE-TASKS.md)
+- [Invocation policies and selective tool context](docs/TOOL-CONTROLS.md)
+
+The Tasks console separates a proposed plan, approval, execution and measured success.
+Unknown mutations are reconciled without replay. Tasks and selective tool discovery are opt-in.
+After upgrading, declare real read-only tools with `kex.agent.tools.rules.<name>.read-only=true`
+to retain transient MCP retries; unclassified tools are no longer automatically retried.

@@ -18,11 +18,13 @@ import * as mcpServer from './mcp-server.js';
 import * as skills from './skills.js';
 import * as supervision from './supervision.js';
 import * as tools from './tools.js';
+import * as tasks from './tasks.js';
 
 const BASE = '/api/agent/supervision';
 $('#refresh-forecasts').addEventListener('click', forecasts.view);
 
 const VIEWS = {
+  tasks: { title: 'Tâches', load: tasks.view },
   forecasts: { title: 'Prévisions', load: forecasts.view },
   overview: { title: 'Vue d’ensemble', load: supervision.overview },
   attention: { title: 'À traiter', load: supervision.attentionView },
@@ -1010,6 +1012,7 @@ forecasts.wire();
 llm.wire();
 skills.wire();
 automations.wire();
+tasks.wire();
 chat.wire(openCredentials);
 wireOperatorContext();
 

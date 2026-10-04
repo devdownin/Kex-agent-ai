@@ -10,7 +10,20 @@ package com.kex.agent.supervision;
 public enum DecisionStatus {
 
     PENDING_APPROVAL,
+    /** Historical execution receipt, before independent verification was introduced. */
     EXECUTED,
+
+    /** The action was accepted; no independent verifier is configured. */
+    EXECUTED_UNVERIFIED,
+
+    /** An independent, fresh read-only measurement confirmed the configured postcondition. */
+    VERIFIED,
+
+    /** The action was accepted, but an independent measurement disproved its postcondition. */
+    VERIFICATION_FAILED,
+
+    /** The action was accepted, but verification could not establish its outcome. */
+    VERIFICATION_UNKNOWN,
     REJECTED,
 
     /** L'action est partie et a échoué : outil en erreur, ou aucun outil lié à la capacité. */
@@ -30,5 +43,11 @@ public enum DecisionStatus {
      * jusqu'ici plutôt que de la faire échouer. Distinct de {@code FAILED} : un outil bien lié qui
      * refuse l'appel est un vrai échec, une capacité jamais câblée n'en est pas un.
      */
-    SIMULATED
+    SIMULATED;
+
+    /** Execution receipts include inconclusive verification; they do not imply business success. */
+    public boolean actionAccepted() {
+        return this == EXECUTED || this == EXECUTED_UNVERIFIED || this == VERIFIED
+                || this == VERIFICATION_FAILED || this == VERIFICATION_UNKNOWN;
+    }
 }
