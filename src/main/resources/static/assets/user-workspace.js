@@ -356,7 +356,7 @@ async function send(message, request = null) {
   let complete = false; let canonical = null;
   const firstCall = request.tools.length;
   try {
-    const durable = serverHistory && (!request.conversationId || request.serverId);
+    const durable = !!request.serverId || (serverHistory && !request.conversationId);
     const response = await fetch(durable ? '/api/agent/workspace/requests/stream' : '/api/agent/chat/stream', { method: 'POST', headers: headers({ 'Content-Type': 'application/json', Accept: 'text/event-stream' }), body: JSON.stringify(durable ? { id: request.serverId || null, message, context: request.context } : { message: responsePrompt(message + contextText(request.context)), conversationId: request.conversationId }), signal: controller.signal });
     if (!response.ok) throw await failure(response);
     for await (const event of events(response)) {
