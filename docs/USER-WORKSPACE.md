@@ -67,16 +67,29 @@ sombre suivent le système ; les parcours sont conçus pour clavier et écran mo
 
 - `node src/test/frontend/user-stream.mjs` : découpage UTF-8/CRLF, données multilignes, événements
   tronqués et libération du lecteur.
+- `node src/test/frontend/user-experience.mjs` : réponses structurées ou invalides, choix de clarification,
+  paramètres bornés et modifications des métadonnées.
 - `node src/test/browser/user-workspace.mjs` avec Playwright : préparation sans exécution,
   compétence retirée, réponse/source, historique, transfert, XSS, erreurs, fin non confirmée,
   isolation de compte et absence de débordement à 1440, 768, 390 et 320 px.
 - `./mvnw verify` : routes statiques, sécurité du catalogue et contrat de fin de flux, plus la
-  suite existante. Les deux scripts frontend font partie du job navigateur de la CI.
+  suite existante. Les scripts frontend font partie du job navigateur de la CI.
 
-## Guided answers and skill forms
+## Clarifications et formulaires de compétences
 
-The user workspace requests a structured response using the existing chat stream. A completed, valid result displays observations, uncertainties and the next proposed action. A clarification offers two to four choices; selecting one only fills the follow-up draft. The user must send it to continue and can write another answer. Free text, invalid JSON and interrupted responses remain visible without inferred conclusions. These presentation instructions do not change tool permissions.
+L’espace utilisateur demande une réponse structurée dans le flux de chat existant. Une réponse
+complète et valide affiche les constats, les incertitudes et la prochaine action proposée. Une
+clarification offre deux à quatre choix : sélectionner un choix remplit uniquement le brouillon.
+L’utilisateur doit l’envoyer pour poursuivre et peut écrire une autre réponse. Le texte libre,
+le JSON invalide et les réponses interrompues restent visibles sans conclusion déduite.
+Ces consignes de présentation ne changent pas les autorisations.
 
-The progress list describes observed tool completions in ordinary language and keeps names and durations in expandable details. A completed call does not establish that the user's objective succeeded.
+Le suivi décrit les appels terminés en langage courant. Les noms d’outils et leurs durées restent
+consultables dans les détails. Un appel terminé ne prouve pas la réussite de l’objectif.
 
-Skill forms show declared preconditions and expected checks, plus up to twenty scalar parameters from verification evidence, with example values. These values are examples, not a validation schema. Complex parameters stay in the procedure and require clarification. Skills without metadata retain the general subject/context form. Changes to procedure or verification metadata invalidate a prepared skill before sending. Preconditions are displayed for examination, never automatically asserted as satisfied.
+Les formulaires affichent les préconditions et vérifications déclarées, ainsi que jusqu’à vingt
+paramètres simples issus des preuves de vérification, avec des exemples. Ces valeurs sont des
+exemples, pas un schéma de validation. Les paramètres complexes restent dans la procédure et
+nécessitent une clarification. Les compétences sans métadonnées gardent le formulaire général.
+Un changement de procédure ou de métadonnées invalide la compétence préparée avant l’envoi.
+Les préconditions sont présentées pour examen ; elles ne sont jamais déclarées satisfaites automatiquement.
