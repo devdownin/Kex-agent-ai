@@ -10,6 +10,9 @@ let associations = [];
 let role = 'ADMIN';
 let denied = false;
 let writes = 0;
+let strategy = 'TIMESFM';
+let fingerprint = 'i1';
+let expired = false;
 const now = Date.now();
 const envelope = (data) => ({ data, coverage: { complete: true }, truncated: false, unavailable: null });
 const measured = (value) => envelope({ measured: true, value });
@@ -32,9 +35,9 @@ const server = createServer(async (req, res) => {
       body = { processId: 'orders', associations, overridden: true, unavailable: null };
     } else body = { processId: 'orders', readAt: now, truncated: false, unavailable: null,
       forecasts: associations.map((association) => ({ association, detail: {
-        forecast: measured({ state: 'READY', visibility: 'SHADOW', strategy: 'TIMESFM', generatedAt: now,
-          context: { inputFingerprint: 'i1', profileFingerprint: 'p1' },
-          forecast: { points: [{ at: now + 600000 }] } }), quality: envelope({ measured: false }),
+        forecast: measured({ state: 'READY', visibility: 'SHADOW', strategy, generatedAt: now,
+          context: { inputFingerprint: fingerprint, profileFingerprint: 'p1' },
+          forecast: { points: [{ at: expired ? now - 1000 : now + 600000 }] } }), quality: envelope({ measured: false }),
       } })), breaches: envelope([{ threshold: { seriesId: 'orders-series', threshold: 20, direction: 'ABOVE', visibility: 'SHADOW' },
         generatedAt: now, windowEndAt: now + 600000, inputFingerprint: 'i1', profileFingerprint: 'p1' }]) };
     res.end(JSON.stringify(body)); return;
@@ -80,6 +83,20 @@ try {
   await page.evaluate(() => window.load());
   assert.equal(await page.getByRole('button', { name: 'Associer une prévision', exact: true }).count(), 0);
   assert.match(await page.locator('#host').innerText(), /nécessite le rôle ADMIN/);
+  associations = [{ seriesId: 'orders-series', environment: 'lab' }];
+  for (const scenario of ['expired', 'fallback', 'empty-fingerprint']) {
+    expired = scenario === 'expired'; strategy = scenario === 'fallback' ? 'LAST_VALUE' : 'TIMESFM';
+    fingerprint = scenario === 'empty-fingerprint' ? '' : 'i1';
+    await page.evaluate(() => window.load());
+    assert.ok(!(await page.locator('#host').innerText()).includes('Dépassement prédit'), `aucun risque superposé pour ${scenario}`);
+  }
+  role = 'ADMIN'; denied = false;
+  associations = Array.from({ length: 6 }, (_, i) => ({ seriesId: `legacy-${i}`, environment: 'lab' }));
+  await page.evaluate(() => window.load());
+  await page.getByRole('button', { name: 'Associer une prévision', exact: true }).click();
+  await page.getByRole('button', { name: 'Retirer toutes les associations', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#host').textContent.includes('Aucune prévision associée'));
+  assert.deepEqual(associations, []);
   await page.evaluate(async () => { const { credentials } = await import('/assets/core.js'); credentials.set('new-token'); });
   assert.equal(await page.locator('#host').textContent(), '');
   console.log('✓ Associations persistées depuis la fiche, retrait, erreurs, aperçu daté, rôle et changement de jeton');
