@@ -88,7 +88,7 @@ kex:
 ```
 
 Sans `shared-memory`, un fichier atomique persiste les compteurs d'une instance. Ne pas le partager
-entre plusieurs processus. Avec `shared-memory`, les migrations V5/V6 ajoutent les preuves et le
+entre plusieurs processus. L’image Docker place ce fichier dans le volume existant `/var/lib/kex/budgets.json`, accessible à son utilisateur non root. Avec `shared-memory`, les migrations V5/V6 ajoutent les preuves et le
 registre JDBC ; transactions et verrouillage des lignes dans un ordre stable protègent les répliques.
 Une réservation refusée ne débite aucun des trois compteurs. Les réservations incertaines ne sont pas
 libérées automatiquement après redémarrage. Conserver ce registre dans les sauvegardes ; sa taille
