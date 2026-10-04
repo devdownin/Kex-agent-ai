@@ -52,7 +52,7 @@ accumulent par jour, toutes conversations confondues — le seul frein d'un cycl
 part sans clic (`kex.agent.supervision.schedule.enabled`). Budget épuisé, l'état de l'agent passe
 `DEGRADED` (`GET /api/agent/supervision/status`) plutôt que de le découvrir dans les métriques
 après coup.
-Tenu en mémoire, par instance, comme le seau de `rate-limit`.
+Les [réservations persistées](VERIFIED-LEARNING-BUDGETS.md) couvrent tous les tours LLM, les flux interrompus et les coûts configurés des outils. Le profil `shared-memory` partage les budgets entre répliques via JDBC.
 
 ### Outils
 

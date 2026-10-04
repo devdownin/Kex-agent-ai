@@ -8,6 +8,7 @@ import java.util.Optional;
 
 public interface LearningRepository {
     void add(LearningEntry entry);
+    boolean replace(LearningEntry entry, String expectedStatus);
     List<LearningEntry> list(String owner, String kind, Instant since);
     /** Atomic transition. Only a pending skill owned by this principal may change. */
     boolean review(String owner, String id, String status, String actor, Instant at, String reason);

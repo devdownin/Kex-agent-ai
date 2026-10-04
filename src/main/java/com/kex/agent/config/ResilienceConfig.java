@@ -29,6 +29,7 @@ class ResilienceConfig {
     @Bean
     CircuitBreakerRegistry circuitBreakerRegistry(ResilienceProperties properties, MeterRegistry meterRegistry) {
         CircuitBreakerConfig defaults = CircuitBreakerConfig.custom()
+                .ignoreExceptions(com.kex.agent.agent.BudgetExceededException.class)
                 .slidingWindowSize(properties.slidingWindowSize())
                 .minimumNumberOfCalls(properties.minimumNumberOfCalls())
                 .failureRateThreshold(properties.failureRateThreshold())

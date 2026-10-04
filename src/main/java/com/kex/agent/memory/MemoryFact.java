@@ -7,5 +7,7 @@ package com.kex.agent.memory;
  * peut désigner le souvenir qu'il corrige, et une correction s'ajouterait à côté du fait devenu
  * faux au lieu de le remplacer.
  */
-public record MemoryFact(String id, String content) {
+public record MemoryFact(String id, String content, String conversationId, java.time.Instant observedAt,
+                         java.time.Instant validUntil, String evidenceStatus) {
+    public MemoryFact(String id, String content) { this(id, content, null, null, null, "ASSERTED"); }
 }

@@ -66,7 +66,9 @@ arrive.
 | `memory.capacity` | `200` | Souvenirs actifs conservés, le plus ancien évincé au-delà |
 | `memory.max-content-length` | `500` | Un souvenir plus long est tronqué à l'écriture |
 | `memory.retention` | `30d` | Au-delà, un souvenir n'est plus relu (sans être supprimé) |
-| `token-budget.daily-limit` | `0` | Jetons consommés par jour, toutes conversations confondues. `0` lève la borne. Tenu en mémoire, par instance — comme `rate-limit` ci-dessus |
+| `token-budget.daily-limit` | `0` | Jetons consommés par jour, toutes conversations confondues. `0` lève la borne. Persisté ; partagé via JDBC sous `shared-memory`, réservé avant chaque tour LLM |
+
+Les budgets par locataire et tâche, les coûts et les réservations sont détaillés dans [Mémoire vérifiée et budgets partagés](VERIFIED-LEARNING-BUDGETS.md).
 
 ### `kex.agent.supervision.*` (nouveautés)
 

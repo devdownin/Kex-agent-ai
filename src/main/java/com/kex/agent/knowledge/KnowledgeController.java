@@ -34,15 +34,20 @@ class KnowledgeController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    List<String> add(@RequestBody @Valid @NotEmpty List<KnowledgeDocument> documents) {
-        return knowledgeService.add(documents);
+    List<String> add(@RequestBody @Valid @NotEmpty List<KnowledgeDocument> documents, java.security.Principal principal) {
+        return knowledgeService.add(com.kex.agent.config.ActorIdentity.tenantOf(principal), documents);
     }
 
     /** Même recherche que celle faite avant chaque échange : permet de voir ce que le modèle verra. */
     @GetMapping
     List<KnowledgeMatch> search(@RequestParam String query,
-                                @RequestParam(required = false) Integer topK) {
-        return knowledgeService.search(query, topK);
+                                @RequestParam(required = false) Integer topK, java.security.Principal principal) {
+        return knowledgeService.search(query, topK, KnowledgeAccess.current(com.kex.agent.config.ActorIdentity.tenantOf(principal)));
+    }
+
+    @org.springframework.web.bind.annotation.ExceptionHandler(IllegalArgumentException.class)
+    org.springframework.http.ProblemDetail invalid(IllegalArgumentException ex) {
+        return org.springframework.http.ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
     @DeleteMapping

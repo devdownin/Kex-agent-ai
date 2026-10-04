@@ -27,6 +27,12 @@ class TaskConfig {
         return new TaskGateway() {
             @Override public com.kex.agent.mcp.McpToolResult call(String connection, String tool,
                     java.util.Map<String, Object> arguments) { return catalog.call(connection, tool, arguments); }
+            @Override public com.kex.agent.mcp.McpToolResult call(String connection, String tool, java.util.Map<String, Object> arguments,
+                    com.kex.agent.agent.TokenBudgetService budget, String owner, String task) {
+                return catalog.call(connection, tool, arguments, budget == null ? java.util.Map.of()
+                        : java.util.Map.of(com.kex.agent.agent.TokenBudgetService.CONTEXT_KEY, budget,
+                                "kex.owner", owner, com.kex.agent.agent.TokenBudgetService.TASK_KEY, task));
+            }
             @Override public java.util.Map<String, Object> schema(String connection, String tool) {
                 if (!catalog.isToolAllowed(connection, tool)) throw new TaskConflictException("Outil de tâche non autorisé");
                 return catalog.servers().stream().filter(server -> server.connection().equals(connection))

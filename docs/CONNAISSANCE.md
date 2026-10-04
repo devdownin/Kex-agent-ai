@@ -7,6 +7,41 @@ la convention de nommage des topics, le runbook d'une DLQ qui se remplit, la rai
 Activée, chaque question est d'abord cherchée dans la base et les passages pertinents sont ajoutés
 au prompt. Le modèle répond alors avec le contexte de la maison, pas seulement avec ses outils.
 
+## Droits, environnement et preuves
+
+L'ingestion associe chaque document au locataire authentifié ; un champ `owner` fourni dans les
+métadonnées ne permet pas de choisir un autre propriétaire. L'environnement du déploiement
+(`kex.agent.knowledge.environment`, défaut `default`) et le droit `readRole` (`TENANT`, `CHAT`,
+`OPERATOR`, `ADMIN`, `INTERNAL`) sont filtrés avant la recherche des meilleurs voisins.
+`TENANT` ouvre le document aux membres du même locataire. Un rôle ADMIN ne contourne pas ce
+filtre de locataire. Les rôles proviennent de l'authentification, jamais d'un paramètre du modèle.
+Les traitements internes sans identité d'opérateur ne voient que les documents `TENANT` et `INTERNAL`.
+
+Une date future est refusée ; une preuve expirée ou plus ancienne que `max-age` (défaut 30 jours)
+est exclue. `observedAt` doit dater l'observation de la source. Sans cette métadonnée, sa valeur est
+la date d'ingestion, explicitement distincte d'une vérification de la justesse du contenu. `validUntil`
+ne peut prolonger le document au-delà de `max-age`. Les anciens documents sans métadonnées d'accès
+sont exclus : les réimporter avec leurs droits et leur provenance.
+
+Après filtrage, le classement combine similarité (90 %) et fraîcheur (10 %), puis garde `top-k`
+passages. Une seconde vérification rejette tout document que le magasin renverrait hors droits.
+L'ancien advisor global sans filtre est retiré. Le contexte documentaire est fourni sur les trois
+chemins de conversation ; l'historique du chat est séparé par ensemble de rôles lorsque la connaissance
+est active, pour qu'une baisse de droits ne relise pas une ancienne réponse privilégiée.
+
+Le modèle reçoit l'instruction de citer `[source:<id>]` pour chaque conclusion fondée sur un document
+et d'identifier les inférences. Les réponses JSON exposent aussi `sources` (identifiant, source,
+date, validité, extrait) ; le flux SSE expose un événement `sources` et le chat permet de consulter
+ces extraits. Cette provenance est déterminée par le serveur. La présence d'une source ne vérifie
+pas à elle seule toutes les assertions rédigées librement par le modèle.
+
+Exemple de métadonnées :
+
+```json
+{"source":"runbook:dlq-v3#replay","environment":"production","readRole":"OPERATOR",
+ "observedAt":"2026-10-04T06:00:00Z","validUntil":"2026-10-11T06:00:00Z"}
+```
+
 ## Pourquoi c'est éteint par défaut
 
 Un RAG a besoin d'un modèle d'embeddings, donc d'une infrastructure : une clé d'API chez un

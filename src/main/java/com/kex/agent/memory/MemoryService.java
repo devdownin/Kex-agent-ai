@@ -70,7 +70,8 @@ class MemoryService {
         Instant since = clock.instant().minus(properties.retention());
         return repository.active(since).stream()
                 .filter(entry -> owner.equals(entry.owner()))
-                .map(entry -> new MemoryFact(entry.id(), entry.content()))
+                .map(entry -> new MemoryFact(entry.id(), entry.content(), entry.conversationId(), entry.createdAt(),
+                        entry.createdAt().plus(properties.retention()), "ASSERTED"))
                 .toList();
     }
 

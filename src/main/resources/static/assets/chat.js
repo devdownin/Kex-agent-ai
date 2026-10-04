@@ -374,6 +374,7 @@ async function sendContextual(question) {
     replay(answer.conversationId);
     const contextualTurn = addContextTurn('agent', answer.content);
     renderToolChips(contextualTurn, answer.tools || []);
+    renderSources(contextualTurn, answer.sources);
     renderFinishReason(contextualTurn, answer.finishReason);
   }
 }
@@ -400,6 +401,17 @@ function renderToolChips(turn, calls) {
  */
 const NORMAL_ENDINGS = new Set(['end_turn', 'stop', 'stop_sequence', 'tool_use', 'tool_calls']);
 const TRUNCATED = new Set(['max_tokens', 'length']);
+
+function renderSources(turn, sources) {
+  if (!sources?.length) return;
+  const details = el('details', 'tool-log');
+  details.append(el('summary', null, `Sources documentaires (${sources.length})`));
+  sources.forEach((source) => {
+    details.append(el('p', 'muted', `[source:${source.id}] ${source.source} · ${source.observedAt}`));
+    details.append(el('pre', 'dump muted', source.excerpt));
+  });
+  turn.append(details);
+}
 
 function renderFinishReason(turn, finishReason) {
   const reason = (finishReason || '').toLowerCase();
@@ -482,6 +494,8 @@ async function sendStreaming(message) {
         accumulatedText += event.data;
         updateBubble(bubble, 'agent', accumulatedText);
         if (stick) transcript.scrollTop = transcript.scrollHeight;
+      } else if (event.name === 'sources') {
+        renderSources(turn, JSON.parse(event.data));
       } else if (event.name === 'tool') {
         calls.push(JSON.parse(event.data));
         renderToolChips(turn, calls);
@@ -510,6 +524,7 @@ async function sendBlocking(message) {
   touchIndex(answer.conversationId, message.slice(0, 48));
   const { turn } = addTurn('agent', answer.content);
   renderToolChips(turn, answer.tools || []);
+  renderSources(turn, answer.sources);
   renderFinishReason(turn, answer.finishReason);
   renderToolLog(answer.tools || []);
   appendTranscript(answer.conversationId,

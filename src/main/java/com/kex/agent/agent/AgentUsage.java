@@ -22,7 +22,7 @@ public record AgentUsage(Integer inputTokens, Integer outputTokens) {
      * il rend {@code 0} là où le fournisseur n'a rien dit, exactement la confusion que le type
      * nullable existe pour éviter.
      */
-    static AgentUsage from(ChatResponse response) {
+    public static AgentUsage from(ChatResponse response) {
         ChatResponseMetadata metadata = response == null ? null : response.getMetadata();
         Usage usage = metadata == null ? null : metadata.getUsage();
         if (usage == null || usage instanceof EmptyUsage) {
@@ -32,7 +32,7 @@ public record AgentUsage(Integer inputTokens, Integer outputTokens) {
     }
 
     /** Les deux compteurs sont nullables séparément ; le budget n'a besoin que de leur somme. */
-    long total() {
-        return (inputTokens == null ? 0 : inputTokens) + (outputTokens == null ? 0 : outputTokens);
+    public long total() {
+        return (inputTokens == null ? 0L : inputTokens.longValue()) + (outputTokens == null ? 0 : outputTokens);
     }
 }

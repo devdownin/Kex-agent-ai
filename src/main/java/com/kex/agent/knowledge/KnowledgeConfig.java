@@ -8,10 +8,7 @@ import java.io.UncheckedIOException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.advisor.api.Advisor;
-import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.DisposableBean;
@@ -70,18 +67,8 @@ class KnowledgeConfig {
     }
 
     @Bean
-    KnowledgeService knowledgeService(VectorStore vectorStore, KnowledgeProperties properties) {
-        return new KnowledgeService(vectorStore, properties);
-    }
-
-    @Bean
-    Advisor questionAnswerAdvisor(VectorStore vectorStore, KnowledgeProperties properties) {
-        return QuestionAnswerAdvisor.builder(vectorStore)
-                .searchRequest(SearchRequest.builder()
-                        .topK(properties.topK())
-                        .similarityThreshold(properties.similarityThreshold())
-                        .build())
-                .build();
+    KnowledgeService knowledgeService(VectorStore vectorStore, KnowledgeProperties properties, java.time.Clock clock) {
+        return new KnowledgeService(vectorStore, properties, clock);
     }
 
     private static File file(KnowledgeProperties properties) {

@@ -17,7 +17,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -41,13 +40,13 @@ class LongTermMemoryServiceTest {
     }
 
     @Test
-    void records_successful_task_summary_and_proposes_procedure() {
+    void records_completion_without_inventing_success_or_proposing_procedure() {
         AgentEvent.ToolCall call = new AgentEvent.ToolCall("kex_list_topics", 10L, false);
 
         service.recordSuccessfulTask("user1", "conv-1", "list topics", "found 5 topics", List.of(call));
 
         verify(repository).add(any(LearningEntry.class));
-        verify(skills).propose(eq("user1"), eq("list topics"), any(), any(), eq("conv-1"));
+        org.mockito.Mockito.verifyNoInteractions(skills);
     }
 
     @Test
@@ -61,7 +60,7 @@ class LongTermMemoryServiceTest {
         given(repository.delete("user1", "s-1")).willReturn(true);
 
         assertThat(service.summaries("user1")).containsExactly(summary);
-        assertThat(service.context("user1")).contains("Markdown summary");
+        assertThat(service.context("user1")).doesNotContain("Markdown summary");
         assertThat(service.forget("user1", "s-1")).isTrue();
     }
 }

@@ -228,6 +228,8 @@ kex:
       top-k: 4
       similarity-threshold: 0.6
       store-path: ""
+      environment: default
+      max-age: 30d
 
     memory:
       # Mémoire long-terme du modèle (outils remember_fact / recall_facts), distincte de la fenêtre
@@ -239,7 +241,7 @@ kex:
       retention: 30d
       skills:
         # Ce que la bibliothèque de compétences approuvées pèse dans le prompt. Elle ne fait que
-        # grandir — chaque échange réussi en propose une — alors que seules les `injected` premières
+        # grandir — chaque tâche aux résultats vérifiés peut en proposer une — alors que seules les `injected` premières
         # agissent : ce sont les plus récemment approuvées, et GET /api/agent/skills/curation dit
         # lesquelles dorment au-delà. Le retrait reste un geste humain, jamais une purge planifiée.
         injected: 5
@@ -353,9 +355,20 @@ kex:
     log-interactions: false
 
     token-budget:
-      # 0 = illimité. Tenu en mémoire, par instance : diviser le seuil en multi-instance, comme
-      # pour rate-limit ci-dessus. Le seul frein d'un cycle qui part sans clic (schedule.enabled).
+      # 0 désactive un plafond. Réservations avant chaque tour LLM et outil.
+      # shared-memory utilise JDBC pour partager les compteurs entre répliques.
       daily-limit: 0
+      tenant-daily-limit: 0
+      task-limit: 0
+      daily-cost-micros: 0
+      tenant-daily-cost-micros: 0
+      task-cost-micros: 0
+      output-reservation: 4096
+      input-token-cost-micros: 0
+      output-token-cost-micros: 0
+      default-tool-cost-micros: 0
+      tool-cost-micros: {}
+      store-path: "${user.home}/.kex/budgets.json"
 
 logging:
   level:

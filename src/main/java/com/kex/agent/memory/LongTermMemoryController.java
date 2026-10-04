@@ -29,6 +29,22 @@ class LongTermMemoryController {
         return memory.summaries(tenant(principal));
     }
 
+    @PostMapping("/{id}/contradict")
+    LearningEntry contradict(@PathVariable String id, @jakarta.validation.Valid @RequestBody Contradiction input,
+            Principal principal) {
+        LearningEntry result = memory.contradict(tenant(principal), id, actor(principal), input.sourceId(), input.reason());
+        supervision.auditAction(actor(principal), "Résumé contredit et compétences retirées", id + " : " + input.reason());
+        return result;
+    }
+
+    record Contradiction(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 255) String sourceId,
+            @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 2000) String reason) {}
+
+    @ExceptionHandler(IllegalStateException.class)
+    org.springframework.http.ProblemDetail conflict(IllegalStateException ex) {
+        return org.springframework.http.ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void forget(@PathVariable String id, Principal principal) {

@@ -427,3 +427,5 @@ The Tasks console separates a proposed plan, approval, execution and measured su
 Unknown mutations are reconciled without replay. Tasks and selective tool discovery are opt-in.
 After upgrading, declare real read-only tools with `kex.agent.tools.rules.<name>.read-only=true`
 to retain transient MCP retries; unclassified tools are no longer automatically retried.
+
+Les [preuves de réussite et budgets partagés](docs/VERIFIED-LEARNING-BUDGETS.md) distinguent une réponse terminée d’un objectif vérifié. La [connaissance documentaire](docs/CONNAISSANCE.md) applique droits, environnement, fraîcheur et provenance datée.

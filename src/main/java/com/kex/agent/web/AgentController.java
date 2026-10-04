@@ -115,11 +115,17 @@ class AgentController {
 
     private static ServerSentEvent<String> event(AgentEvent agentEvent) {
         return switch (agentEvent) {
+            case AgentEvent.Sources sources -> event("sources", sourcesJson(sources.sources()));
             case AgentEvent.Token token -> event("token", token.text());
             case AgentEvent.ToolCall call -> event("tool",
                     "{\"tool\":\"%s\",\"durationMillis\":%d,\"failed\":%b}"
                             .formatted(call.tool(), call.durationMillis(), call.failed()));
         };
+    }
+
+    private static String sourcesJson(List<com.kex.agent.knowledge.KnowledgeSource> sources) {
+        try { return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(sources); }
+        catch (com.fasterxml.jackson.core.JsonProcessingException ex) { throw new IllegalStateException("Sources non sérialisables", ex); }
     }
 
     private static ServerSentEvent<String> event(String name, String data) {
@@ -139,6 +145,7 @@ class AgentController {
         if (ex instanceof CallNotPermittedException) {
             return MODEL_CIRCUIT_OPEN;
         }
+        if (ex instanceof com.kex.agent.agent.BudgetExceededException) return ex.getMessage();
         log.error("Échec pendant le flux de chat", ex);
         return "Le flux s'est interrompu avant la fin de la réponse";
     }

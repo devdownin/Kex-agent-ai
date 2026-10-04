@@ -26,5 +26,14 @@ public record KnowledgeProperties(
         @DefaultValue("0.6") @DecimalMin("0.0") @DecimalMax("1.0") double similarityThreshold,
 
         /** Fichier de persistance du magasin en mémoire. Vide : la connaissance meurt avec le processus. */
-        @DefaultValue("") String storePath) {
+        @DefaultValue("") String storePath,
+        @DefaultValue("default") @jakarta.validation.constraints.NotBlank String environment,
+        @DefaultValue("P30D") java.time.Duration maxAge) {
+    public KnowledgeProperties(boolean enabled, int topK, double threshold, String path) {
+        this(enabled, topK, threshold, path, "default", java.time.Duration.ofDays(30));
+    }
+    @org.springframework.boot.context.properties.bind.ConstructorBinding
+    public KnowledgeProperties {
+        if (maxAge == null || maxAge.isNegative() || maxAge.isZero()) throw new IllegalArgumentException("Fraîcheur positive requise");
+    }
 }

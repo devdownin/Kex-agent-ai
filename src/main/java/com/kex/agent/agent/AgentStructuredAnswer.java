@@ -8,5 +8,10 @@ import java.util.Map;
 /** Mêmes métadonnées que {@link AgentAnswer}, pour la même raison. */
 public record AgentStructuredAnswer(String conversationId, Map<String, Object> content,
                                     List<AgentEvent.ToolCall> tools, AgentUsage usage,
-                                    String finishReason) {
+                                    String finishReason, List<com.kex.agent.knowledge.KnowledgeSource> sources) {
+    public AgentStructuredAnswer(String conversationId, Map<String, Object> content,
+            List<AgentEvent.ToolCall> tools, AgentUsage usage, String finishReason) {
+        this(conversationId, content, tools, usage, finishReason, List.of());
+    }
+    public AgentStructuredAnswer { sources = List.copyOf(sources); }
 }
