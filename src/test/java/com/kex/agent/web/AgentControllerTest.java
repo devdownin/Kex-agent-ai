@@ -47,6 +47,7 @@ import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @WebMvcTest(AgentController.class)
@@ -109,6 +110,20 @@ class AgentControllerTest {
         assertThat(response).bodyJson().extractingPath("$[0].connection").isEqualTo("kafka-explorer");
         assertThat(response).bodyJson().extractingPath("$[0].serverName").isEqualTo("kafka-explorer-mcp");
         assertThat(response).bodyJson().extractingPath("$[0].tools[0].name").isEqualTo("kex_list_topics");
+    }
+
+    @Test
+    void presente_les_services_d_une_connexion_mcp() {
+        given(toolCatalog.inspect("runbook")).willReturn(new McpServerInfo(
+                "runbook", "runbook-mcp", "1.0", "2025-06-18", true, null,
+                List.of(new McpToolInfo("search", "Rechercher une procédure", Map.of("type", "object")))));
+
+        var response = mvc.get().uri("/api/agent/mcp/servers/runbook/preview");
+        assertThat(response).hasStatusOk();
+        assertThat(response).bodyJson().extractingPath("$.serverName").isEqualTo("runbook-mcp");
+        assertThat(response).bodyJson().extractingPath("$.tools[0].description")
+                .isEqualTo("Rechercher une procédure");
+        verify(toolCatalog, never()).setEnabled("runbook", true);
     }
 
     @Test

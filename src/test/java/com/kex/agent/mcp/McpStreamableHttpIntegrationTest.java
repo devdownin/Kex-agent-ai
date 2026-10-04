@@ -81,6 +81,28 @@ class McpStreamableHttpIntegrationTest {
     }
 
     @Test
+    void inspecte_les_services_sans_activer_une_connexion_desactivee() {
+        String connection = "preview-faux";
+        catalog.register(new McpServerRegistration(connection, "HTTP",
+                "http://127.0.0.1:" + SERVER.port(), "/mcp", FakeMcpServer.TOKEN,
+                Map.of(), null, List.of(), Map.of(), false, Set.of("echo"), Map.of()));
+        try {
+            McpServerInfo preview = catalog.inspect(connection);
+            assertThat(preview.serverName()).isEqualTo("faux-serveur");
+            assertThat(preview.protocolVersion()).isEqualTo("2025-06-18");
+            assertThat(preview.tools()).extracting(McpToolInfo::name).containsExactly("echo");
+            assertThat(catalog.runtimeServers().stream()
+                    .filter(server -> server.connection().equals(connection)))
+                    .singleElement().satisfies(server -> assertThat(server.enabled()).isFalse());
+            assertThat(catalog.dynamicServers()).extracting(McpServerInfo::connection).doesNotContain(connection);
+            assertThat(catalog.diagnostics(connection).connected()).isFalse();
+        }
+        finally {
+            catalog.unregister(connection);
+        }
+    }
+
+    @Test
     void administre_une_connexion_runtime_et_applique_les_permissions() {
         McpServerRegistration registration = new McpServerRegistration(
                 "runtime-faux", "HTTP", "http://127.0.0.1:" + SERVER.port(), "/mcp",

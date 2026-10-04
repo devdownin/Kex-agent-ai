@@ -297,6 +297,29 @@ public class McpToolCatalog implements AutoCloseable {
         return definitions.keySet().stream().sorted().map(this::runtimeView).toList();
     }
 
+    /** Inspection ponctuelle : une connexion désactivée reste indisponible pour l'agent. */
+    public synchronized McpServerInfo inspect(String connection) {
+        McpServerRegistration definition = requireDynamic(connection);
+        McpSyncClient candidate = createClient(definition);
+        try {
+            candidate.initialize();
+            McpSchema.Implementation info = candidate.getServerInfo();
+            McpSchema.InitializeResult initialization = candidate.getCurrentInitializationResult();
+            return new McpServerInfo(connection, info == null ? null : info.name(),
+                    info == null ? null : info.version(),
+                    initialization == null ? null : initialization.protocolVersion(),
+                    candidate.isInitialized(), null,
+                    listToolsStrict(candidate).stream()
+                            .filter(tool -> isToolAllowed(connection, tool.name())).toList());
+        }
+        catch (RuntimeException ex) {
+            throw new McpServerUnavailableException(connection, ex);
+        }
+        finally {
+            closeClient(candidate);
+        }
+    }
+
     /** Conservé pour les clients de la première API runtime. */
     public List<String> dynamicConnectionNames() {
         return definitions.keySet().stream().sorted().toList();
