@@ -264,12 +264,12 @@ public class McpToolCatalog implements AutoCloseable {
                 else secretRotations.put(connection, previousRotation);
                 throw ex;
             }
+            catalogSnapshots.remove(connection);
             if (changed.enabled()) {
                 deactivate(connection);
                 install(connection, candidate);
             }
             else closeClient(candidate);
-            catalogSnapshots.remove(connection);
         }
         catch (RuntimeException ex) {
             closeClient(candidate);
