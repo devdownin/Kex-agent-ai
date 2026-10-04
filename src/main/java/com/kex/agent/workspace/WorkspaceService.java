@@ -95,18 +95,20 @@ public class WorkspaceService {
         return Flux.concat(Flux.just(event("request", json(running)), event("conversation", running.conversationId())),
                 source
                         .map(e -> {
-                            return switch (e) {
+                            synchronized (text) { return switch (e) {
                                 case AgentEvent.Token token -> { if (text.length() + token.text().length() > 64000) throw new IllegalStateException("Réponse trop longue"); text.append(token.text()); yield event("token", token.text()); }
                                 case AgentEvent.ToolCall tool -> { if (tools.size() >= 200) throw new IllegalStateException("Trop d’appels dans cette demande"); tools.add(tool); yield event("tool", json(tool)); }
                                 case AgentEvent.Sources evidence -> { sources.clear(); sources.addAll(evidence.sources()); yield event("sources", json(sources)); }
-                            };
+                            }; }
                         }), Flux.defer(() -> {
+                            synchronized (text) {
                             String status = tools.subList(newTools, tools.size()).stream().anyMatch(AgentEvent.ToolCall::failed) || text.isEmpty() ? "PARTIAL" : clarification(text.toString()) ? "NEEDS_INPUT" : "COMPLETE";
                             finalized.set(true); var result = finish(owner, running, turns, tools, sources, text.toString(), status, null, true);
                             return Flux.just(event("snapshot", json(result)), event("done", "response-complete"));
+                            }
                         }))
-                .onErrorResume(ex -> { if (finalized.compareAndSet(false, true)) finish(owner, running, turns, tools, sources, text.toString(), "ERROR", "Traitement interrompu. Aucun nouvel envoi automatique.", false); return Flux.just(event("error", "Traitement interrompu. Aucun nouvel envoi automatique.")); })
-                .doFinally(signal -> { if (finalized.compareAndSet(false, true)) finish(owner, running, turns, tools, sources, text.toString(), "INTERRUPTED", "Réception non confirmée. Vérifiez les actions déjà engagées avant de poursuivre.", false); });
+                .onErrorResume(ex -> { synchronized (text) { if (finalized.compareAndSet(false, true)) finish(owner, running, turns, tools, sources, text.toString(), "ERROR", "Traitement interrompu. Aucun nouvel envoi automatique.", false); return Flux.just(event("error", "Traitement interrompu. Aucun nouvel envoi automatique.")); } })
+                .doFinally(signal -> { synchronized (text) { if (finalized.compareAndSet(false, true)) finish(owner, running, turns, tools, sources, text.toString(), "INTERRUPTED", "Réception non confirmée. Vérifiez les actions déjà engagées avant de poursuivre.", false); } });
     }
     private WorkspaceRequest finish(String owner, WorkspaceRequest running, List<WorkspaceRequest.Turn> turns,
             List<AgentEvent.ToolCall> tools, List<KnowledgeSource> sources, String text, String status, String error, boolean completed) {
