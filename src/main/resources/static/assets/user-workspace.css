@@ -9,4 +9,4 @@
 
 .action-item{display:flex;flex-direction:column;gap:8px;min-width:0}.action-item .action-card{flex:1;width:100%}.favorite-card{display:flex;flex-direction:column;gap:12px;padding:20px;border:1px solid var(--line);border-radius:12px;overflow-wrap:anywhere}.approval-card h3,.approval-card h4{overflow-wrap:anywhere}.approval-card li{margin-bottom:20px}.approval-card ol{padding-left:24px}#review-dialog{max-height:90dvh;overflow:auto}#review-content .panel{padding:14px;margin:12px 0}
 
-#notification-preferences label{display:flex;align-items:center;gap:.7rem}#notification-preferences input[type=checkbox]{width:1.2rem;min-width:1.2rem;height:1.2rem}
+#notification-preferences label{display:flex;align-items:center;gap:.7rem}#notification-preferences input[type=checkbox]{width:1.2rem;min-width:1.2rem;height:1.2rem;margin:0;padding:0}#notification-list{overflow-wrap:anywhere}

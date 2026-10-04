@@ -90,6 +90,8 @@ try {
     await page.getByRole('link', { name: /^Notifications/ }).click(); await page.locator('#notifications').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#notification-list a[href^="#/request/"]').filter({ hasText: 'Résultat disponible' }).count(), 2, 'actual completed streams notify once each');
     assert.ok(await page.locator('#notification-list a').filter({ hasText: 'Approbation attendue' }).count() >= 2, 'server drafts request attention');
+    await page.locator('#notification-list a[href^="#/request/"]').first().click(); await page.locator('#detail').waitFor({ state: 'visible' });
+    await page.getByRole('link', { name: /^Notifications/ }).click();
     await page.locator('#read-notifications').click(); assert.equal(await page.locator('#notification-count').textContent(), '');
     await page.locator('#notify-result').uncheck(); await page.reload(); await page.getByText('Connecté : alpha', { exact: true }).waitFor();
     assert.equal(await page.locator('#notify-result').isChecked(), false, 'notification preferences persist');
