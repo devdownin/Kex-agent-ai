@@ -30,6 +30,11 @@
          en 11.0.25. Propriété documentée par Spring Boot pour avancer un composant géré sans
          attendre une version mineure du parent — publish.yml bloquait dessus, à raison. -->
     <tomcat.version>11.0.25</tomcat.version>
+    <!-- CVE-2026-89407, -89425, -68497, -91776 et -91777 : le scan de publication détecte
+         les deux générations de Jackson. Les BOM gardent leurs modules alignés, sans migration
+         de version mineure ni exclusion de vulnérabilité dans Trivy. -->
+    <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
+    <jackson-bom.version>3.1.7</jackson-bom.version>
   </properties>
 
   <dependencyManagement>

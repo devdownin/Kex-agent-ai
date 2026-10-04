@@ -238,6 +238,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Le même seuil que Publish doit passer sur la PR, avant un tag ou un accès aux registres.
+      - name: Scan the agent image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: kex-agent-ai:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
       # L'image doit démarrer sans serveur MCP joignable : c'est l'invariant que
       # l'initialisation paresseuse des clients MCP existe pour tenir.
       - name: Smoke test the image
