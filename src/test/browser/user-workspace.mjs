@@ -64,6 +64,12 @@ try {
     await page.locator('#prepare').click(); await page.getByText('Cette compétence a changé', { exact: false }).waitFor();
     assert.equal(posts.length, 0, 'preparing must not execute a skill');
     await page.locator('#close-action').click(); approved = true;
+    await page.getByRole('button', { name: /Procédure commandes/ }).click();
+    await page.locator('#action-subject').fill('commandes'); await page.locator('#skill-parameter-0').fill('orders-live');
+    await page.locator('#prepare').click();
+    assert.match(await page.locator('#prompt').inputValue(), /check \/ topic : orders-live/);
+    assert.equal(posts.length, 0);
+    await page.getByRole('link', { name: 'Actions prêtes à l’emploi', exact: true }).click();
     await page.getByRole('button', { name: /Vérifier un processus/ }).click();
     await page.locator('#action-subject').fill('commandes'); await page.locator('#prepare').click();
     await page.locator('#send').click(); await page.getByText('Réponse reçue', { exact: true }).waitFor();
