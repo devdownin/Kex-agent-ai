@@ -93,8 +93,8 @@ class SupervisionCycleIntegrationTest {
 
         // L'action est partie sur le réseau : c'est « pong », la réponse du serveur, qui remonte.
         assertThat(decisionsOf(report)).singleElement().satisfies(decision -> {
-            assertThat(decision.status()).isEqualTo(DecisionStatus.EXECUTED);
-            assertThat(decision.result()).isEqualTo("pong");
+            assertThat(decision.status()).isEqualTo(DecisionStatus.EXECUTED_UNVERIFIED);
+            assertThat(decision.result()).startsWith("pong").contains("Objectif non vérifié");
             assertThat(decision.resolvedBy()).isEqualTo("Agent");
             assertThat(decision.policyVersion()).isEqualTo("policy-v1");
         });

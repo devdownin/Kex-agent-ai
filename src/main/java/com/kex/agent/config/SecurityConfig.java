@@ -114,6 +114,7 @@ class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/agent/memory/*",
                                 "/api/agent/memory/summaries/*", "/api/agent/knowledge")
                                 .hasRole("ADMIN")
+                        .requestMatchers("/api/agent/tasks/**", "/api/agent/tasks").hasAnyRole("OPERATOR", "ADMIN")
                         .requestMatchers("/api/agent/**").hasAnyRole("OPERATOR", "ADMIN")
                         .requestMatchers(EndpointRequest.toAnyEndpoint()).hasRole("ADMIN")
                         .anyRequest().authenticated())

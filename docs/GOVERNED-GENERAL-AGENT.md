@@ -34,3 +34,12 @@ java -jar target/kex-agent-ai-*.jar
 Pour une image native, la compilation GraalVM est une étape de distribution optionnelle ; les transports MCP dynamiques et les modèles doivent être déclarés dans les hints de compilation de l'installation cible.
 
 Exemples non-Kafka : connecter le serveur MCP filesystem pour comparer des fichiers de livraison, GitHub en lecture seule pour diagnostiquer une release, ou un serveur SQL en lecture seule pour contrôler un rapprochement. Dans tous les cas, autonomie, seuils de confiance et audit restent les mêmes.
+
+## Fiabilité des exécutions
+
+Le parcours opt-in [Tâches](DURABLE-TASKS.md) ajoute des plans structurés, l'approbation du plan exact,
+les points de reprise persistés et la réconciliation des mutations incertaines. La supervision
+distingue désormais [l'action acceptée de son objectif vérifié](ACTION-VERIFICATION.md).
+Les [contrôles d'invocation](TOOL-CONTROLS.md) s'appliquent aux outils et une sélection bornée
+peut réduire le contexte exposé au modèle. Les [évaluations](AGENT-EVALUATIONS.md) comparent
+les résultats sur des scénarios répétés ; la CI ordinaire ne déclenche aucun appel fournisseur.

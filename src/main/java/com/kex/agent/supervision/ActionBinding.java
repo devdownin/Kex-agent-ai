@@ -4,6 +4,7 @@ package com.kex.agent.supervision;
 
 import java.util.Map;
 
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
@@ -13,5 +14,16 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param arguments arguments fixes ; {@code processId} et {@code decisionId} y sont ajoutés à
  *                  l'appel pour que l'outil sache sur quoi il agit
  */
-public record ActionBinding(String connection, String tool, @DefaultValue Map<String, Object> arguments) {
+public record ActionBinding(String connection, String tool, @DefaultValue Map<String, Object> arguments,
+                            VerificationBinding verification) {
+
+    @ConstructorBinding
+    public ActionBinding {
+        arguments = arguments == null ? Map.of() : Map.copyOf(arguments);
+    }
+
+    /** Existing configurations and callers remain executable, explicitly without outcome proof. */
+    public ActionBinding(String connection, String tool, Map<String, Object> arguments) {
+        this(connection, tool, arguments, null);
+    }
 }

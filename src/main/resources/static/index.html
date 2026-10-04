@@ -53,6 +53,7 @@
       <a class="nav-item" href="#/chat" data-view="chat" aria-label="Conversation">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4.5 5.5h15v11h-9.2L6 20v-3.5H4.5Z"/></svg>
         Conversation</a>
+      <a class="nav-item" href="#/tasks" data-view="tasks" aria-label="Tâches"><span class="nav-ico" aria-hidden="true">☑</span> Tâches</a>
       <a class="nav-item" href="#/activity" data-view="activity" aria-label="Activité">
         <svg class="nav-ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 12h3l2-5 4 10 2-5h3"/><circle cx="12" cy="12" r="9"/></svg>
         Activité</a>
@@ -757,6 +758,20 @@
         <div class="tiles" id="metric-tiles"></div>
         <pre class="dump" id="health-dump">—</pre>
       </section>
+    </section>
+
+    <section class="view" id="view-tasks" hidden>
+      <section class="panel">
+        <div class="panel-head"><h1>Tâches</h1><button type="button" class="ghost" id="refresh-tasks">Actualiser</button></div>
+        <p class="hint" id="task-note" role="status">Chargement des tâches…</p>
+        <form id="task-plan-form">
+          <label for="task-objective">Objectif et critère de réussite</label>
+          <textarea id="task-objective" rows="3" maxlength="2000" required placeholder="Décrivez le résultat attendu et le périmètre à examiner"></textarea>
+          <button type="submit" class="primary" id="task-plan-submit">Préparer un plan</button>
+        </form>
+        <div id="task-list" class="panel-actions" aria-label="Tâches disponibles"></div>
+      </section>
+      <section class="panel" id="task-detail" aria-label="Plan, progression et preuves"></section>
     </section>
 
     <!-- ══ Conversation ══ -->

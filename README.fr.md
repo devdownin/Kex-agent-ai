@@ -374,3 +374,15 @@ Le dashboard affiche les risques à venir ; les aides expliquent modes et scores
 liées ouvrent topics, groupes et processus, et l’actualisation à 60 s reste facultative.
 L’assistant de création de processus propose une série autorisée et enregistre l’association sans redémarrage. La fiche processus permet aussi de gérer les liens
 et d’examiner risques, échéances et qualité réalisée. Le YAML reste un export facultatif. Voir les [exemples de prompts et du wizard](docs/EXEMPLES.md#timesfm--démonstration-et-prompts-opérationnels).
+
+## Fiabilité et tâches durables
+
+- [Évaluations et seuils de régression](docs/AGENT-EVALUATIONS.md)
+- [Vérification indépendante des actions](docs/ACTION-VERIFICATION.md)
+- [Plans durables, approbations et reprise](docs/DURABLE-TASKS.md)
+- [Politiques d’invocation et sélection des outils](docs/TOOL-CONTROLS.md)
+
+La console Tâches distingue le plan proposé, son approbation, son exécution et sa réussite mesurée.
+Les mutations incertaines sont réconciliées sans rejeu. Les tâches et la sélection des outils s’activent explicitement.
+Après mise à jour, déclarer les véritables lectures avec `kex.agent.tools.rules.<name>.read-only=true`
+pour conserver les réessais MCP transitoires ; les outils non classés ne sont plus rejoués automatiquement.

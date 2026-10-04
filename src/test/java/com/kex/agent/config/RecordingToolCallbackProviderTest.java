@@ -49,6 +49,34 @@ class RecordingToolCallbackProviderTest {
         assertThat(wrap(callback("lag: 42", null)).call("{}", context)).contains("lag: 42");
     }
 
+    @Test
+    void la_politique_serveur_est_appliquee_avant_le_callback_meme_sans_contexte() {
+        AtomicBoolean called = new AtomicBoolean();
+        ToolCallback delegate = new ToolCallback() {
+            public ToolDefinition getToolDefinition() {
+                return DefaultToolDefinition.builder().name("restart").description("restart").inputSchema("{}").build();
+            }
+            public String call(String input) { called.set(true); return "ok"; }
+        };
+        var properties = new com.kex.agent.tools.ToolControlProperties(false, 12, 256, 1000,
+                Map.of("restart", new com.kex.agent.tools.ToolControlProperties.Rule(false, false,
+                        Map.of("/cluster", Set.of("staging")), Map.of())), java.util.List.of());
+        var policy = new com.kex.agent.tools.ToolInvocationPolicy(properties, new com.fasterxml.jackson.databind.ObjectMapper());
+        ToolCallback wrapped = new RecordingToolCallbackProvider(ToolCallbackProvider.from(delegate),
+                CircuitBreaker.ofDefaults("mcp-tool"), policy).getToolCallbacks()[0];
+        assertThatThrownBy(() -> wrapped.call("{\"cluster\":\"production\"}")).isInstanceOf(SecurityException.class);
+        assertThatThrownBy(() -> wrapped.call("{\"cluster\":\"production\"}", new ToolContext(Map.of())))
+                .isInstanceOf(SecurityException.class);
+        assertThat(called).isFalse();
+    }
+
+    @Test
+    void les_resultats_volumineux_restent_balises_et_portent_une_reference_de_troncature() {
+        String result = wrap(callback("x".repeat(15000), null)).call("{}");
+        assertThat(result).contains("TRUNCATED", "originalCharacters=15000", "sha256=", "trust=\"untrusted\"");
+        assertThat(result).hasSizeLessThan(12500);
+    }
+
     private static ToolCallback callback(String result, RuntimeException failure) {
         return new ToolCallback() {
             @Override

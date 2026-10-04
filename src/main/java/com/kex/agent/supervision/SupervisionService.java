@@ -271,7 +271,7 @@ public class SupervisionService {
                 (int) rejected,
                 // Aucun verdict humain : un taux calculé sur zéro serait un chiffre inventé.
                 ruled == 0 ? null : (double) approved / ruled,
-                (int) taken.stream().filter(d -> d.status() == DecisionStatus.EXECUTED).count(),
+                (int) taken.stream().filter(d -> d.status().actionAccepted()).count(),
                 (int) taken.stream().filter(d -> d.status() == DecisionStatus.FAILED).count(),
                 (int) taken.stream().filter(d -> d.status() == DecisionStatus.BLOCKED).count(),
                 (int) taken.stream().filter(d -> d.status() == DecisionStatus.EXPIRED).count(),
@@ -937,6 +937,19 @@ public class SupervisionService {
     private Decision execute(Decision decision, String actor) {
         ActionBinding binding = properties.actions().get(decision.capability());
         Instant at = clock.instant();
+        SupervisionPolicy current = policy.get();
+        Autonomy permitted = current.effectiveAutonomy(decision.capability());
+        if (permitted == Autonomy.FORBIDDEN || state.paused() || activeMaintenanceWindows().stream()
+                .anyMatch(window -> window.processId().equals(decision.processId()))) {
+            return decision.resolvedAs(DecisionStatus.BLOCKED,
+                    "Exécution bloquée par la politique actuelle, la pause ou une maintenance ("
+                            + current.version() + ")", actor, at);
+        }
+        if (AGENT.equals(actor) && (permitted != Autonomy.AUTOMATIC
+                || decision.confidence() < current.confidenceThresholdOf(decision.capability()))) {
+            return decision.withResult("Politique modifiée avant exécution : validation humaine requise ("
+                    + current.version() + ")");
+        }
         if (binding == null || !StringUtils.hasText(binding.connection()) || !StringUtils.hasText(binding.tool())) {
             // NOTIFY est la seule capacité dont WebhookNotifier sait tenir lieu d'outil : son
             // système cible est une personne, pas un système au schéma propre — voir sa javadoc.
@@ -945,8 +958,9 @@ public class SupervisionService {
             if (decision.capability() == Capability.NOTIFY) {
                 return notifier.send(decision.action(), decision.context())
                         .map(reason -> decision.resolvedAs(DecisionStatus.FAILED, reason, actor, at))
-                        .orElseGet(() -> decision.resolvedAs(DecisionStatus.EXECUTED,
-                                "Notifié par webhook", actor, at));
+                        .orElseGet(() -> decision.resolvedAs(DecisionStatus.EXECUTED_UNVERIFIED,
+                                "Notifié par webhook\nObjectif non vérifié : aucun vérificateur indépendant configuré",
+                                actor, at));
             }
             // Le droit d'agir et le moyen d'agir sont deux choses distinctes : sans binding, la
             // capacité reste inexécutable. `simulateUnboundActions` ne fabrique aucun appel d'outil
@@ -965,8 +979,11 @@ public class SupervisionService {
         try {
             McpToolResult result = toolCatalog.call(binding.connection(), binding.tool(), arguments);
             String output = String.join("\n", result.content());
-            return decision.resolvedAs(result.error() ? DecisionStatus.FAILED : DecisionStatus.EXECUTED,
-                    StringUtils.hasText(output) ? output : "Exécutée par " + actor, actor, at);
+            String receipt = StringUtils.hasText(output) ? output : "Exécutée par " + actor;
+            if (result.error()) {
+                return decision.resolvedAs(DecisionStatus.FAILED, receipt, actor, clock.instant());
+            }
+            return ActionVerification.verify(decision, binding, actor, clock.instant(), clock, toolCatalog, receipt);
         }
         catch (RuntimeException ex) {
             log.warn("Exécution de la décision {} en échec", decision.id(), ex);

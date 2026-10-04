@@ -1747,3 +1747,13 @@ disparition du dialogue (`{ state: 'hidden' }`) sur le sélecteur positif, jamai
 | `SupervisionServiceTest` (simulation, connaissance, seuils par processus, historique) | Une capacité sans outil lié se résout en `SIMULATED` quand demandé ; une note de connaissance citée se retrouve sur l'alerte ; un processus avec seuils propres les récite dans le prompt ; l'historique d'un processus suit son état à travers les cycles, refusé pour un processus inconnu |
 | `CycleAnalysisTest` (`knowledgeReference`) | Une note citée est reprise telle quelle ; son absence reste absente, jamais inventée |
 | `SupervisionControllerTest` (maintenance, historique) | Déclaration et levée d'une fenêtre, 404 sur un processus inconnu, contrat HTTP de la tendance par processus |
+
+## Plans et exécution vérifiable
+
+Le parcours [tâches durables](DURABLE-TASKS.md) persiste plan, approbation, version et résultats
+avant chaque effet. Les états de [vérification d’action](ACTION-VERIFICATION.md) complètent
+`EXECUTED` historique : action acceptée, résultat confirmé, postcondition échouée ou preuve
+indéterminée. Les [contrôles des outils](TOOL-CONTROLS.md) s’appliquent avant invocation et
+réservent les réessais aux lectures explicitement déclarées. Le prompt de gouvernance est
+conservé quand les procédures et souvenirs sont ajoutés au contexte. Les outils sont exposés
+par requête, sans catalogue par défaut qui contournerait une sélection vide.

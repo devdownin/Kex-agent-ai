@@ -17,6 +17,7 @@
 
   <properties>
     <java.version>25</java.version>
+    <excludedGroups>eval</excludedGroups>
     <springdoc.version>3.1.1</springdoc.version>
     <spotless.version>3.10.2</spotless.version>
     <jacoco.version>0.8.15</jacoco.version>
@@ -362,7 +363,7 @@
           <!-- Les évals de jugement du modèle (@Tag("eval")) appellent un vrai fournisseur, donc
                payant et non déterministe : aucune CI ne doit les joindre. À exécuter à la main
                avec -DexcludedGroups= pour lever l'exclusion. -->
-          <excludedGroups>eval</excludedGroups>
+          <excludedGroups>${excludedGroups}</excludedGroups>
         </configuration>
       </plugin>
     </plugins>

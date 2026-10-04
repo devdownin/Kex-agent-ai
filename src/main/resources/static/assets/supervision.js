@@ -59,7 +59,11 @@ const STOP_REASONS = {
 
 const DECISION_LABELS = {
   PENDING_APPROVAL: 'Validation requise',
-  EXECUTED: 'Exécutée',
+  EXECUTED: 'Exécutée (historique)',
+  EXECUTED_UNVERIFIED: 'Exécutée — objectif non vérifié',
+  VERIFIED: 'Résultat confirmé',
+  VERIFICATION_FAILED: 'Exécutée — objectif non atteint',
+  VERIFICATION_UNKNOWN: 'Exécutée — résultat indéterminé',
   REJECTED: 'Refusée',
   FAILED: 'Échec',
   EXPIRED: 'Expirée sans réponse',
@@ -69,7 +73,11 @@ const DECISION_LABELS = {
 
 const DECISION_STATES = {
   PENDING_APPROVAL: 'PENDING',
-  EXECUTED: 'OK',
+  EXECUTED: 'UNKNOWN',
+  EXECUTED_UNVERIFIED: 'UNKNOWN',
+  VERIFIED: 'OK',
+  VERIFICATION_FAILED: 'ERROR',
+  VERIFICATION_UNKNOWN: 'WARNING',
   REJECTED: 'UNKNOWN',
   FAILED: 'ERROR',
   EXPIRED: 'WARNING',
@@ -1276,8 +1284,8 @@ async function resolveDecision(decision, approve) {
     const result = await api(`${BASE}/decisions/${encodeURIComponent(decision.id)}/${approve ? 'approve' : 'reject'}`,
       { method: 'POST', body });
     toast(`${decision.action} — ${DECISION_LABELS[result.status] || result.status}`,
-      result.status === 'FAILED' ? 'error' : undefined);
-    if (approve && result.status === 'EXECUTED' && before) {
+      ['FAILED', 'VERIFICATION_FAILED'].includes(result.status) ? 'error' : undefined);
+    if (approve && ['EXECUTED', 'EXECUTED_UNVERIFIED', 'VERIFIED', 'VERIFICATION_FAILED', 'VERIFICATION_UNKNOWN'].includes(result.status) && before) {
       remember('kex.agent.action-verification', {
         decisionId: decision.id,
         processId: decision.processId,
@@ -1318,7 +1326,7 @@ export async function decisions() {
     const matching = scoped.filter((decision) => state === 'ALL'
       || (state === 'PENDING' && decision.status === 'PENDING_APPROVAL')
       || (state === 'FAILED' && ['FAILED', 'EXPIRED'].includes(decision.status))
-      || (state === 'RESOLVED' && ['EXECUTED', 'REJECTED', 'BLOCKED', 'SIMULATED'].includes(decision.status)));
+      || (state === 'RESOLVED' && ['EXECUTED', 'EXECUTED_UNVERIFIED', 'VERIFIED', 'VERIFICATION_FAILED', 'VERIFICATION_UNKNOWN', 'REJECTED', 'BLOCKED', 'SIMULATED'].includes(decision.status)));
     if (!scoped.length) return empty('Aucune décision dans ce contexte.', 'Élargissez la période ou choisissez tous les processus.',
       { href: '#/overview', label: 'Lancer une analyse' });
     if (!matching.length) return empty('Aucune décision dans cette vue.', 'Choisissez un autre filtre.');
