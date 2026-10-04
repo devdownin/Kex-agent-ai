@@ -4,12 +4,12 @@
 
 ### Stop asking AI to guess. Give it real tools.
 
-**A production-minded AI agent built with Java 25, Spring Boot 4, Spring AI 2 and MCP.**
+**A production-minded AI agent built with Java 21, Spring Boot 4, Spring AI 2 and MCP.**
 
 [![CI](https://github.com/devdownin/Kex-agent-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/devdownin/Kex-agent-ai/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/devdownin/Kex-agent-ai/actions/workflows/codeql.yml/badge.svg)](https://github.com/devdownin/Kex-agent-ai/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/devdownin/Kex-agent-ai/badge)](https://scorecard.dev/viewer/?uri=github.com/devdownin/Kex-agent-ai)
-[![Java 25](https://img.shields.io/badge/Java-25-orange)](pom.xml)
+[![Java 21](https://img.shields.io/badge/Java-21-orange)](pom.xml)
 [![Spring Boot 4.1](https://img.shields.io/badge/Spring_Boot-4.1-6DB33F?logo=springboot&logoColor=white)](pom.xml)
 [![Spring AI 2.0](https://img.shields.io/badge/Spring_AI-2.0-6DB33F)](pom.xml)
 [![MCP](https://img.shields.io/badge/MCP-stdio_·_SSE_·_streamable--HTTP-5A45FF)](docs/MCP.md)
@@ -113,7 +113,7 @@ curl -X POST localhost:8081/api/agent/chat \
 Or open **http://localhost:8081** for the **Control Center** — the console the agent serves itself.
 Paste the same bearer once; it lives in `sessionStorage` and never leaves the browser.
 
-No Docker? [Run it from source](docs/CONFIGURATION.md#running-from-source) — JDK 25 and `./mvnw spring-boot:run`.
+No Docker? [Run it from source](docs/CONFIGURATION.md#running-from-source) — JDK 21 and `./mvnw spring-boot:run`.
 
 ## 🧭 The Control Center
 
@@ -354,7 +354,7 @@ the agent discovers the stub, its tool, and calls it through the network with th
 
 | Component | Version |
 |---|---|
-| Java | 25 |
+| Java | 21 |
 | Spring Boot | 4.1.1 |
 | Spring AI | 2.0.1 |
 | Model | Anthropic, or any OpenRouter model — one variable apart |
