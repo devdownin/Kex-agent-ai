@@ -13,6 +13,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -305,12 +306,12 @@ public class McpToolCatalog implements AutoCloseable {
             candidate.initialize();
             McpSchema.Implementation info = candidate.getServerInfo();
             McpSchema.InitializeResult initialization = candidate.getCurrentInitializationResult();
+            List<McpToolInfo> tools = listToolsStrict(candidate);
             return new McpServerInfo(connection, info == null ? null : info.name(),
                     info == null ? null : info.version(),
                     initialization == null ? null : initialization.protocolVersion(),
                     candidate.isInitialized(), null,
-                    listToolsStrict(candidate).stream()
-                            .filter(tool -> isToolAllowed(connection, tool.name())).toList());
+                    tools.stream().filter(tool -> isToolAllowed(connection, tool.name())).toList(), tools.size());
         }
         catch (RuntimeException ex) {
             throw new McpServerUnavailableException(connection, ex);
@@ -840,11 +841,12 @@ public class McpToolCatalog implements AutoCloseable {
         McpSchema.Implementation info = client.getServerInfo();
         McpSchema.InitializeResult initialization = client.getCurrentInitializationResult();
         CircuitBreaker breaker = circuitBreakers.get(connection);
+        List<McpToolInfo> tools = listTools(client);
         return new McpServerInfo(connection, info != null ? info.name() : null,
                 info != null ? info.version() : null,
                 initialization != null ? initialization.protocolVersion() : null,
                 client.isInitialized(), breaker == null ? null : breaker.getState().name(),
-                listTools(client).stream().filter(tool -> isToolAllowed(connection, tool.name())).toList());
+                tools.stream().filter(tool -> isToolAllowed(connection, tool.name())).toList(), tools.size());
     }
 
     private static String connectionName(McpSyncClient client) {
@@ -854,7 +856,7 @@ public class McpToolCatalog implements AutoCloseable {
         return separator < 0 ? clientInfo.name() : clientInfo.name().substring(separator + CLIENT_NAME_SEPARATOR.length());
     }
 
-    private static List<McpToolInfo> listTools(McpSyncClient client) {
+    private List<McpToolInfo> listTools(McpSyncClient client) {
         if (client == null || !client.isInitialized()) return List.of();
         try {
             return listToolsStrict(client);
@@ -865,10 +867,19 @@ public class McpToolCatalog implements AutoCloseable {
         }
     }
 
-    private static List<McpToolInfo> listToolsStrict(McpSyncClient client) {
+    private List<McpToolInfo> listToolsStrict(McpSyncClient client) {
         if (client == null || !client.isInitialized()) return List.of();
         return client.listTools().tools().stream()
-                .map(tool -> new McpToolInfo(tool.name(), tool.description(), tool.inputSchema()))
+                .map(tool -> {
+                    // Les annotations sont des déclarations du serveur, distinctes de la politique Kex.
+                    var declared = objectMapper.valueToTree(tool).path("annotations");
+                    Map<String, Boolean> annotations = new LinkedHashMap<>();
+                    for (String hint : List.of("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")) {
+                        if (declared.path(hint).isBoolean()) annotations.put(hint, declared.path(hint).booleanValue());
+                    }
+                    return new McpToolInfo(tool.name(), tool.description(), tool.inputSchema(), Map.copyOf(annotations),
+                            isReadOnly(connectionName(client), tool.name()));
+                })
                 .toList();
     }
 

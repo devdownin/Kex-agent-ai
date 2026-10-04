@@ -103,6 +103,40 @@ class McpStreamableHttpIntegrationTest {
     }
 
     @Test
+    void presente_les_effets_declares_et_distingue_un_catalogue_filtre() throws IOException {
+        try (FakeMcpServer annotated = new FakeMcpServer().withToolsList("""
+                {"tools":[{"name":"search","description":"Rechercher les topics",
+                  "inputSchema":{"type":"object","required":["topic"],
+                    "properties":{"topic":{"type":"string","description":"Topic à examiner"}}},
+                  "annotations":{"readOnlyHint":true,"destructiveHint":false}}]}
+                """)) {
+            String connection = "preview-annotations";
+            catalog.register(new McpServerRegistration(connection, "HTTP",
+                    "http://127.0.0.1:" + annotated.port(), "/mcp", FakeMcpServer.TOKEN,
+                    Map.of(), null, List.of(), Map.of(), false, Set.of(), Map.of()));
+            try {
+                McpServerInfo preview = catalog.inspect(connection);
+                assertThat(preview.reportedToolCount()).isEqualTo(1);
+                assertThat(preview.tools()).singleElement().satisfies(tool -> {
+                    assertThat(tool.annotations()).containsEntry("readOnlyHint", true)
+                            .containsEntry("destructiveHint", false);
+                    assertThat(tool.readOnlyByPolicy()).isFalse();
+                    assertThat(tool.inputSchema()).containsEntry("required", List.of("topic"));
+                });
+                catalog.update(connection, new McpServerRegistration(connection, "HTTP",
+                        "http://127.0.0.1:" + annotated.port(), "/mcp", null,
+                        Map.of(), null, List.of(), Map.of(), false, Set.of("not-authorized"), Map.of()));
+                McpServerInfo filtered = catalog.inspect(connection);
+                assertThat(filtered.tools()).isEmpty();
+                assertThat(filtered.reportedToolCount()).isEqualTo(1);
+            }
+            finally {
+                catalog.unregister(connection);
+            }
+        }
+    }
+
+    @Test
     void administre_une_connexion_runtime_et_applique_les_permissions() {
         McpServerRegistration registration = new McpServerRegistration(
                 "runtime-faux", "HTTP", "http://127.0.0.1:" + SERVER.port(), "/mcp",
