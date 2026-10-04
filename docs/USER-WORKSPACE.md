@@ -37,28 +37,40 @@ leur date d’observation et leur extrait, lorsqu’ils sont fournis par l’API
 
 **Arrêter la réception** ferme le flux côté navigateur. Des actions déjà engagées peuvent avoir
 abouti : l’écran le rappelle. Aucun échec ou interruption ne déclenche de nouvel envoi automatique.
-Un rechargement classe une demande encore en cours comme réception interrompue.
+Les anciennes demandes locales encore en cours sont classées comme réception interrompue après rechargement. Pour les nouvelles demandes serveur, l’état enregistré est consulté sans rejouer le prompt. Une réception serveur restée sans fin confirmée pendant dix minutes est classée comme interrompue après reprise.
 
 ## Historique et console experte
 
-**Mes demandes** conserve jusqu’à 20 demandes et 40 tours par demande dans `sessionStorage`,
-séparément pour chaque couple locataire/utilisateur. L’historique appartient à cet onglet,
-ne contient pas le code d’accès et n’est pas un stockage partagé entre appareils ou répliques.
-Un changement de compte efface les données affichées et invalide les réponses réseau tardives.
+**Mes demandes** consulte les 100 demandes serveur les plus récentes. Elles sont privées au compte,
+au locataire et à ses autorités authentifiées : une autre personne du même locataire ou un rôle
+modifié ne reçoit pas les transcriptions précédentes. Un autre appareil retrouve la conversation,
+son contexte et les résultats enregistrés après connexion. La liste contient un aperçu ; ouvrir
+une demande charge les tours complets. La réception active sur un autre appareil est actualisée
+sans relancer le modèle. Deux reprises simultanées sont protégées par révision.
+
+Le stockage local utilise `kex.agent.workspace.storage-directory` (par défaut
+`${user.home}/.kex/workspace`) et des fichiers atomiques privés, pour une instance. Le profil
+`shared-memory` utilise PostgreSQL, la migration V7 et une mise à jour conditionnelle SQL.
+Le flux serveur enregistre le début, les sources, les outils et son issue, y compris annulation
+ou erreur. Les réponses sont bornées à 64000 caractères, les conversations à 40 tours et
+120000 caractères de transcription ; les tours les plus anciens peuvent être retirés.
+
+Les anciennes demandes restent locales à leur onglet ; elles ne sont pas importées comme des
+preuves serveur. Un serveur ancien sans ces API conserve ce mode local, signalé explicitement.
+Le code d’accès reste dans l’onglet. Changer de compte efface les données affichées et invalide
+les réponses réseau tardives.
 
 **Examiner dans la console experte** transfère la même conversation et sa transcription via
 un passage local à l’onglet. La console vérifie à nouveau l’identité avant d’afficher le contenu.
 Elle ne copie pas ces demandes dans son ancien historique global. Les échanges supplémentaires
 sur cette conversation alimentent l’historique isolé ; leur résultat est conservativement marqué
-partiel, la console historique ne vérifiant pas le signal de fin du flux. Au retour à `/app`,
-les échanges sont disponibles dans **Mes demandes**. Le transfert n’est proposé qu’une fois la
+partiel, la console historique ne vérifiant pas le signal de fin du flux. Au retour à `/app`, les échanges de la console restent dans la copie locale. Le serveur de l’espace utilisateur conserve les échanges effectués via son propre flux ; il ne transforme pas une copie locale en résultat serveur. Le transfert n’est proposé qu’une fois la
 réception terminée. Un simple lien vers la console ouvre sa conversation habituelle.
 
 ## Accès et compatibilité
 
 Le HTML et les ressources statiques sont publics et inertes. Les appels à l’API restent protégés.
-Le rôle `CHAT` peut lire uniquement `GET /api/agent/skills/available`, en plus de ses routes de
-chat et d’identité. Les autres routes de compétences gardent leurs droits précédents.
+Le rôle `CHAT` peut lire `GET /api/agent/skills/available`, son historique privé et les détails de ses demandes, et appeler le flux utilisateur, en plus de ses routes de chat et d’identité. Associer un plan exige OPERATOR/ADMIN et vérifie le locataire du plan. Les autres routes de compétences gardent leurs droits précédents.
 Si les compétences sont désactivées, les demandes guidées et le prompt libre restent disponibles.
 Le code d’accès utilise le stockage de session déjà partagé avec la console. Les modes clair et
 sombre suivent le système ; les parcours sont conçus pour clavier et écran mobile.
@@ -144,3 +156,37 @@ Le centre **Notifications** signale les résultats reçus (y compris partiels, s
 Les trois catégories peuvent être désactivées indépendamment. Les alertes du navigateur sont facultatives, nécessitent un clic explicite pour demander l’autorisation puis l’activation de la préférence, et apparaissent uniquement lorsque l’onglet est masqué. Leur contenu reste générique. Un refus d’autorisation laisse le centre interne accessible. Changer de compte ferme les alertes ouvertes et efface les informations affichées.
 
 La page doit rester ouverte et le navigateur doit autoriser son exécution en arrière-plan. Il ne s’agit pas de notifications push après fermeture. Les plans sont consultés environ toutes les 30 secondes avec les droits OPERATOR/ADMIN existants (5 secondes pour un plan actif dans un onglet visible) ; un serveur indisponible arrête ces consultations jusqu’à l’actualisation. Aucun courriel ni message externe n’est envoyé.
+
+## Contexte et pièces jointes
+
+Dans **Nouvelle demande**, ouvrir **Ajouter du contexte ou des fichiers**. Renseigner le processus,
+la période et l’environnement. Les noms de processus accessibles sont suggérés aux opérateurs ;
+la saisie libre reste possible. Le résumé du contexte reste visible avant **Lancer**.
+
+Joindre jusqu’à trois fichiers texte UTF-8 (`.txt`, `.csv`, `.json`, `.md`, `.log`, `.yaml`, `.yml`),
+50 Ko et 5000 caractères maximum chacun. Un aperçu et un bouton de retrait permettent de vérifier
+les données envoyées. Les formats PDF, images et tableurs binaires ne sont pas extraits dans ce
+parcours. Le formulaire refuse un ensemble demande/contexte supérieur à 30000 caractères ;
+le serveur valide les champs, les pièces jointes et le prompt final de 32000 caractères maximum.
+Les fichiers sont des données non fiables, sans pouvoir d’approbation ni droits supplémentaires.
+Le contexte initial reste lié à la conversation ; préparer une nouvelle demande permet de le changer.
+
+## Interventions et bilan
+
+**À suivre** regroupe les précisions nécessaires, les plans à approuver ou examiner, et les résultats
+non encore examinés. Les liens ouvrent les demandes ou les plans et ne déclenchent pas d’action.
+**Marquer ce résultat comme examiné** enlève son intervention de cette vue sur ce navigateur ;
+ce geste ne valide pas l’objectif et n’approuve aucun plan. Les plans restent soumis à leurs états
+serveur et aux confirmations existantes.
+
+Le bilan de fin réunit faits rapportés, limites, sources disponibles et prochaine action proposée.
+Une réponse complète demeure distincte d’un objectif vérifié. Seul l’état `VERIFIED` d’un plan
+serveur associé permet d’afficher la confirmation de son critère final, avec accès à ses preuves.
+
+## Trouver une compétence par besoin
+
+Le catalogue propose une recherche dans les titres, descriptions et procédures, et quatre
+regroupements indicatifs : vérifier/surveiller, comprendre/rechercher, préparer un bilan et autres
+besoins. Les cartes indiquent les informations à préparer et un exemple de résultat attendu issu
+des vérifications déclarées. Ces regroupements ne remplacent pas la revue de la procédure ni sa
+revalidation avant envoi.

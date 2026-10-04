@@ -44,6 +44,7 @@ class RateLimitFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String uri = request.getRequestURI();
         boolean limited = uri.startsWith(CHAT_PATH)
+                || ("POST".equals(request.getMethod()) && uri.equals("/api/agent/workspace/requests/stream"))
                 || ("POST".equals(request.getMethod()) && PATH_MATCHER.match(DIRECT_TOOL_CALL_PATTERN, uri));
         return !limited;
     }

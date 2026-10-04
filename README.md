@@ -443,3 +443,6 @@ The user workspace also offers server-backed plans for OPERATOR/ADMIN review, wi
 
 
 Preferences in the notification center control alerts for results, clarification requests and pending approvals. Browser alerts require explicit permission and contain no request details. Notifications work while the page stays open.
+
+
+The user workspace supports explicit process/period/environment context and previewed text attachments, an attention queue, completion summaries, private server history across devices, and searchable skills grouped by user need. Server history follows authenticated account/tenant/authority boundaries, uses atomic local files or the shared-memory JDBC store, and never resumes a prompt automatically.

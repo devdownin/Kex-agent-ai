@@ -21,6 +21,7 @@
   <a href="#/actions" data-page="actions">Actions prêtes à l’emploi</a>
   <a href="#/approvals" data-page="approvals" id="approvals-link" hidden>Plans à valider</a>
   <a href="#/requests" data-page="requests">Mes demandes</a>
+  <a href="#/attention" data-page="attention">À suivre <span id="attention-count"></span></a>
   <a href="#/notifications" data-page="notifications">Notifications <span id="notification-count"></span></a>
 </nav>
 <main id="main">
@@ -31,6 +32,15 @@
     <form id="request-form" class="panel">
       <label for="prompt">Votre demande</label>
       <textarea id="prompt" rows="4" required maxlength="24000" placeholder="Exemple : vérifie que les commandes arrivent bien dans notre système."></textarea>
+      <details id="request-context"><summary>Ajouter du contexte ou des fichiers</summary>
+        <label for="context-process">Processus concerné</label><input id="context-process" list="process-options" maxlength="500" placeholder="Nom ou identifiant"><datalist id="process-options"></datalist>
+        <label for="context-period">Période</label><input id="context-period" maxlength="500" placeholder="Exemple : depuis ce matin">
+        <label for="context-environment">Environnement</label><input id="context-environment" maxlength="200" placeholder="Exemple : production">
+        <label for="context-files">Pièces jointes texte</label><input id="context-files" type="file" multiple accept=".txt,.csv,.json,.md,.log,.yaml,.yml">
+        <p class="muted">3 fichiers maximum, 5000 caractères par fichier. Formats texte, CSV, JSON, Markdown, journaux et YAML. Le contenu sera envoyé à Kex avec votre demande.</p>
+        <div id="context-preview"></div><p id="context-error" role="alert"></p>
+      </details>
+      <p id="context-summary" role="status"></p>
       <p id="selected-action" class="muted" hidden></p>
       <div class="row"><button class="primary" id="send" type="submit" disabled>Lancer</button><span class="muted">Kex vous demandera les précisions nécessaires.</span></div>
     </form>
@@ -43,6 +53,9 @@
     <h2>Demandes guidées</h2><p class="muted">Ces modèles préparent votre demande. Ils ne lancent aucune action directement.</p>
     <div id="guided" class="actions-grid"></div>
     <h2>Compétences de votre équipe</h2><p class="muted">Procédures approuvées et encore valides, proposées pour votre espace.</p>
+    <label for="skill-search">Rechercher une compétence</label><input id="skill-search" type="search" placeholder="Exemple : commandes, incident, bilan">
+    <label for="skill-category">Votre besoin</label><select id="skill-category"><option value="all">Tous les besoins</option><option value="monitor">Vérifier et surveiller</option><option value="investigate">Comprendre et rechercher</option><option value="report">Résumer et préparer un bilan</option><option value="other">Autres besoins</option></select>
+    <p class="muted">Regroupement indicatif d’après le titre et la description ; examinez la procédure avant utilisation.</p>
     <div id="skills" class="actions-grid"></div><button id="refresh-skills" type="button">Actualiser les compétences</button>
   </section>
   <section id="approvals" hidden aria-labelledby="approvals-title">
@@ -52,9 +65,10 @@
   </section>
   <section id="requests" hidden aria-labelledby="requests-title">
     <h1 id="requests-title">Mes demandes</h1>
-    <p class="muted">Historique de cet onglet. Il reste disponible en passant à la console experte ; il ne constitue pas un journal partagé.</p>
+    <p id="history-note" class="muted">Historique privé à votre compte et votre espace.</p><button id="refresh-requests" type="button">Actualiser mes demandes</button>
     <div id="request-list"></div>
   </section>
+  <section id="attention" hidden aria-labelledby="attention-title"><h1 id="attention-title">Ce qui demande votre attention</h1><p class="intro">Répondez aux précisions, examinez les plans et vérifiez les résultats avant de poursuivre.</p><button id="refresh-attention" type="button">Actualiser</button><div id="attention-list"></div></section>
   <section id="notifications" hidden aria-labelledby="notifications-title">
     <h1 id="notifications-title">Notifications</h1>
     <p class="intro">Retrouvez ce qui demande votre attention. Une notification ouvre la demande ou les plans, sans lancer d’action.</p>
@@ -80,6 +94,8 @@
     <div class="row"><button id="stop" type="button" hidden>Arrêter la réception</button><button id="open-expert" type="button">Examiner dans la console experte</button></div>
     <div class="row"><button id="favorite-request" type="button">Ajouter cette demande aux favoris</button><button id="reprepare-request" type="button">Préparer une nouvelle demande</button><button id="prepare-plan" type="button" hidden>Préparer un plan à valider</button></div>
     <section id="linked-plan-section" hidden aria-label="Plan associé à cette demande"><h2>Plan associé</h2><button id="refresh-linked-plan" type="button">Actualiser ce plan</button><p id="linked-plan-note" role="status"></p><div id="linked-plan"></div></section>
+    <section id="completion-summary" class="panel" hidden aria-label="Bilan de la demande"></section>
+    <details id="saved-context" hidden><summary>Contexte envoyé avec cette demande</summary><div id="saved-context-content"></div></details>
     <div id="turns"></div>
     <form id="followup-form" class="panel"><label for="followup">Préciser ou poursuivre votre demande</label><textarea id="followup" rows="2" required maxlength="24000"></textarea><button class="primary" id="followup-send" type="submit">Envoyer</button></form>
   </section>

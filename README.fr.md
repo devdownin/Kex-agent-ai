@@ -400,3 +400,6 @@ L’espace utilisateur permet aussi aux rôles OPERATOR/ADMIN de valider des pla
 
 
 Le centre de notifications propose des préférences pour les résultats, précisions nécessaires et approbations attendues. Les alertes du navigateur nécessitent une autorisation explicite et ne contiennent aucun détail de demande. Elles fonctionnent tant que la page reste ouverte.
+
+
+L’espace utilisateur propose un contexte processus/période/environnement avec aperçu des fichiers texte, une vue des interventions attendues, un bilan de fin, un historique serveur privé entre appareils et un catalogue de compétences organisé par besoin. L’historique respecte le compte, le locataire et les autorités authentifiées ; il utilise des fichiers locaux atomiques ou JDBC avec le profil shared-memory. Retrouver une demande ne relance jamais son prompt.
