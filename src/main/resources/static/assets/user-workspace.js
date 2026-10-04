@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 import { $, api, credentials, el, failure, headers } from './core.js';
+import { userApprovals } from './user-approvals.js';
 import { events } from './user-stream.js';
 import { activity, parameterFields, parseResponse, responsePrompt, skillSignature } from './user-experience.js';
 
@@ -19,9 +20,72 @@ let selected = null;
 let fields = [];
 let preparedSkill = null;
 let preparing = false;
+let preparedDraft = null;
+let favorites = [];
+const approvals = userApprovals({ onPlan(requestId, taskId) {
+  const request = history.find(r => r.id === requestId);
+  if (request) { request.taskId = taskId; save(); if (current === request) drawDetail(); }
+} });
 let epoch = 0;
 let skillEpoch = 0;
 const storageKey = () => `kex.agent.user.requests.${encodeURIComponent(identity)}`;
+const favoriteKey = () => `kex.agent.user.favorites.${encodeURIComponent(identity)}`;
+function saveFavorites() {
+  try { localStorage.setItem(favoriteKey(), JSON.stringify(favorites)); }
+  catch { $('#notice').textContent = 'Les favoris restent en mémoire : leur enregistrement sur ce navigateur a échoué.'; }
+  drawFavorites();
+}
+function loadFavorites() {
+  try { const rows = JSON.parse(localStorage.getItem(favoriteKey()) || '[]'); favorites = Array.isArray(rows) ? rows.filter(f => f && typeof f.key === 'string' && typeof f.title === 'string' && ['action', 'request'].includes(f.type)).slice(0, 20) : []; }
+  catch { favorites = []; }
+}
+function toggleFavorite(favorite) {
+  if (!identity) { $('#notice').textContent = 'Connectez-vous pour conserver vos favoris.'; return; }
+  const index = favorites.findIndex(f => f.key === favorite.key);
+  if (index >= 0) favorites.splice(index, 1);
+  else { favorites.unshift(favorite); favorites = favorites.slice(0, 20); }
+  saveFavorites(); if (current) drawDetail();
+}
+function drawFavorites() {
+  const host = $('#favorites'); host.replaceChildren();
+  favorites.forEach(f => {
+    const item = el('article', 'favorite-card');
+    item.append(el('strong', null, f.title), button('Préparer', () => prepareFavorite(f)), button('Retirer des favoris', () => toggleFavorite(f)));
+    host.append(item);
+  });
+  if (!favorites.length) host.append(el('p', 'muted', identity ? 'Ajoutez une action ou une demande à vos favoris pour la retrouver ici.' : 'Connectez-vous pour retrouver vos favoris.'));
+}
+async function prepareFavorite(f) {
+  if (f.type === 'request') return reprepare(f.request);
+  if (f.skillId) {
+    const own = epoch;
+    try { const rows = await api('/api/agent/skills/available'); if (own !== epoch) return;
+      const action = rows.find(r => r.id === f.skillId);
+      if (!action) throw new Error('Cette compétence n’est plus disponible. Actualisez le catalogue.');
+      openAction(action);
+    } catch (error) { if (own === epoch) $('#notice').textContent = error.message; }
+  } else { const action = STARTERS.find(s => s.title === f.title); if (action) openAction(action); }
+}
+async function reprepare(request) {
+  if (!request || !identity || active) return;
+  const own = epoch; $('#notice').textContent = '';
+  try {
+    if (request.draft?.skillId) {
+      const rows = await api('/api/agent/skills/available'); if (own !== epoch) return;
+      const skill = rows.find(s => s.id === request.draft.skillId);
+      if (!skill || skillSignature(skill) !== request.draft.signature) throw new Error('La compétence de cette demande a changé ou n’est plus disponible. Choisissez-la dans le catalogue pour examiner sa nouvelle version.');
+      if (!request.draft.edited) { openAction(skill, request.draft); return; }
+      preparedSkill = skill;
+    }
+    const action = STARTERS.find(a => a.title === request.draft?.actionTitle);
+    if (action && !request.draft.edited) { openAction(action, request.draft); return; }
+    const message = request.turns?.find(t => t.role === 'user')?.text;
+    if (typeof message !== 'string') throw new Error('La demande d’origine n’est pas disponible.');
+    preparedDraft = request.draft ? structuredClone(request.draft) : null; if (!request.draft?.skillId) preparedSkill = null; $('#prompt').value = message;
+    $('#selected-action').textContent = 'Nouvelle demande préparée. Vérifiez les paramètres et la période avant de la lancer.'; $('#selected-action').hidden = false;
+    location.hash = '#/new'; route(); $('#prompt').focus();
+  } catch (error) { if (own === epoch) $('#notice').textContent = error.message; }
+}
 function save() {
   if (!identity) return;
   try { sessionStorage.setItem(storageKey(), JSON.stringify(history.slice(0, 20))); }
@@ -41,14 +105,17 @@ function date(at) { return at ? new Date(at).toLocaleString('fr-FR') : 'Date non
 function route() {
   const name = location.hash.slice(2) || 'new';
   const request = name.startsWith('request/') ? history.find(r => r.id === name.slice(8)) : null;
-  const page = request ? 'detail' : ['new', 'actions', 'requests'].includes(name) ? name : 'new';
-  ['new', 'actions', 'requests', 'detail'].forEach(id => { $('#' + id).hidden = id !== page; });
+  const page = request ? 'detail' : ['new', 'actions', 'requests', 'approvals'].includes(name) ? name : 'new';
+  ['new', 'actions', 'requests', 'approvals', 'detail'].forEach(id => { $('#' + id).hidden = id !== page; });
   document.querySelectorAll('[data-page]').forEach(a => {
     if (a.dataset.page === (page === 'detail' ? 'requests' : page)) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
   current = request;
   if (request) drawDetail();
+  approvals.request(request);
+  if (page === 'approvals') approvals.refresh();
+  if (page === 'actions') drawFavorites();
   if (page === 'requests') drawHistory();
 }
 function drawHistory() {
@@ -63,6 +130,10 @@ function drawHistory() {
 function drawDetail() {
   if (!current) return;
   $('#detail-title').textContent = current.title;
+  $('#favorite-request').textContent = favorites.some(f => f.key === 'request:' + current.id) ? 'Retirer cette demande des favoris' : 'Ajouter cette demande aux favoris';
+  $('#favorite-request').disabled = !!active || !identity;
+  $('#reprepare-request').disabled = !!active || !identity;
+  $('#prepare-plan').disabled = !!active || !!current.taskId;
   $('#run-status').textContent = LABELS[current.status] || 'État non disponible';
   const running = active?.request === current;
   $('#stop').hidden = !running;
@@ -105,13 +176,14 @@ function drawDetail() {
   }
 }
 function card(action) {
-  const b = button('', () => openAction(action), 'action-card'); b.append(el('strong', null, action.title), el('span', null, action.description || 'Utiliser cette procédure approuvée avec votre contexte.')); return b;
+  const b = button('', () => openAction(action), 'action-card'); b.append(el('strong', null, action.title), el('span', null, action.description || 'Utiliser cette procédure approuvée avec votre contexte.')); const item = el('article', 'action-item');
+  item.append(b, button('Ajouter aux favoris', () => toggleFavorite({ key: action.id ? 'skill:' + action.id : 'starter:' + action.title, type: 'action', title: action.title, skillId: action.id || null }))); return item;
 }
-function openAction(action) {
+function openAction(action, draft = null) {
   selected = action;
   $('#action-title').textContent = action.title;
   $('#action-description').textContent = action.description || 'Précisez votre contexte. Kex vérifiera les préconditions avant de poursuivre.';
-  $('#action-subject').value = ''; $('#action-period').value = ''; $('#action-error').textContent = '';
+  $('#action-subject').value = draft?.subject || ''; $('#action-period').value = draft?.period || ''; $('#action-error').textContent = '';
   $('#skill-details').hidden = !action.id;
   $('#skill-procedure').textContent = action.markdown || '';
   const meta = $('#skill-context'); meta.replaceChildren();
@@ -142,6 +214,8 @@ function openAction(action) {
     });
     if (descriptors.omitted) parameters.append(el('p', 'muted', 'Certains paramètres complexes restent dans la procédure. Décrivez-les dans le contexte ; Kex devra les clarifier.'));
   }
+  fields.forEach((field, i) => { const value = draft?.parameters?.find(p => JSON.stringify(p.path) === JSON.stringify(field.path))?.value; if (typeof value === 'string') $('#skill-parameter-' + i).value = value; });
+  if (draft) $('#action-error').textContent = 'Valeurs précédentes préremplies. Vérifiez la cible, la période et les paramètres avant de préparer la nouvelle demande.';
   $('#action-dialog').showModal();
 }
 async function skills() {
@@ -161,7 +235,7 @@ async function skills() {
 function clearIdentity() {
   // Invalide toutes les réponses tardives avant de changer l'espace affiché.
   epoch++; skillEpoch++; active?.controller.abort(); active = null;
-  identity = null; history = []; current = null; selected = null; preparedSkill = null;
+  identity = null; history = []; current = null; selected = null; preparedSkill = null; preparedDraft = null; favorites = []; approvals.reset(); drawFavorites();
   $('#turns').replaceChildren(); $('#request-list').replaceChildren(); $('#skills').replaceChildren();
   $('#identity').textContent = ''; $('#prompt').value = ''; $('#followup').value = '';
   $('#selected-action').hidden = true; $('#send').disabled = true;
@@ -175,7 +249,7 @@ async function authenticate() {
   try {
     const me = await api('/api/agent/whoami');
     if (ownEpoch !== epoch) return false;
-    identity = JSON.stringify([me.tenant, me.name]); load();
+    identity = JSON.stringify([me.tenant, me.name]); load(); loadFavorites(); approvals.reset(me.roles || []); drawFavorites();
     $('#prompt').value = draft;
     $('#identity').textContent = `Connecté : ${me.name}`; $('#account').textContent = 'Mon accès';
     $('#send').disabled = false; $('#notice').textContent = ''; route(); skills(); return true;
@@ -187,7 +261,7 @@ async function authenticate() {
 async function send(message, request = null) {
   if (active || !identity) return;
   if (!request) {
-    request = { id: crypto.randomUUID(), title: message.slice(0, 100), turns: [], tools: [], conversationId: null };
+    request = { id: crypto.randomUUID(), title: message.slice(0, 100), turns: [], tools: [], conversationId: null, draft: preparedDraft ? structuredClone(preparedDraft) : null };
     history.unshift(request); history = history.slice(0, 20);
   }
   const ownEpoch = epoch; const controller = new AbortController();
@@ -223,7 +297,7 @@ async function send(message, request = null) {
     if (e.status === 401) $('#notice').textContent = 'Votre accès a été refusé. Reconnectez-vous avant de poursuivre.';
   } finally {
     if (ownEpoch === epoch) {
-      active = null; save(); $('#send').disabled = !identity; if (current === request) drawDetail(); drawHistory();
+      active = null; save(); $('#send').disabled = !identity; if (current === request) { drawDetail(); approvals.request(request); } drawHistory();
     }
   }
 }
@@ -259,6 +333,7 @@ $('#action-form').addEventListener('submit', async e => {
     const parameterText = fields.map((f, i) => `${f.path.join(' / ')} : ${$('#skill-parameter-' + i).value.trim()}`).join('\n');
     $('#prompt').value = `${procedure}\n\nÉlément concerné : ${$('#action-subject').value.trim()}\nContexte : ${$('#action-period').value.trim() || 'À préciser si nécessaire'}\nParamètres renseignés :\n${parameterText || 'Aucun paramètre spécifique renseigné'}\n\nPrésente le résultat en français accessible, avec les sources disponibles. N’affirme pas de réussite sans vérification.`;
     preparedSkill = action.id ? action : null;
+    preparedDraft = { actionTitle: action.title, skillId: action.id || null, signature: action.id ? skillSignature(action) : null, subject: $('#action-subject').value.trim(), period: $('#action-period').value.trim(), parameters: fields.map((f, i) => ({ path: f.path, value: $('#skill-parameter-' + i).value.trim() })) };
     $('#selected-action').textContent = `Demande préparée : ${action.title}. Vous pouvez la modifier avant de la lancer.`; $('#selected-action').hidden = false;
     $('#action-dialog').close(); location.hash = '#/new'; route(); $('#prompt').focus();
   } catch (err) { $('#action-error').textContent = err.message; }
@@ -283,6 +358,9 @@ $('#request-form').addEventListener('submit', async e => {
   finally { preparing = false; $('#send').disabled = !!active || !identity; }
 });
 $('#followup-form').addEventListener('submit', e => { e.preventDefault(); const text = $('#followup').value.trim(); if (text && current && !active) { $('#followup').value = ''; send(text, current); } });
+$('#favorite-request').addEventListener('click', () => { if (current && !active) toggleFavorite({ key: 'request:' + current.id, type: 'request', title: current.title, request: { draft: current.draft || null, turns: [current.turns.find(t => t.role === 'user')] } }); });
+$('#reprepare-request').addEventListener('click', () => reprepare(current));
+$('#prompt').addEventListener('input', () => { if (preparedDraft) preparedDraft.edited = true; });
 $('#stop').addEventListener('click', () => active?.controller.abort());
 $('#open-expert').addEventListener('click', expert);
 $('#refresh-skills').addEventListener('click', skills);
