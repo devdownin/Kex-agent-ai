@@ -24,7 +24,8 @@ class LlmRoutingConfigTest {
                 Map.of("m1", openaiEp, "m2", anthropicEp), Map.of(LlmRoutingProperties.Task.CHAT, List.of("m1", "m2")));
 
         LlmRoutingConfig config = new LlmRoutingConfig();
-        RoutingChatModel router = config.routingChatModel(properties, ObservationRegistry.NOOP);
+        RoutingChatModel router = config.routingChatModel(properties, ObservationRegistry.NOOP,
+                org.mockito.Mockito.mock(com.kex.agent.agent.TokenBudgetService.class));
 
         assertThat(router).isNotNull();
     }

@@ -26,6 +26,7 @@ public final class BudgetedChatModel implements ChatModel {
         this.delegate = delegate; this.budgets = budgets;
     }
     @Override public ChatOptions getOptions() { return delegate.getOptions(); }
+    @Override public ChatOptions getDefaultOptions() { return delegate.getOptions(); }
     @Override public ChatResponse call(Prompt prompt) {
         TokenBudgetService service = budgets.get();
         Prompt bounded = prepare(prompt, service);
