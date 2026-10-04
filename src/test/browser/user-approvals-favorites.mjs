@@ -57,12 +57,13 @@ try {
     tasks = [task('t1'), task('t2', 'change')]; operations = []; chats = []; available = true; hold = null;
     const context = await browser.newContext({ viewport: { width, height: 900 } }); const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(String(e)));
     const login = async token => { await page.locator('#account').click(); await page.locator('#access-key').fill(token); await page.locator('#connect').click(); await page.getByText('Connecté : ' + token, { exact: true }).waitFor(); };
-    await page.goto(`http://127.0.0.1:${server.address().port}/app`); await login('alpha');
+    await page.goto(`http://127.0.0.1:${server.address().port}/app#/new`); await login('alpha');
     await page.locator('#approvals-link').click(); const read = page.locator('#approval-list [data-task-id="t1"]'); const change = page.locator('#approval-list [data-task-id="t2"]');
     await read.getByRole('button', { name: 'Approuver ce plan', exact: true }).waitFor();
+    assert.match(await change.innerText(), /peut modifier le système/);
     assert.equal(await change.getByRole('button', { name: 'Approuver ce plan', exact: true }).isDisabled(), true, 'mutation approval requires ADMIN');
     await read.getByRole('button', { name: 'Approuver ce plan', exact: true }).click(); assert.equal(operations.length, 0);
-    assert.match(await page.locator('#review-content').innerText(), /orders/); assert.equal(await page.locator('#review-content img').count(), 0);
+    assert.match(await page.locator('#review-content').innerText(), /orders/); assert.match(await page.locator('#review-content').innerText(), /Périmètre concerné/); assert.match(await page.locator('#review-content').innerText(), /lecture seule/); assert.match(await page.locator('#review-content').innerText(), /Aucun retour arrière/); assert.equal(await page.locator('#review-content img').count(), 0);
     tasks[0].revision++; tasks[0].plan.objective = 'Examiner les commandes actualisées'; await page.locator('#review-accept').click(); await page.getByText('Le plan ou son état a changé', { exact: false }).waitFor(); assert.equal(operations.length, 0, 'stale plans must not be approved');
     await page.locator('#review-close').click(); await page.locator('#refresh-approvals').click(); await read.getByRole('heading', { name: 'Examiner les commandes actualisées', exact: true }).waitFor();
     await read.getByRole('button', { name: 'Approuver ce plan', exact: true }).click(); await page.locator('#review-accept').click();

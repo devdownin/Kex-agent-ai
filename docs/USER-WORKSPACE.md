@@ -6,7 +6,7 @@ son adresse `/` et tous ses liens existants. Chaque interface propose un accès 
 ## Première demande
 
 1. Ouvrir **Espace utilisateur** et se connecter avec le code d’accès fourni par l’administrateur.
-2. Décrire le besoin dans **Nouvelle demande**, ou choisir une **Action prête à l’emploi**.
+2. Depuis **Mon travail**, choisir **Nouvelle demande** puis décrire le besoin, ou choisir une **Action prête à l’emploi**.
 3. Vérifier la demande préparée, la modifier si nécessaire, puis sélectionner **Lancer**.
 4. Lire le suivi, la réponse et ses sources. Poursuivre avec le champ de précision si nécessaire.
 
@@ -199,3 +199,17 @@ Dans **Nouvelle demande**, le guide explique trois étapes : décrire le besoin,
 Après connexion, trois exemples sont proposés à partir des compétences actuellement disponibles, en diversifiant les besoins. Si le catalogue contient moins de trois compétences, les demandes guidées complètent la sélection ; en cas d’indisponibilité, ce repli est expliqué. **Préparer cet exemple** revérifie la compétence et ouvre son formulaire. Il ne lance ni prompt ni outil ; le lancement reste explicite.
 
 **J’ai compris** masque le guide pour le compte et le locataire sur ce navigateur. **Guide de démarrage** permet de le rouvrir à tout moment. Changer de compte efface les exemples affichés, et un chargement tardif du catalogue précédent est ignoré.
+
+## Mon travail et suivi accessible
+
+`/app` ouvre **Mon travail** ; `#/new` reste un accès direct à la rédaction. L’accueil présente les demandes en cours, les précisions attendues et les plans à décider, puis les derniers résultats triés par mise à jour. Chaque groupe affiche au plus six éléments et indique son total. Les liens consultent une demande ou les plans sans lancer d’action. Une marque de résultat examiné n’est pas une preuve de réussite.
+
+**Actualiser mon travail** recharge l’historique et les plans accessibles. Les états de fraîcheur distinguent chargement, lecture réussie, historique local, fonction non activée et données indisponibles. Les plans disparaissent en cas d’échec de leur lecture. Un changement de compte vide l’accueil et ignore les lectures tardives de l’ancien compte.
+
+Le détail affiche l’activité en langage courant à partir des événements réellement reçus, ainsi que l’heure de dernière activité. Après une minute sans nouvel événement, le suivi signale le silence et conseille de vérifier l’état avant toute relance. Ce seuil n’est ni une estimation de durée ni une preuve de panne. **Actualiser le suivi** consulte l’état serveur ; pendant une réception locale active, le flux reste la source du suivi. Arrêter la réception ne garantit pas l’annulation des effets déjà engagés.
+
+Le bilan présente **Conclusion**, **Sources et observations**, **Limites** et **Prochaine action**. Les sources du flux sont datées lorsque la date est fournie ; aucune source ni limite manquante n’est inventée. Une réponse libre reste lisible et les preuves du plan associé restent distinctes des affirmations du modèle.
+
+## Comprendre une approbation
+
+Chaque plan et sa confirmation présentent l’objectif, le périmètre issu des paramètres exacts, les effets déclarés dans la configuration et les possibilités de refus avant lancement. Les étapes dont la lecture seule n’est pas explicitement déclarée exigent toujours une approbation ADMIN. Aucun retour arrière des effets déjà produits n’est garanti. Les préconditions, critères, preuves et paramètres techniques restent consultables. L’approbation ne lance pas le plan ; l’état, la révision et le contenu sont revalidés avant chaque décision.

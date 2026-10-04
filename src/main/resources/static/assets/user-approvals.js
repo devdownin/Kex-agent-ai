@@ -6,7 +6,7 @@ const BASE = '/api/agent/tasks';
 const STATES = { DRAFT: 'Votre décision est attendue', APPROVED: 'Plan approuvé — à lancer', RUNNING: 'Traitement en cours', VERIFIED: 'Critère final confirmé', COMPLETED: 'Étapes terminées — objectif non vérifié', FAILED: 'Critère non satisfait', PAUSED: 'Traitement en pause', NEEDS_RECONCILIATION: 'Résultat incertain — examen nécessaire', CANCELLED: 'Plan refusé ou annulé' };
 
 // Only server-owned plans enter this flow; model answers never supply approval identifiers.
-export function userApprovals({ onPlan, onTasks = () => {} }) {
+export function userApprovals({ onPlan, onTasks = () => {}, onAvailability = () => {} }) {
   let generation = 0; let roles = []; let tasks = []; let bindings = {}; let linked = null;
   let loading = false; let refreshQueued = false; let timer = null; let confirmation = null; let planning = null;
   const pending = new Set();
@@ -24,11 +24,28 @@ export function userApprovals({ onPlan, onTasks = () => {} }) {
     for (const id of ['plan-dialog', 'review-dialog']) if ($('#' + id).open) $('#' + id).close();
     $('#approvals-link').hidden = !canOperate(); $('#prepare-plan').hidden = !canOperate();
     $('#linked-plan-section').hidden = !canOperate(); $('#plan-submit').disabled = false;
+    onAvailability(canOperate() ? 'non actualisés' : 'non accessibles avec cet accès');
+  }
+  function decisionOverview(task) {
+    const overview = el('section', 'decision-overview'); overview.setAttribute('aria-label', 'Comprendre ce plan');
+    const mutation = task.plan.steps.some(s => bindings[s.binding]?.readOnly !== true);
+    overview.append(el('h4', null, 'Ce que vous autorisez'), el('p', null, task.plan.objective));
+    overview.append(el('h4', null, 'Périmètre concerné'));
+    task.plan.steps.forEach(step => {
+      const scope = el('dl'); scope.append(el('dt', null, step.description));
+      Object.entries(step.arguments || {}).forEach(([name, value]) => scope.append(el('dd', null, `${name} : ${typeof value === 'string' ? value : JSON.stringify(value)}`)));
+      if (!Object.keys(step.arguments || {}).length) scope.append(el('dd', null, 'Aucune cible explicite dans les paramètres. Examinez la procédure avant de décider.'));
+      overview.append(scope);
+    });
+    overview.append(el('h4', null, 'Effets possibles'), el('p', null, mutation ? 'Au moins une étape peut modifier le système ou son effet n’est pas déclaré en lecture seule. Une approbation ADMIN est nécessaire. Les effets précis doivent être examinés dans les étapes.' : 'Toutes les étapes sont déclarées en lecture seule dans la configuration du serveur. Elles consultent les données indiquées.'));
+    overview.append(el('h4', null, 'Annulation et retour arrière'), el('p', null, 'Vous pouvez refuser un brouillon avant son lancement. Aucun retour arrière des effets déjà produits n’est garanti par ce plan.'));
+    return overview;
   }
   function renderPlan(task, compact = false) {
     const card = el('article', 'panel approval-card'); card.dataset.taskId = task.id;
     card.append(el('h3', null, task.plan.objective), el('p', null, STATES[task.status] || 'État non disponible'));
     card.append(el('p', 'muted', task.detail || ''), el('p', 'muted', `Mise à jour : ${new Date(task.updatedAt).toLocaleString('fr-FR')}`));
+    card.append(decisionOverview(task));
     card.append(el('h4', null, 'Conditions à examiner'), el('p', null, task.plan.preconditions.join(' ; ') || 'Aucune condition déclarée'));
     const steps = el('ol');
     task.plan.steps.forEach((step, index) => {
@@ -71,16 +88,17 @@ export function userApprovals({ onPlan, onTasks = () => {} }) {
   async function refresh() {
     if (!canOperate()) return;
     if (loading) { refreshQueued = true; return; }
-    const own = generation; loading = true; clearTimeout(timer); message('Actualisation des plans…');
+    const own = generation; loading = true; clearTimeout(timer); message('Actualisation des plans…'); onAvailability('actualisation en cours');
     try {
       const [rows, configured] = await Promise.all([api(BASE), api(`${BASE}/bindings`)]);
       if (own !== generation) return;
-      tasks = rows; bindings = configured; message(''); draw(); onTasks(tasks);
+      tasks = rows; bindings = configured; message(''); draw(); onTasks(tasks); onAvailability('actualisés à ' + new Date().toLocaleString('fr-FR'));
       timer = setTimeout(refresh, tasks.some(t => t.status === 'RUNNING') && !document.hidden ? 5000 : 30000);
     } catch (error) {
       if (own !== generation) return;
       // Stale approval controls must disappear when the server or authorization is unavailable.
       tasks = []; bindings = {}; $('#approval-list').replaceChildren(); $('#linked-plan').replaceChildren();
+      onTasks([]); onAvailability(error.status === 404 ? 'fonction non activée' : 'indisponibles, actualisation nécessaire');
       message(error.status === 404 ? 'Les plans à approuver ne sont pas activés sur ce serveur.' : 'Les plans ne sont pas disponibles. Actualisez avant de décider. ' + error.message);
     } finally { if (own === generation) { loading = false; if (refreshQueued) { refreshQueued = false; refresh(); } } }
   }

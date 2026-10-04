@@ -389,7 +389,9 @@ pour conserver les réessais MCP transitoires ; les outils non classés ne sont 
 
 ## Espace utilisateur
 
-Ouvrez `/app` pour une interface simple : demandes libres, demandes guidées, compétences approuvées,
+Ouvrez `/app` pour une interface simple. L’accueil **Mon travail** regroupe les demandes en cours, les décisions et les derniers résultats, avec un état de fraîcheur. Le suivi affiche la dernière activité reçue et signale une minute sans nouvelle information, sans conclure à une panne du serveur. Les résultats réunissent conclusion, sources datées, limites et prochaine action. Les approbations expliquent le périmètre exact, les effets possibles et les limites du retour arrière avant les décisions séparées d’approbation et de lancement.
+
+Fonctions disponibles : demandes libres, demandes guidées, compétences approuvées,
 suivi en direct, sources et historique récent. La console experte reste à `/`. Les deux interfaces
 proposent un accès réciproque. Voir le [guide utilisateur](docs/USER-WORKSPACE.md) pour les droits,
 la portée de l’historique et la distinction entre réponse reçue et réussite vérifiée.

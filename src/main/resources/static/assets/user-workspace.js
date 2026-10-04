@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 import { $, api, credentials, el, failure, headers } from './core.js';
+import { drawWork, drawRunActivity, resultSections } from './user-work.js';
 import { userOnboarding } from './user-onboarding.js';
 import { userNotifications } from './user-notifications.js';
 import { userApprovals } from './user-approvals.js';
@@ -29,7 +30,8 @@ let attachments = []; let contextVersion = 0; let contextLoading = false;
 let historyTimer = null;
 let availableSkills = []; let serverHistory = false; let historyVersion = 0; let attentionTasks = [];
 const examinedKey = () => `kex.agent.user.examined.${encodeURIComponent(identity)}`;
-let examined = [];
+let examined = []; let historyState = 'non actualisées'; let taskState = 'non actualisés';
+function drawOverview() { drawWork({ identity, history, tasks: attentionTasks, examined, historyState, taskState }); }
 function contextValue() { return { process: $('#context-process').value.trim(), period: $('#context-period').value.trim(), environment: $('#context-environment').value.trim(), files: structuredClone(attachments) }; }
 function drawContext() {
   const context = contextValue(); const host = $('#context-preview'); host.replaceChildren();
@@ -45,12 +47,14 @@ function drawSkillCatalogue() {
 }
 async function refreshHistory() {
   if (!identity || active) return;
-  clearTimeout(historyTimer);
+  clearTimeout(historyTimer); historyState = 'actualisation en cours'; drawOverview();
   const own = epoch; const version = ++historyVersion;
   try {
     const rows = await api('/api/agent/workspace/requests');
     if (own !== epoch || version !== historyVersion) return;
-    serverHistory = true;
+    // Une lecture démarrée avant un envoi ne doit pas écraser le flux maintenant actif.
+    if (active) { historyState = 'réception active, actualisation différée'; drawOverview(); return; }
+    serverHistory = true; historyState = 'actualisées à ' + date(new Date().toISOString());
     const local = history.filter(r => !r.serverId);
     const saved = new Map(history.filter(r => r.serverId).map(r => [r.serverId, r]));
     history = [...rows.map(r => ({ ...saved.get(r.id), ...r, id: saved.get(r.id)?.id || r.id, serverId: r.id, summaryOnly: true })), ...local].slice(0, 100);
@@ -60,6 +64,7 @@ async function refreshHistory() {
     if (history.some(r => r.status === 'RUNNING')) historyTimer = setTimeout(refreshHistory, 5000);
   } catch (error) {
     if (own !== epoch || version !== historyVersion) return;
+    historyState = error.status === 404 && !serverHistory ? 'historique local de cet onglet' : 'indisponibles, données potentiellement anciennes'; drawOverview();
     if (error.status === 404 && !serverHistory) $('#history-note').textContent = 'Historique local de cet onglet : la reprise serveur n’est pas disponible sur cette version du serveur.';
     else $('#notice').textContent = 'Historique serveur indisponible. Les demandes affichées peuvent être anciennes ; actualisez avant de poursuivre.';
   }
@@ -72,12 +77,13 @@ function drawAttention() {
     else if (['COMPLETE', 'PARTIAL', 'ERROR', 'INTERRUPTED'].includes(r.status) && !examined.includes(`${r.id}:${r.updatedAt}`)) item('Résultat à examiner', r.title, '#/request/' + r.id);
   });
   attentionTasks.forEach(t => { if (t.status === 'DRAFT') item('Plan à approuver', t.plan.objective, '#/approvals'); else if (['PAUSED', 'NEEDS_RECONCILIATION', 'FAILED'].includes(t.status)) item('Plan à examiner', t.plan.objective, '#/approvals'); });
+  drawOverview();
   $('#attention-count').textContent = count ? `(${count})` : '';
   if (!count) host.append(el('p', 'muted', identity ? 'Aucune intervention attendue dans les éléments disponibles.' : 'Connectez-vous pour consulter les interventions attendues.'));
 }
 const onboarding = userOnboarding({ prepare: prepareFavorite });
 const notifications = userNotifications();
-const approvals = userApprovals({ onTasks: tasks => { attentionTasks = tasks; notifications.tasks(tasks); drawAttention(); if (current) drawDetail(); }, onPlan(requestId, taskId) {
+const approvals = userApprovals({ onAvailability: state => { taskState = state; drawOverview(); }, onTasks: tasks => { attentionTasks = tasks; notifications.tasks(tasks); drawAttention(); if (current) drawDetail(); }, onPlan(requestId, taskId) {
   const request = history.find(r => r.id === requestId);
   if (request) { request.taskId = taskId; save();
     if (request.serverId) { const own = epoch; api(`/api/agent/workspace/requests/${encodeURIComponent(request.serverId)}/plan`, { method: 'POST', body: { taskId } }).catch(() => { if (own === epoch) $('#notice').textContent = 'Le plan est créé, mais son lien avec cette demande n’a pas pu être enregistré. Retrouvez-le dans Plans à valider.'; }); } if (current === request) drawDetail(); }
@@ -162,10 +168,10 @@ function button(label, action, className = '') {
 }
 function date(at) { return at ? new Date(at).toLocaleString('fr-FR') : 'Date non fournie'; }
 function route() {
-  const name = location.hash.slice(2) || 'new';
+  const name = location.hash.slice(2) || 'work';
   const request = name.startsWith('request/') ? history.find(r => r.id === name.slice(8)) : null;
-  const page = request ? 'detail' : ['new', 'actions', 'requests', 'approvals', 'notifications', 'attention'].includes(name) ? name : 'new';
-  ['new', 'actions', 'requests', 'approvals', 'notifications', 'attention', 'detail'].forEach(id => { $('#' + id).hidden = id !== page; });
+  const page = request ? 'detail' : ['work', 'new', 'actions', 'requests', 'approvals', 'notifications', 'attention'].includes(name) ? name : 'new';
+  ['work', 'new', 'actions', 'requests', 'approvals', 'notifications', 'attention', 'detail'].forEach(id => { $('#' + id).hidden = id !== page; });
   document.querySelectorAll('[data-page]').forEach(a => {
     if (a.dataset.page === (page === 'detail' ? 'requests' : page)) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
@@ -187,6 +193,7 @@ function route() {
   if (page === 'actions') drawFavorites();
   if (page === 'requests') drawHistory();
   if (page === 'attention') drawAttention();
+  if (page === 'work') { drawOverview(); approvals.refresh(); }
 }
 function drawHistory() {
   const host = $('#request-list'); host.replaceChildren();
@@ -205,8 +212,9 @@ function drawDetail() {
   $('#reprepare-request').disabled = !!active || !identity;
   $('#prepare-plan').disabled = !!active || !!current.taskId;
   $('#run-status').textContent = LABELS[current.status] || 'État non disponible';
+  drawRunActivity(current);
   const running = active?.request === current;
-  $('#stop').hidden = !running;
+  $('#stop').hidden = !running; $('#refresh-current').disabled = !!active;
   $('#followup-send').disabled = !!active || current.status === 'RUNNING' || !!current.loadingDetail || !identity || !current.conversationId;
   $('#followup-form').hidden = !current.conversationId;
   $('#open-expert').disabled = !current.conversationId || !!active;
@@ -220,8 +228,7 @@ function drawDetail() {
   const recap = $('#completion-summary'); recap.replaceChildren(); const bilan = summary(current, attentionTasks.find(t => t.id === current.taskId)); recap.hidden = !bilan;
   if (bilan) {
     recap.append(el('h2', null, bilan.title), el('p', null, bilan.evidence), el('p', null, bilan.limits));
-    const answer = current.turns.filter(t => t.role === 'agent').at(-1); const parsed = answer?.completed ? parseResponse(answer.text) : null;
-    if (parsed?.kind === 'result') recap.append(el('h3', null, 'Ce qui a été réalisé selon la réponse'), el('p', null, parsed.observations), el('h3', null, 'Limites signalées'), el('p', null, parsed.uncertainties), el('h3', null, 'Prochaine action proposée'), el('p', null, parsed.nextAction));
+    const answer = current.turns.filter(t => t.role === 'agent').at(-1); resultSections(recap, answer);
     recap.append(button('Marquer ce résultat comme examiné', () => { examined.push(`${current.id}:${current.updatedAt}`); examined = examined.slice(-200); try { localStorage.setItem(examinedKey(), JSON.stringify(examined)); } catch { $('#notice').textContent = 'La marque de lecture reste en mémoire.'; } drawAttention(); }));
   }
   $('#saved-context').hidden = !current.context; $('#saved-context-content').replaceChildren();
@@ -316,7 +323,7 @@ async function skills() {
 }
 function clearIdentity() {
   // Invalide toutes les réponses tardives avant de changer l'espace affiché.
-  clearTimeout(historyTimer); epoch++; skillEpoch++; historyVersion++; contextVersion++; contextLoading = false; serverHistory = false; attentionTasks = []; examined = []; availableSkills = []; restoreContext(null); $('#context-error').textContent = ''; $('#skill-search').value = ''; $('#skill-category').value = 'all'; drawAttention(); active?.controller.abort(); active = null;
+  clearTimeout(historyTimer); epoch++; skillEpoch++; historyVersion++; contextVersion++; contextLoading = false; serverHistory = false; historyState = 'non actualisées'; taskState = 'non actualisés'; attentionTasks = []; examined = []; availableSkills = []; restoreContext(null); $('#context-error').textContent = ''; $('#skill-search').value = ''; $('#skill-category').value = 'all'; drawAttention(); active?.controller.abort(); active = null;
   identity = null; history = []; current = null; selected = null; preparedSkill = null; preparedDraft = null; favorites = []; $('#process-options').replaceChildren(); onboarding.reset(); notifications.reset(); approvals.reset(); drawFavorites(); drawAttention(); $('#completion-summary').replaceChildren(); $('#saved-context-content').replaceChildren(); $('#saved-context').hidden = true;
   $('#turns').replaceChildren(); $('#request-list').replaceChildren(); $('#skills').replaceChildren();
   $('#identity').textContent = ''; $('#prompt').value = ''; $('#followup').value = '';
@@ -374,7 +381,7 @@ async function send(message, request = null) {
       else if (event.name === 'error') { answer.error = event.data; request.status = 'ERROR'; }
       else if (event.name === 'done') complete = true;
       request.updatedAt = new Date().toISOString(); save();
-      if (current === request) drawDetail();
+      if (current === request) drawDetail(); if (event.name !== 'token') drawOverview();
     }
     if (request.status !== 'ERROR') request.status = complete && answer.text ? (request.tools.slice(firstCall).some(t => t.failed) ? 'PARTIAL' : 'COMPLETE') : 'PARTIAL';
     answer.completed = complete && !answer.error;
@@ -463,8 +470,11 @@ $('#context-files').addEventListener('change', async () => {
   catch (error) { if (own === epoch && version === contextVersion) { attachments = []; $('#context-files').value = ''; drawContext(); $('#context-error').textContent = error.message; } }
   finally { if (own === epoch && version === contextVersion) { contextLoading = false; $('#send').disabled = !!active || !identity; } }
 });
+$('#refresh-work').addEventListener('click', async () => { await refreshHistory(); await approvals.refresh(); drawOverview(); });
+$('#refresh-current').addEventListener('click', async () => { if (active) return; const own = epoch; await refreshHistory(); if (own !== epoch || active) return; if (current?.serverId) { current.summaryOnly = true; } route(); });
+const activityTimer = setInterval(() => { if (current?.status === 'RUNNING' && !document.hidden) drawRunActivity(current); }, 15000);
 $('#refresh-requests').addEventListener('click', async () => { await refreshHistory(); route(); });
 $('#refresh-attention').addEventListener('click', async () => { await refreshHistory(); await approvals.refresh(); drawAttention(); });
 addEventListener('hashchange', route);
-addEventListener('pagehide', () => { clearTimeout(historyTimer); if (active) { active.request.status = 'INTERRUPTED'; save(); active.controller.abort(); } });
+addEventListener('pagehide', () => { clearInterval(activityTimer); clearTimeout(historyTimer); if (active) { active.request.status = 'INTERRUPTED'; save(); active.controller.abort(); } });
 route(); authenticate();

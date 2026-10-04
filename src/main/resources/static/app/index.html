@@ -17,6 +17,7 @@
   <div class="header-actions"><span id="identity"></span><a href="/#/chat" id="expert">Console experte</a><button id="account" type="button">Se connecter</button></div>
 </header>
 <nav aria-label="Navigation utilisateur">
+  <a href="#/work" data-page="work">Mon travail</a>
   <a href="#/new" data-page="new">Nouvelle demande</a>
   <a href="#/actions" data-page="actions">Actions prêtes à l’emploi</a>
   <a href="#/approvals" data-page="approvals" id="approvals-link" hidden>Plans à valider</a>
@@ -26,7 +27,15 @@
 </nav>
 <main id="main">
   <p id="notice" role="status"></p>
-  <section id="new" aria-labelledby="new-title">
+  <section id="work" aria-labelledby="work-title">
+    <h1 id="work-title">Mon travail</h1><p id="work-note" class="intro"></p>
+    <div class="row"><a class="work-new" href="#/new">Nouvelle demande</a><button id="refresh-work" type="button">Actualiser mon travail</button></div>
+    <p id="work-freshness" role="status" class="muted"></p>
+    <h2>En cours <span id="work-running-count"></span></h2><div id="work-running" class="actions-grid"></div>
+    <h2>À vous de décider <span id="work-decisions-count"></span></h2><div id="work-decisions" class="actions-grid"></div>
+    <h2>Derniers résultats <span id="work-results-count"></span></h2><div id="work-results" class="actions-grid"></div>
+  </section>
+  <section id="new" hidden aria-labelledby="new-title">
     <h1 id="new-title">Que souhaitez-vous faire ?</h1>
     <p class="intro">Décrivez votre besoin ou choisissez une action prête à l’emploi.</p>
     <button id="open-onboarding" type="button">Guide de démarrage</button>
@@ -101,6 +110,7 @@
     <a href="#/requests">Toutes mes demandes</a>
     <h1 id="detail-title"></h1>
     <p id="run-status" role="status"></p>
+    <p id="run-activity" role="status" aria-live="polite"></p><p id="last-activity" class="muted"></p><p id="activity-delay" role="status" hidden></p><button id="refresh-current" type="button">Actualiser le suivi</button>
     <ol id="progress" aria-label="Déroulement du traitement"></ol>
     <div class="row"><button id="stop" type="button" hidden>Arrêter la réception</button><button id="open-expert" type="button">Examiner dans la console experte</button></div>
     <div class="row"><button id="favorite-request" type="button">Ajouter cette demande aux favoris</button><button id="reprepare-request" type="button">Préparer une nouvelle demande</button><button id="prepare-plan" type="button" hidden>Préparer un plan à valider</button></div>
