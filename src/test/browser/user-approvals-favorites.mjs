@@ -27,7 +27,7 @@ const server = createServer(async (req, res) => {
     if (!['alpha', 'admin'].includes(token)) return json({ detail: 'Accès refusé' }, 403);
     if (req.url === '/api/agent/tasks/bindings') return json(bindings);
     if (req.url === '/api/agent/tasks' && req.method === 'GET') {
-      if (hold) { const deferred = hold; hold = null; await deferred; }
+      if (hold) { const deferred = hold; const snapshot = structuredClone(tasks); hold = null; await deferred; return json(snapshot); }
       return json(tasks);
     }
     let body = ''; for await (const chunk of req) body += chunk;
@@ -78,7 +78,9 @@ try {
     await page.locator('#action-dialog').waitFor({ state: 'hidden' }); await page.locator('#send').click(); await page.locator('#run-status').getByText('Réponse reçue', { exact: true }).waitFor();
     await page.locator('#favorite-request').click(); await page.locator('#reprepare-request').click(); await page.locator('#action-dialog').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#skill-parameter-0').inputValue(), 'orders-live'); assert.equal(await page.locator('#action-period').inputValue(), 'Ce matin'); assert.equal(chats.length, 1);
-    await page.locator('#close-action').click(); await page.locator('#prepare-plan').click(); await page.locator('#plan-objective').fill('Vérifier les commandes depuis ce matin'); await page.locator('#plan-submit').click(); await page.locator('#plan-dialog').waitFor({ state: 'hidden' });
+    await page.locator('#close-action').click(); await page.waitForFunction(() => document.querySelector('#linked-plan-note').textContent === '');
+    let releasePlanRead; hold = new Promise(resolve => { releasePlanRead = resolve; }); await page.locator('#refresh-linked-plan').click(); await page.locator('#linked-plan-note').getByText('Actualisation des plans…', { exact: true }).waitFor();
+    await page.locator('#prepare-plan').click(); await page.locator('#plan-objective').fill('Vérifier les commandes depuis ce matin'); await page.locator('#plan-submit').click(); await page.locator('#plan-dialog').waitFor({ state: 'hidden' }); releasePlanRead();
     await page.locator('#linked-plan [data-task-id="t3"]').waitFor(); assert.equal(operations.at(-1).verb, 'plan'); assert.equal(tasks.at(-1).status, 'DRAFT');
     await page.reload(); await page.getByText('Connecté : alpha', { exact: true }).waitFor(); await page.locator('#linked-plan [data-task-id="t3"]').waitFor();
     await page.getByRole('link', { name: 'Actions prêtes à l’emploi', exact: true }).click(); await page.locator('#favorites').getByRole('button', { name: 'Préparer', exact: true }).waitFor();
@@ -87,7 +89,7 @@ try {
     assert.equal(chats.length, 2); assert.equal(chats[1].conversationId, null, 'relaunch creates a new conversation');
     await page.locator('#approvals-link').click(); await page.locator('#approvals').waitFor({ state: 'visible' }); await page.waitForFunction(() => document.querySelector('#approval-note').textContent === '');
     let release; hold = new Promise(resolve => { release = resolve; }); await page.locator('#refresh-approvals').click(); await page.locator('#approval-note').getByText('Actualisation des plans…', { exact: true }).waitFor();
-    await login('beta'); release(); await page.getByRole('link', { name: 'Actions prêtes à l’emploi', exact: true }).click(); await page.locator('#favorites').getByText('Ajoutez une action', { exact: false }).waitFor();
+    await login('beta'); release(); await page.waitForLoadState('networkidle'); await page.getByRole('link', { name: 'Actions prêtes à l’emploi', exact: true }).click(); await page.locator('#favorites').getByText('Ajoutez une action', { exact: false }).waitFor();
     assert.equal(await page.locator('#approvals-link').isVisible(), false); assert.equal(await page.locator('#approval-list').innerText(), ''); assert.equal(await page.locator('#linked-plan').innerText(), '');
     assert.equal(await page.evaluate(() => window.hacked), undefined); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)); assert.deepEqual(errors, []);
     await context.close();

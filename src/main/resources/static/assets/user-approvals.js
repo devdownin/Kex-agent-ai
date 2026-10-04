@@ -8,7 +8,7 @@ const STATES = { DRAFT: 'Votre décision est attendue', APPROVED: 'Plan approuv�
 // Only server-owned plans enter this flow; model answers never supply approval identifiers.
 export function userApprovals({ onPlan }) {
   let generation = 0; let roles = []; let tasks = []; let bindings = {}; let linked = null;
-  let loading = false; let timer = null; let confirmation = null; let planning = null;
+  let loading = false; let refreshQueued = false; let timer = null; let confirmation = null; let planning = null;
   const pending = new Set();
   const canOperate = () => roles.some(r => ['OPERATOR', 'ADMIN'].includes(r));
   const button = (label, run) => {
@@ -16,7 +16,7 @@ export function userApprovals({ onPlan }) {
   };
   function message(text) { $('#approval-note').textContent = text; $('#linked-plan-note').textContent = text; }
   function reset(nextRoles = []) {
-    generation++; roles = nextRoles; tasks = []; bindings = {}; linked = null; loading = false;
+    generation++; roles = nextRoles; tasks = []; bindings = {}; linked = null; loading = false; refreshQueued = false;
     clearTimeout(timer); pending.clear(); confirmation = null; planning = null;
     $('#approval-list').replaceChildren(); $('#linked-plan').replaceChildren(); message('');
     for (const id of ['plan-dialog', 'review-dialog']) if ($('#' + id).open) $('#' + id).close();
@@ -67,7 +67,8 @@ export function userApprovals({ onPlan }) {
     if (linked && !task) $('#linked-plan').append(el('p', 'muted', 'Ce plan n’est pas disponible. Actualisez son état.'));
   }
   async function refresh() {
-    if (!canOperate() || loading) return;
+    if (!canOperate()) return;
+    if (loading) { refreshQueued = true; return; }
     const own = generation; loading = true; clearTimeout(timer); message('Actualisation des plans…');
     try {
       const [rows, configured] = await Promise.all([api(BASE), api(`${BASE}/bindings`)]);
@@ -79,7 +80,7 @@ export function userApprovals({ onPlan }) {
       // Stale approval controls must disappear when the server or authorization is unavailable.
       tasks = []; bindings = {}; $('#approval-list').replaceChildren(); $('#linked-plan').replaceChildren();
       message(error.status === 404 ? 'Les plans à approuver ne sont pas activés sur ce serveur.' : 'Les plans ne sont pas disponibles. Actualisez avant de décider. ' + error.message);
-    } finally { if (own === generation) loading = false; }
+    } finally { if (own === generation) { loading = false; if (refreshQueued) { refreshQueued = false; refresh(); } } }
   }
   function show(id) { linked = id || null; if (canOperate()) { draw(); refresh(); } }
   function review(task, verb) {
