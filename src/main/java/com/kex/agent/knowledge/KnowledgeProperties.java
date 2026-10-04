@@ -32,6 +32,7 @@ public record KnowledgeProperties(
     public KnowledgeProperties(boolean enabled, int topK, double threshold, String path) {
         this(enabled, topK, threshold, path, "default", java.time.Duration.ofDays(30));
     }
+    @org.springframework.boot.context.properties.bind.ConstructorBinding
     public KnowledgeProperties {
         if (maxAge == null || maxAge.isNegative() || maxAge.isZero()) throw new IllegalArgumentException("Fraîcheur positive requise");
     }

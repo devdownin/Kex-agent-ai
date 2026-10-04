@@ -25,6 +25,7 @@ public record TokenBudgetProperties(@DefaultValue("0") @PositiveOrZero long dail
         @DefaultValue("0") @PositiveOrZero long defaultToolCostMicros,
         Map<String, Long> toolCostMicros,
         @DefaultValue(".kex/budgets.json") String storePath) {
+    @org.springframework.boot.context.properties.bind.ConstructorBinding
     public TokenBudgetProperties {
         toolCostMicros = toolCostMicros == null ? Map.of() : Map.copyOf(toolCostMicros);
         if (toolCostMicros.values().stream().anyMatch(v -> v == null || v < 0)) {
