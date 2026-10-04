@@ -139,7 +139,7 @@ compétence retirée, reprise des paramètres, nouvelle conversation et isolatio
 
 ## Notifications utiles
 
-Le centre **Notifications** signale les résultats reçus (y compris partiels, sans affirmer la réussite), les précisions nécessaires et les plans serveur en attente d’approbation. Un lien ouvre la demande ou la liste des plans ; il n’approuve ni ne lance aucune action. Les événements sont dédupliqués dans cet onglet et les 50 derniers sont conservés dans son historique. Les préférences sont isolées par compte et espace sur ce navigateur.
+Le centre **Notifications** signale les résultats reçus (y compris partiels, sans affirmer la réussite), les précisions nécessaires, les plans serveur en attente d’approbation et leurs résultats disponibles. Les résultats durables précisent si le critère est confirmé, non satisfait, incertain ou non vérifié. Un lien ouvre la demande ou la liste des plans ; il n’approuve ni ne lance aucune action. Les événements sont dédupliqués dans cet onglet et les 50 derniers sont conservés dans son historique. Les préférences sont isolées par compte et espace sur ce navigateur.
 
 Les trois catégories peuvent être désactivées indépendamment. Les alertes du navigateur sont facultatives, nécessitent un clic explicite pour demander l’autorisation puis l’activation de la préférence, et apparaissent uniquement lorsque l’onglet est masqué. Leur contenu reste générique. Un refus d’autorisation laisse le centre interne accessible. Changer de compte ferme les alertes ouvertes et efface les informations affichées.
 

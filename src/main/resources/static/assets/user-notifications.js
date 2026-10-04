@@ -87,7 +87,11 @@ export function userNotifications() {
       notify(`request:${request.id}:${request.updatedAt}`, type, request.status === 'PARTIAL' ? 'Réception partielle : vérifiez les limites dans la demande.' : request.title, '#/request/' + request.id);
     },
     tasks(tasks) {
-      tasks.filter(task => task.status === 'DRAFT').forEach(task => notify(`approval:${task.id}:${task.revision}`, 'approval', task.plan.objective, '#/approvals'));
+      const outcomes = { VERIFIED: 'Critère final confirmé', COMPLETED: 'Objectif non vérifié', FAILED: 'Critère non satisfait', PAUSED: 'Traitement en pause', NEEDS_RECONCILIATION: 'Résultat incertain — examen nécessaire' };
+      tasks.forEach(task => {
+        if (task.status === 'DRAFT') notify(`approval:${task.id}:${task.revision}`, 'approval', task.plan.objective, '#/approvals');
+        else if (Object.hasOwn(outcomes, task.status)) notify(`result:${task.id}:${task.revision}`, 'result', `${outcomes[task.status]} : ${task.plan.objective}`, '#/approvals');
+      });
     },
   };
 }

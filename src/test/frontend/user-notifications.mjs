@@ -45,5 +45,9 @@ ui.request(request('COMPLETE')); assert.equal(alerts.length, 0, 'pas d’alerte 
 document.hidden = true; ui.request(request('PARTIAL', 'r4')); assert.equal(alerts.length, 1); assert.equal(alerts[0].options.body, 'Résultat disponible'); assert.ok(!JSON.stringify(alerts[0].options).includes('onerror'));
 ui.reset('alpha', ['OPERATOR']); assert.equal(alerts[0].closed, true); alerts[0].onclick(); assert.equal(location.hash, '', 'une ancienne alerte ne navigue pas après changement de compte');
 Notification.permission = 'denied'; ui.reset('beta', ['CHAT']); ui.request(request('NEEDS_INPUT', 'r5')); assert.equal(alerts.length, 1); assert.match($('#notification-permission').textContent, /bloquées/); assert.ok(count() > 0);
+ui.reset('gamma', ['OPERATOR']);
+ui.tasks([{ id: 't2', revision: 3, status: 'RUNNING', plan: { objective: 'Plan' } }]); assert.equal(count(), 0);
+ui.tasks([{ id: 't2', revision: 4, status: 'FAILED', plan: { objective: 'Plan' } }]); assert.equal(count(), 1); assert.match($('#notification-list').children[0].children[1].textContent, /Critère non satisfait/);
+ui.tasks([{ id: 't2', revision: 4, status: 'FAILED', plan: { objective: 'Plan' } }]); assert.equal(count(), 1, 'les résultats durables sont dédupliqués');
 $('#read-notifications').handlers.click(); assert.equal($('#notification-count').textContent, '');
 console.log('✓ notifications : événements réels, déduplication, préférences, compte isolé, autorisation explicite et tardive, alertes génériques et refus');
