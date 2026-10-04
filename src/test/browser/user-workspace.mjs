@@ -51,7 +51,7 @@ try {
   for (const width of [1440, 768, 390, 320]) {
     const context = await browser.newContext({ viewport: { width, height: 900 } });
     const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(String(e)));
-    await page.goto(`http://127.0.0.1:${server.address().port}/app`);
+    await page.goto(`http://127.0.0.1:${server.address().port}/app#/new`);
     assert.equal(await page.locator('#send').isDisabled(), true);
     await page.locator('#account').click(); await page.locator('#access-key').fill('alpha'); await page.locator('#connect').click();
     await page.getByText('Connecté : alpha').waitFor();

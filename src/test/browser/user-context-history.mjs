@@ -32,7 +32,7 @@ try {
   for (const width of [1440, 390]) {
     records.clear(); posts.length = 0; historyFailure = false;
     const context = await browser.newContext({ viewport: { width, height: 900 } }); const page = await context.newPage(); const errors = []; page.on('pageerror', error => errors.push(String(error)));
-    await page.goto(url); await login(page, 'alice');
+    await page.goto(url + "#/new"); await login(page, 'alice');
     await page.locator('#request-context summary').click(); await page.locator('#context-process').fill('orders'); await page.locator('#context-period').fill('hier'); await page.locator('#context-environment').fill('production');
     await page.locator('#context-files').setInputFiles({ name: 'orders.csv', mimeType: 'text/csv', buffer: Buffer.from('id,etat\n1,OK') }); await page.locator('#context-summary').getByText('1 fichier(s) joint(s)', { exact: false }).waitFor();
     assert.equal(posts.length, 0, 'préparer le contexte ne lance pas de traitement');

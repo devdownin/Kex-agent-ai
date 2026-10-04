@@ -22,7 +22,7 @@ const server = createServer(async (req, res) => {
   try { const path = req.url === '/app' ? 'app/index.html' : req.url.slice(1).split('?')[0]; if (path.includes('..')) throw new Error(); res.setHeader('Content-Type', path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : 'text/html'); res.end(await readFile(resolve(root, path))); } catch { res.writeHead(404); res.end(); }
 });
 await new Promise(done => server.listen(0, '127.0.0.1', done)); const browser = await chromium.launch();
-const url = `http://127.0.0.1:${server.address().port}/app`;
+const url = `http://127.0.0.1:${server.address().port}/app#/new`;
 async function login(page, user) { await page.locator('#account').click(); await page.locator('#access-key').fill(user); await page.locator('#connect').click(); await page.getByText('Connecté : ' + user, { exact: true }).waitFor(); }
 try {
   for (const width of [1440, 390]) {

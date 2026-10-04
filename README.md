@@ -432,7 +432,9 @@ Les [preuves de réussite et budgets partagés](docs/VERIFIED-LEARNING-BUDGETS.m
 
 ## User workspace
 
-Open `/app` for a simple interface: free-form requests, guided starters, approved team skills,
+Open `/app` for a simple interface. The **My work** home groups running requests, decisions and recent results, with freshness notices. Request tracking shows the last received activity and warns after a minute without new information; it does not infer a server failure. Results group the conclusion, dated sources, limits and next action. Approval screens explain the exact scope, possible effects and rollback limitations before the separate approval and launch decisions.
+
+Available features: free-form requests, guided starters, approved team skills,
 streamed progress, sources and recent requests. The expert Control Center stays at `/`.
 Both interfaces link to each other. See [the user workspace guide](docs/USER-WORKSPACE.md)
 for permissions, history scope and completion semantics.
