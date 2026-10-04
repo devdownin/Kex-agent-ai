@@ -872,7 +872,7 @@ public class McpToolCatalog implements AutoCloseable {
         return client.listTools().tools().stream()
                 .map(tool -> {
                     // Les annotations sont des déclarations du serveur, distinctes de la politique Kex.
-                    var declared = objectMapper.valueToTree(tool).path("annotations");
+                    var declared = objectMapper.valueToTree(tool.annotations());
                     Map<String, Boolean> annotations = new LinkedHashMap<>();
                     for (String hint : List.of("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")) {
                         if (declared.path(hint).isBoolean()) annotations.put(hint, declared.path(hint).booleanValue());
