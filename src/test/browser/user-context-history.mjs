@@ -5,13 +5,14 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
+let historyFailure = false;
 const root = resolve('src/main/resources/static'); const records = new Map(); const posts = [];
 const server = createServer(async (req, res) => {
   const user = req.headers.authorization?.slice(7); const rows = records.get(user) || [];
   const json = (value, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value)); };
   if (req.url === '/api/agent/whoami') return json({ name: user, tenant: 'team', roles: ['CHAT'] });
   if (req.url === '/api/agent/skills/available') return json([{ id: 's1', title: 'Vérifier les commandes', description: 'Surveiller les commandes', markdown: 'Lire les commandes', verification: { checks: ['État documenté'], parameters: { topic: 'orders' } } }, { id: 's2', title: 'Préparer un bilan', markdown: 'Résumer les observations' }]);
-  if (req.url === '/api/agent/workspace/requests' && req.method === 'GET') return json(rows);
+  if (req.url === '/api/agent/workspace/requests' && req.method === 'GET') return historyFailure ? json({ detail: 'Indisponible' }, 503) : json(rows);
   if (req.url === '/api/agent/workspace/requests/stream') {
     let body = ''; for await (const chunk of req) body += chunk; const input = JSON.parse(body); posts.push(input);
     let request = rows.find(r => r.id === input.id);
@@ -29,7 +30,7 @@ const url = `http://127.0.0.1:${server.address().port}/app`;
 async function login(page, user) { await page.locator('#account').click(); await page.locator('#access-key').fill(user); await page.locator('#connect').click(); await page.getByText('Connecté : ' + user, { exact: true }).waitFor(); }
 try {
   for (const width of [1440, 390]) {
-    records.clear(); posts.length = 0;
+    records.clear(); posts.length = 0; historyFailure = false;
     const context = await browser.newContext({ viewport: { width, height: 900 } }); const page = await context.newPage(); const errors = []; page.on('pageerror', error => errors.push(String(error)));
     await page.goto(url); await login(page, 'alice');
     await page.locator('#request-context summary').click(); await page.locator('#context-process').fill('orders'); await page.locator('#context-period').fill('hier'); await page.locator('#context-environment').fill('production');
@@ -48,6 +49,10 @@ try {
     await other.locator('#request-list').getByRole('button', { name: 'Consulter' }).click(); await other.locator('#saved-context summary').click(); await other.locator('#saved-context-content').getByText('orders.csv', { exact: false }).waitFor();
     await other.locator('#followup').fill('Clarifier'); await other.locator('#followup-send').click(); await other.locator('#run-status').getByText('Votre réponse est nécessaire', { exact: true }).waitFor();
     await other.getByRole('link', { name: /^À suivre/ }).click(); await other.locator('#attention-list').getByRole('link', { name: 'Précision nécessaire' }).waitFor(); assert.equal(posts.length, 2);
+    historyFailure = true; await other.reload(); await other.getByText('Connecté : alice', { exact: true }).waitFor();
+    await other.getByRole('link', { name: 'Mes demandes', exact: true }).click(); await other.locator('#request-list').getByRole('button', { name: 'Consulter' }).click();
+    await other.locator('#followup').fill('Poursuivre'); await other.locator('#followup-send').click(); await other.locator('#run-status').getByText('Réponse reçue', { exact: true }).waitFor();
+    assert.equal(posts.length, 3, 'une demande serveur conserve son flux protégé lorsque la lecture de l’historique échoue'); historyFailure = false;
     await login(other, 'bob'); await other.getByRole('link', { name: 'Mes demandes', exact: true }).click(); await other.locator('#request-list').getByText('Aucune demande', { exact: false }).waitFor(); assert.equal(await other.locator('#saved-context-content').textContent(), '');
     assert.equal(await page.evaluate(() => window.hacked), undefined); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)); assert.deepEqual(errors, []);
     await context.close(); await secondContext.close();
