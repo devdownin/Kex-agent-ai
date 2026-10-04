@@ -436,3 +436,5 @@ Open `/app` for a simple interface: free-form requests, guided starters, approve
 streamed progress, sources and recent requests. The expert Control Center stays at `/`.
 Both interfaces link to each other. See [the user workspace guide](docs/USER-WORKSPACE.md)
 for permissions, history scope and completion semantics.
+
+Guided clarifications offer selectable answers; completed results separate observations, uncertainties and next actions. Skill forms display declared parameters, prerequisites and expected checks. Technical execution details remain expandable.

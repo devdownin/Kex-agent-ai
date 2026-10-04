@@ -72,3 +72,11 @@ sombre suivent le système ; les parcours sont conçus pour clavier et écran mo
   isolation de compte et absence de débordement à 1440, 768, 390 et 320 px.
 - `./mvnw verify` : routes statiques, sécurité du catalogue et contrat de fin de flux, plus la
   suite existante. Les deux scripts frontend font partie du job navigateur de la CI.
+
+## Guided answers and skill forms
+
+The user workspace requests a structured response using the existing chat stream. A completed, valid result displays observations, uncertainties and the next proposed action. A clarification offers two to four choices; selecting one only fills the follow-up draft. The user must send it to continue and can write another answer. Free text, invalid JSON and interrupted responses remain visible without inferred conclusions. These presentation instructions do not change tool permissions.
+
+The progress list describes observed tool completions in ordinary language and keeps names and durations in expandable details. A completed call does not establish that the user's objective succeeded.
+
+Skill forms show declared preconditions and expected checks, plus up to twenty scalar parameters from verification evidence, with example values. These values are examples, not a validation schema. Complex parameters stay in the procedure and require clarification. Skills without metadata retain the general subject/context form. Changes to procedure or verification metadata invalidate a prepared skill before sending. Preconditions are displayed for examination, never automatically asserted as satisfied.

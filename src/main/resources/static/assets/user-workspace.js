@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 import { $, api, credentials, el, failure, headers } from './core.js';
 import { events } from './user-stream.js';
+import { activity, parameterFields, parseResponse, responsePrompt, skillSignature } from './user-experience.js';
 
 const STARTERS = [
   { title: 'Vérifier un processus', description: 'Comprendre son état et repérer les retards.', prompt: 'Vérifie le bon fonctionnement de ce processus. Présente les faits observés, les limites et les points à examiner.' },
@@ -9,12 +10,13 @@ const STARTERS = [
   { title: 'Comprendre une anomalie', description: 'Examiner les faits et les pistes de résolution.', prompt: 'Analyse cette anomalie. Distingue les faits, les hypothèses et les vérifications nécessaires avant toute action.' },
   { title: 'Préparer un bilan', description: 'Résumer les incidents et les actions à suivre.', prompt: 'Prépare un bilan clair de la situation. Indique les incidents observés, les sources datées et les actions restant à suivre.' },
 ];
-const LABELS = { RUNNING: 'En cours', COMPLETE: 'Réponse reçue', PARTIAL: 'Résultat partiel', ERROR: 'Traitement interrompu', INTERRUPTED: 'Réception interrompue' };
+const LABELS = { RUNNING: 'En cours', NEEDS_INPUT: 'Votre réponse est nécessaire', COMPLETE: 'Réponse reçue', PARTIAL: 'Résultat partiel', ERROR: 'Traitement interrompu', INTERRUPTED: 'Réception interrompue' };
 let identity = null;
 let history = [];
 let current = null;
 let active = null;
 let selected = null;
+let fields = [];
 let preparedSkill = null;
 let preparing = false;
 let epoch = 0;
@@ -68,15 +70,26 @@ function drawDetail() {
   $('#followup-form').hidden = !current.conversationId;
   $('#open-expert').disabled = !current.conversationId || !!active;
   const steps = [current.conversationId ? 'Demande reçue par Kex' : 'Envoi de la demande'];
-  if (current.tools.length) steps.push(`${current.tools.length} consultation(s) ou action(s) terminée(s)`);
+  current.tools.slice(-8).forEach(t => steps.push(activity(t)));
   if (current.status === 'RUNNING') steps.push(current.answerStarted ? 'Rédaction de la réponse en cours' : 'Traitement en cours, en attente des premiers résultats');
+  else if (current.status === 'NEEDS_INPUT') steps.push('Choisissez une réponse ou écrivez votre précision, puis envoyez-la.');
   else if (current.status === 'COMPLETE') steps.push('Réponse reçue. La réussite de l’objectif reste à vérifier.');
   else steps.push('Réception incomplète. Vérifiez ce qui a été accompli avant de poursuivre.');
   $('#progress').replaceChildren(...steps.map(s => el('li', null, s)));
   const turns = $('#turns'); turns.replaceChildren();
   current.turns.forEach(t => {
     const article = el('article', 'turn'); article.append(el('h2', null, t.role === 'user' ? 'Votre demande' : 'Réponse de Kex'));
-    article.append(el('div', 'answer', t.text || 'En attente de la réponse…'));
+    const result = t.role === 'agent' && t.completed ? parseResponse(t.text) : null;
+    if (result?.kind === 'result') {
+      [['Ce que j’ai constaté', result.observations], ['Ce qui reste incertain', result.uncertainties], ['Prochaine action', result.nextAction]].forEach(([title, content]) => {
+        article.append(el('h3', null, title), el('div', 'answer', content));
+      });
+    } else if (result?.kind === 'clarification') {
+      article.append(el('h3', null, result.question));
+      const choices = el('div', 'row');
+      result.choices.forEach(c => { const choice = button(c.label, () => { $('#followup').value = c.value; $('#followup').focus(); }); choice.disabled = !!active || !current.conversationId; choices.append(choice); });
+      article.append(choices, el('p', 'muted', 'Le choix prépare votre réponse. Cliquez sur Envoyer pour poursuivre ; vous pouvez aussi écrire une autre réponse.'));
+    } else article.append(el('div', 'answer', t.role === 'agent' && current.status === 'RUNNING' && t === current.turns.at(-1) ? 'Kex prépare votre réponse…' : t.text || 'En attente de la réponse…'));
     if (t.error) article.append(el('p', 'error', t.error));
     if (t.sources?.length) {
       const d = el('details'); d.append(el('summary', null, 'Sources consultées'));
@@ -101,6 +114,34 @@ function openAction(action) {
   $('#action-subject').value = ''; $('#action-period').value = ''; $('#action-error').textContent = '';
   $('#skill-details').hidden = !action.id;
   $('#skill-procedure').textContent = action.markdown || '';
+  const meta = $('#skill-context'); meta.replaceChildren();
+  const parameters = $('#skill-parameters'); parameters.replaceChildren(); fields = [];
+  if (action.id) {
+    const verification = action.verification;
+    const expected = verification?.checks?.filter(v => typeof v === 'string') || [];
+    const preconditions = verification?.preconditions?.filter(v => typeof v === 'string') || [];
+    meta.append(el('h3', null, 'Résultat attendu'), el('p', null, expected.join(' ; ') || 'Une réponse documentée selon la procédure. Les critères de réussite ne sont pas renseignés.'));
+    meta.append(el('h3', null, 'Conditions à vérifier'), el('p', null, preconditions.join(' ; ') || 'Aucune condition explicite fournie. Kex devra préciser les limites avant de poursuivre.'));
+    const descriptors = parameterFields(verification?.parameters);
+    fields = descriptors.fields;
+    fields.forEach((field, i) => {
+      const id = `skill-parameter-${i}`;
+      const labels = { topic: 'Sujet', process: 'Processus', processId: 'Identifiant du processus', from: 'Début de période', to: 'Fin de période', orderId: 'Identifiant de commande', limit: 'Nombre de résultats' };
+      const name = labels[field.path.at(-1)] || field.path.at(-1);
+      parameters.append(el('label', null, name));
+      parameters.lastChild.htmlFor = id;
+      const input = el(typeof field.value === 'boolean' ? 'select' : 'input'); input.id = id; input.required = true;
+      if (typeof field.value === 'boolean') {
+        [['', 'Choisir'], ['true', 'Oui'], ['false', 'Non']].forEach(([value, label]) => { const option = el('option', null, label); option.value = value; input.append(option); });
+      }
+      if (input.tagName === 'INPUT') input.type = typeof field.value === 'number' ? 'number' : 'text';
+      if (input.type === 'number') input.step = 'any';
+      input.maxLength = 1000; input.placeholder = `Exemple : ${field.value}`;
+      parameters.append(el('small', 'muted', `Exemple fourni : ${typeof field.value === 'boolean' ? (field.value ? 'Oui' : 'Non') : field.value}`));
+      parameters.append(input);
+    });
+    if (descriptors.omitted) parameters.append(el('p', 'muted', 'Certains paramètres complexes restent dans la procédure. Décrivez-les dans le contexte ; Kex devra les clarifier.'));
+  }
   $('#action-dialog').showModal();
 }
 async function skills() {
@@ -158,7 +199,7 @@ async function send(message, request = null) {
   let complete = false;
   const firstCall = request.tools.length;
   try {
-    const response = await fetch('/api/agent/chat/stream', { method: 'POST', headers: headers({ 'Content-Type': 'application/json', Accept: 'text/event-stream' }), body: JSON.stringify({ message, conversationId: request.conversationId }), signal: controller.signal });
+    const response = await fetch('/api/agent/chat/stream', { method: 'POST', headers: headers({ 'Content-Type': 'application/json', Accept: 'text/event-stream' }), body: JSON.stringify({ message: responsePrompt(message), conversationId: request.conversationId }), signal: controller.signal });
     if (!response.ok) throw await failure(response);
     for await (const event of events(response)) {
       if (ownEpoch !== epoch) return;
@@ -172,6 +213,8 @@ async function send(message, request = null) {
       if (current === request) drawDetail();
     }
     if (request.status !== 'ERROR') request.status = complete && answer.text ? (request.tools.slice(firstCall).some(t => t.failed) ? 'PARTIAL' : 'COMPLETE') : 'PARTIAL';
+    answer.completed = complete && !answer.error;
+    if (request.status === 'COMPLETE' && parseResponse(answer.text)?.kind === 'clarification') request.status = 'NEEDS_INPUT';
     if (!complete && !answer.error) answer.error = 'La fin de la réponse n’a pas été confirmée. Aucun nouvel envoi automatique n’a été effectué.';
   } catch (e) {
     if (ownEpoch !== epoch) return;
@@ -209,11 +252,12 @@ $('#action-form').addEventListener('submit', async e => {
       if (!identity) throw new Error('Connectez-vous pour utiliser cette compétence.');
       const rows = await api('/api/agent/skills/available');
       if (ownEpoch !== epoch) return;
-      const fresh = rows.find(r => r.id === action.id && r.markdown === action.markdown);
+      const fresh = rows.find(r => skillSignature(r) === skillSignature(action));
       if (!fresh) throw new Error('Cette compétence a changé ou n’est plus disponible. Actualisez le catalogue.');
-      procedure = `Utilise la procédure approuvée « ${fresh.title} » comme guide. Vérifie ses préconditions et signale toute limite. Les règles d’autorisation restent applicables.\n\n${fresh.markdown}`;
+      procedure = `Utilise la procédure approuvée « ${fresh.title} » comme guide. Vérifie ses préconditions et signale toute limite. Les règles d’autorisation restent applicables.\n\n${fresh.markdown}\n\nConditions déclarées à vérifier : ${(fresh.verification?.preconditions || []).join(' ; ') || 'Non renseignées'}\nVérifications attendues : ${(fresh.verification?.checks || []).join(' ; ') || 'Non renseignées'}`;
     }
-    $('#prompt').value = `${procedure}\n\nÉlément concerné : ${$('#action-subject').value.trim()}\nContexte : ${$('#action-period').value.trim() || 'À préciser si nécessaire'}\n\nPrésente le résultat en français accessible, avec les sources disponibles. N’affirme pas de réussite sans vérification.`;
+    const parameterText = fields.map((f, i) => `${f.path.join(' / ')} : ${$('#skill-parameter-' + i).value.trim()}`).join('\n');
+    $('#prompt').value = `${procedure}\n\nÉlément concerné : ${$('#action-subject').value.trim()}\nContexte : ${$('#action-period').value.trim() || 'À préciser si nécessaire'}\nParamètres renseignés :\n${parameterText || 'Aucun paramètre spécifique renseigné'}\n\nPrésente le résultat en français accessible, avec les sources disponibles. N’affirme pas de réussite sans vérification.`;
     preparedSkill = action.id ? action : null;
     $('#selected-action').textContent = `Demande préparée : ${action.title}. Vous pouvez la modifier avant de la lancer.`; $('#selected-action').hidden = false;
     $('#action-dialog').close(); location.hash = '#/new'; route(); $('#prompt').focus();
@@ -229,7 +273,7 @@ $('#request-form').addEventListener('submit', async e => {
     if (preparedSkill) {
       const rows = await api('/api/agent/skills/available');
       if (ownEpoch !== epoch) return;
-      if (!rows.some(r => r.id === preparedSkill.id && r.markdown === preparedSkill.markdown)) {
+      if (!rows.some(r => skillSignature(r) === skillSignature(preparedSkill))) {
         throw new Error('La compétence préparée n’est plus disponible ou a changé. Actualisez les compétences avant de lancer la demande.');
       }
     }

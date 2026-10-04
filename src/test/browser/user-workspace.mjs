@@ -17,7 +17,7 @@ const server = createServer(async (req, res) => {
   }
   if (req.url === '/api/agent/skills/available') {
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify(token === 'Bearer alpha' && approved ? [{ id: 'skill-1', title: 'Procédure commandes', markdown: '# Lire les faits ' + unsafe }] : [])); return;
+    res.end(JSON.stringify(token === 'Bearer alpha' && approved ? [{ id: 'skill-1', title: 'Procédure commandes', markdown: '# Lire les faits ' + unsafe, verification: { parameters: { check: { topic: 'orders' } }, preconditions: ['Accès aux commandes'], checks: ['État des commandes documenté'] } }] : [])); return;
   }
   if (req.url === '/api/agent/chat/stream') {
     let body = ''; for await (const chunk of req) body += chunk; posts.push(JSON.parse(body));
@@ -26,9 +26,10 @@ const server = createServer(async (req, res) => {
     if (mode === 'hold') return;
     res.write('event: tool\ndata: {"tool":"kex_process_health","durationMillis":9,"failed":false}\n\n');
     res.write('event: sources\ndata: [{"source":"runbook","observedAt":"2026-10-04T08:00:00Z","excerpt":"preuve"}]\n\n');
-    res.write('event: token\ndata: Observation ' + unsafe + '\n\n');
+    const output = mode === 'clarification' ? JSON.stringify({ kind: 'clarification', question: 'Quelle période examiner ?', choices: [{ label: 'Aujourd’hui', value: 'Depuis ce matin' }, { label: 'Cette semaine', value: 'Depuis lundi' }] }) : mode === 'structured' ? JSON.stringify({ kind: 'result', observations: unsafe, uncertainties: 'Période non vérifiée', nextAction: 'Préciser la période' }) : 'Observation ' + unsafe;
+    res.write('event: token\ndata: ' + output + '\n\n');
     if (mode === 'error') res.write('event: error\ndata: Service indisponible\n\n');
-    if (mode === 'success') res.write('event: done\ndata: response-complete\n\n');
+    if (['success', 'clarification', 'structured'].includes(mode)) res.write('event: done\ndata: response-complete\n\n');
     res.end(); return;
   }
   const path = req.url.split('?')[0];
@@ -56,7 +57,10 @@ try {
     await page.getByText('Connecté : alpha').waitFor();
     await page.getByRole('link', { name: 'Actions prêtes à l’emploi', exact: true }).click();
     await page.getByRole('button', { name: /Procédure commandes/ }).click();
-    await page.locator('#action-subject').fill('commandes'); approved = false;
+    await page.locator('#action-subject').fill('commandes');
+    await page.locator('#skill-parameter-0').fill('orders');
+    assert.match(await page.locator('#skill-context').innerText(), /Accès aux commandes/);
+    approved = false;
     await page.locator('#prepare').click(); await page.getByText('Cette compétence a changé', { exact: false }).waitFor();
     assert.equal(posts.length, 0, 'preparing must not execute a skill');
     await page.locator('#close-action').click(); approved = true;
@@ -74,6 +78,16 @@ try {
     await page.goto(`http://127.0.0.1:${server.address().port}/app#/requests`);
     await page.getByRole('button', { name: 'Consulter' }).click();
     await page.getByText('Réponse reçue', { exact: true }).waitFor();
+    mode = 'clarification'; await page.locator('#followup').fill('Examine les commandes'); await page.locator('#followup-send').click();
+    await page.getByText('Votre réponse est nécessaire', { exact: true }).waitFor();
+    const count = posts.length;
+    await page.getByRole('button', { name: 'Aujourd’hui', exact: true }).click();
+    assert.equal(await page.locator('#followup').inputValue(), 'Depuis ce matin');
+    assert.equal(posts.length, count, 'choices must not execute automatically');
+    mode = 'structured'; await page.locator('#followup-send').click();
+    await page.getByRole('heading', { name: 'Ce que j’ai constaté', exact: true }).waitFor();
+    assert.equal(await page.locator('#turns img').count(), 0);
+    assert.match(posts.at(-1).message, /Depuis ce matin/);
     mode = 'partial'; await page.locator('#followup').fill('Précise les limites'); await page.locator('#followup-send').click();
     await page.getByText('Résultat partiel', { exact: true }).waitFor();
     mode = 'error'; await page.locator('#followup').fill('Nouvelle vérification'); await page.locator('#followup-send').click();
@@ -83,6 +97,7 @@ try {
     await page.locator('#account').click(); await page.locator('#access-key').fill('beta'); await page.locator('#connect').click();
     await page.getByText('Connecté : beta').waitFor();
     await page.getByRole('link', { name: 'Mes demandes', exact: true }).click();
+    await page.locator('#request-list').getByText('Aucune demande', { exact: false }).waitFor();
     assert.match(await page.locator('#request-list').innerText(), /Aucune demande/);
     assert.equal(await page.locator('#turns').innerText(), '', 'account changes clear transcript and ignore old stream');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `no horizontal overflow at ${width}px`);
