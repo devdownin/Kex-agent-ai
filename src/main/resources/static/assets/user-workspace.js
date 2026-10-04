@@ -52,6 +52,8 @@ async function refreshHistory() {
   try {
     const rows = await api('/api/agent/workspace/requests');
     if (own !== epoch || version !== historyVersion) return;
+    // Une lecture démarrée avant un envoi ne doit pas écraser le flux maintenant actif.
+    if (active) { historyState = 'réception active, actualisation différée'; drawOverview(); return; }
     serverHistory = true; historyState = 'actualisées à ' + date(new Date().toISOString());
     const local = history.filter(r => !r.serverId);
     const saved = new Map(history.filter(r => r.serverId).map(r => [r.serverId, r]));
@@ -469,7 +471,7 @@ $('#context-files').addEventListener('change', async () => {
   finally { if (own === epoch && version === contextVersion) { contextLoading = false; $('#send').disabled = !!active || !identity; } }
 });
 $('#refresh-work').addEventListener('click', async () => { await refreshHistory(); await approvals.refresh(); drawOverview(); });
-$('#refresh-current').addEventListener('click', async () => { if (active) return; await refreshHistory(); if (current?.serverId) { current.summaryOnly = true; } route(); });
+$('#refresh-current').addEventListener('click', async () => { if (active) return; const own = epoch; await refreshHistory(); if (own !== epoch || active) return; if (current?.serverId) { current.summaryOnly = true; } route(); });
 const activityTimer = setInterval(() => { if (current?.status === 'RUNNING' && !document.hidden) drawRunActivity(current); }, 15000);
 $('#refresh-requests').addEventListener('click', async () => { await refreshHistory(); route(); });
 $('#refresh-attention').addEventListener('click', async () => { await refreshHistory(); await approvals.refresh(); drawAttention(); });
