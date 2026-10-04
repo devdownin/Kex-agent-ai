@@ -1,0 +1,75 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 Kex Agent AI Contributors -->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Kex Agent · Espace utilisateur</title>
+  <link rel="icon" href="/assets/logo.png">
+  <link rel="stylesheet" href="/assets/user-workspace.css">
+  <script type="module" src="/assets/user-workspace.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Aller au contenu</a>
+<header class="app-header">
+  <a class="brand" href="/app"><img src="/assets/logo.png" width="36" height="36" alt=""><span><strong>Kex Agent</strong><small>Espace utilisateur</small></span></a>
+  <div class="header-actions"><span id="identity"></span><a href="/#/chat" id="expert">Console experte</a><button id="account" type="button">Se connecter</button></div>
+</header>
+<nav aria-label="Navigation utilisateur">
+  <a href="#/new" data-page="new">Nouvelle demande</a>
+  <a href="#/actions" data-page="actions">Actions prêtes à l’emploi</a>
+  <a href="#/requests" data-page="requests">Mes demandes</a>
+</nav>
+<main id="main">
+  <p id="notice" role="status"></p>
+  <section id="new" aria-labelledby="new-title">
+    <h1 id="new-title">Que souhaitez-vous faire ?</h1>
+    <p class="intro">Décrivez votre besoin ou choisissez une action prête à l’emploi.</p>
+    <form id="request-form" class="panel">
+      <label for="prompt">Votre demande</label>
+      <textarea id="prompt" rows="4" required maxlength="24000" placeholder="Exemple : vérifie que les commandes arrivent bien dans notre système."></textarea>
+      <p id="selected-action" class="muted" hidden></p>
+      <div class="row"><button class="primary" id="send" type="submit" disabled>Lancer</button><span class="muted">Kex vous demandera les précisions nécessaires.</span></div>
+    </form>
+    <h2>Pour commencer</h2><div id="starters" class="actions-grid"></div>
+  </section>
+  <section id="actions" hidden aria-labelledby="actions-title">
+    <h1 id="actions-title">Actions prêtes à l’emploi</h1>
+    <p class="intro">Choisissez un objectif, puis précisez votre besoin.</p>
+    <h2>Demandes guidées</h2><p class="muted">Ces modèles préparent votre demande. Ils ne lancent aucune action directement.</p>
+    <div id="guided" class="actions-grid"></div>
+    <h2>Compétences de votre équipe</h2><p class="muted">Procédures approuvées et encore valides, proposées pour votre espace.</p>
+    <div id="skills" class="actions-grid"></div><button id="refresh-skills" type="button">Actualiser les compétences</button>
+  </section>
+  <section id="requests" hidden aria-labelledby="requests-title">
+    <h1 id="requests-title">Mes demandes</h1>
+    <p class="muted">Historique de cet onglet. Il reste disponible en passant à la console experte ; il ne constitue pas un journal partagé.</p>
+    <div id="request-list"></div>
+  </section>
+  <section id="detail" hidden aria-labelledby="detail-title">
+    <a href="#/requests">Toutes mes demandes</a>
+    <h1 id="detail-title"></h1>
+    <p id="run-status" role="status"></p>
+    <ol id="progress" aria-label="Déroulement du traitement"></ol>
+    <div class="row"><button id="stop" type="button" hidden>Arrêter la réception</button><button id="open-expert" type="button">Examiner dans la console experte</button></div>
+    <div id="turns"></div>
+    <form id="followup-form" class="panel"><label for="followup">Préciser ou poursuivre votre demande</label><textarea id="followup" rows="2" required maxlength="24000"></textarea><button class="primary" id="followup-send" type="submit">Envoyer</button></form>
+  </section>
+</main>
+<dialog id="connection"><form id="connection-form">
+  <h2>Connexion à votre espace</h2>
+  <p>Utilisez le code d’accès fourni par votre administrateur. Il reste dans cet onglet.</p>
+  <label for="access-key">Code d’accès</label><input type="password" id="access-key" autocomplete="off" required>
+  <p id="connection-error" role="alert"></p>
+  <div class="row"><button type="submit" class="primary" id="connect">Se connecter</button><button type="button" id="close-connection">Fermer</button><button type="button" id="disconnect">Se déconnecter</button></div>
+</form></dialog>
+<dialog id="action-dialog"><form id="action-form">
+  <h2 id="action-title"></h2><p id="action-description"></p>
+  <label for="action-subject">Processus ou élément concerné</label><input id="action-subject" required maxlength="500" placeholder="Exemple : traitement des commandes">
+  <label for="action-period">Période ou contexte complémentaire (facultatif)</label><input id="action-period" maxlength="1000" placeholder="Exemple : depuis ce matin">
+  <details id="skill-details" hidden><summary>Consulter la procédure approuvée</summary><pre id="skill-procedure"></pre></details>
+  <p id="action-error" role="alert"></p><div class="row"><button class="primary" id="prepare" type="submit">Préparer ma demande</button><button id="close-action" type="button">Annuler</button></div>
+</form></dialog>
+</body>
+</html>

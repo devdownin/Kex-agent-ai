@@ -386,3 +386,10 @@ La console Tâches distingue le plan proposé, son approbation, son exécution e
 Les mutations incertaines sont réconciliées sans rejeu. Les tâches et la sélection des outils s’activent explicitement.
 Après mise à jour, déclarer les véritables lectures avec `kex.agent.tools.rules.<name>.read-only=true`
 pour conserver les réessais MCP transitoires ; les outils non classés ne sont plus rejoués automatiquement.
+
+## Espace utilisateur
+
+Ouvrez `/app` pour une interface simple : demandes libres, demandes guidées, compétences approuvées,
+suivi en direct, sources et historique récent. La console experte reste à `/`. Les deux interfaces
+proposent un accès réciproque. Voir le [guide utilisateur](docs/USER-WORKSPACE.md) pour les droits,
+la portée de l’historique et la distinction entre réponse reçue et réussite vérifiée.

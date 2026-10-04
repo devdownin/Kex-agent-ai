@@ -429,3 +429,10 @@ After upgrading, declare real read-only tools with `kex.agent.tools.rules.<name>
 to retain transient MCP retries; unclassified tools are no longer automatically retried.
 
 Les [preuves de réussite et budgets partagés](docs/VERIFIED-LEARNING-BUDGETS.md) distinguent une réponse terminée d’un objectif vérifié. La [connaissance documentaire](docs/CONNAISSANCE.md) applique droits, environnement, fraîcheur et provenance datée.
+
+## User workspace
+
+Open `/app` for a simple interface: free-form requests, guided starters, approved team skills,
+streamed progress, sources and recent requests. The expert Control Center stays at `/`.
+Both interfaces link to each other. See [the user workspace guide](docs/USER-WORKSPACE.md)
+for permissions, history scope and completion semantics.

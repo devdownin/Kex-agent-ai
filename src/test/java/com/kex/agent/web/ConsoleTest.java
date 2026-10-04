@@ -36,6 +36,18 @@ class ConsoleTest {
     }
 
     @Test
+    void sert_l_espace_utilisateur_sans_ouvrir_l_api() throws Exception {
+        for (String path : List.of("/app", "/app/", "/app/index.html")) {
+            HttpResponse<String> response = get(path);
+            assertThat(response.statusCode()).as(path).isEqualTo(200);
+            assertThat(response.body()).contains("Espace utilisateur").contains("user-workspace.js");
+        }
+        assertThat(get("/api/agent/skills/available").statusCode()).isEqualTo(401);
+        assertThat(get("/assets/user-workspace.js").statusCode()).isEqualTo(200);
+        assertThat(get("/assets/user-workspace.css").statusCode()).isEqualTo(200);
+    }
+
+    @Test
     void sert_les_ressources_de_la_console_sans_jeton() throws Exception {
         // Les modules sont importés les uns par les autres : un seul 404 casse toute la console.
         for (String asset : List.of("forecasts.js", "console.js", "core.js", "supervision.js", "tools.js", "chat.js",

@@ -318,7 +318,8 @@ class AgentControllerTest {
         assertThat(body).contains("event:conversation").contains("data:conv-9")
                 .contains("event:token").contains("data:sa").contains("data:lut")
                 // Sans cet événement, le flux reste muet pendant l'exécution de l'outil.
-                .contains("event:tool").contains("\"tool\":\"echo\"").contains("\"durationMillis\":12");
+                .contains("event:tool").contains("\"tool\":\"echo\"").contains("\"durationMillis\":12")
+                .contains("event:done").contains("data:response-complete");
     }
 
     @Test
@@ -334,7 +335,7 @@ class AgentControllerTest {
 
         assertThat(response).hasStatusOk();
         assertThat(response.getResponse().getContentAsString())
-                .contains("event:error").contains("120s");
+                .contains("event:error").contains("120s").doesNotContain("event:done");
     }
 
     /**

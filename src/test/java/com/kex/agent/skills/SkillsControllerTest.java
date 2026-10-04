@@ -65,4 +65,11 @@ class SkillsControllerTest {
 
         assertThat(controller.reviewQueue()).containsExactly(entry);
     }
+
+    @Test
+    void le_catalogue_utilisateur_utilise_les_competences_valides_du_locataire() {
+        given(service.ranked("admin")).willReturn(List.of());
+        assertThat(controller.available(principal)).isEmpty();
+        verify(service).ranked("admin");
+    }
 }
