@@ -73,7 +73,7 @@ try {
     await page.getByRole('link', { name: 'Actions prêtes à l’emploi', exact: true }).click();
     await page.locator('#guided').getByRole('button', { name: /Vérifier un processus/ }).click();
     await page.locator('#action-subject').fill('commandes'); await page.locator('#prepare').click();
-    await page.locator('#send').click(); await page.getByText('Réponse reçue', { exact: true }).waitFor();
+    await page.locator('#send').click(); await page.locator('#run-status').getByText('Réponse reçue', { exact: true }).waitFor();
     assert.match(await page.locator('#progress').innerText(), /reste à vérifier/);
     assert.equal(await page.locator('#turns img').count(), 0);
     await page.getByText('Sources consultées').click(); assert.match(await page.locator('#turns').innerText(), /runbook/);
@@ -84,9 +84,9 @@ try {
     assert.equal(await page.evaluate(() => localStorage.getItem('kex.agent.conversation.conv-1')), null, 'handoff must not copy private turns to the global expert history');
     await page.goto(`http://127.0.0.1:${server.address().port}/app#/requests`);
     await page.getByRole('button', { name: 'Consulter' }).click();
-    await page.getByText('Réponse reçue', { exact: true }).waitFor();
+    await page.locator('#run-status').getByText('Réponse reçue', { exact: true }).waitFor();
     mode = 'clarification'; await page.locator('#followup').fill('Examine les commandes'); await page.locator('#followup-send').click();
-    await page.getByText('Votre réponse est nécessaire', { exact: true }).waitFor();
+    await page.locator('#run-status').getByText('Votre réponse est nécessaire', { exact: true }).waitFor();
     const count = posts.length;
     await page.getByRole('button', { name: 'Aujourd’hui', exact: true }).click();
     assert.equal(await page.locator('#followup').inputValue(), 'Depuis ce matin');
@@ -96,11 +96,11 @@ try {
     assert.equal(await page.locator('#turns img').count(), 0);
     assert.match(posts.at(-1).message, /Depuis ce matin/);
     mode = 'partial'; await page.locator('#followup').fill('Précise les limites'); await page.locator('#followup-send').click();
-    await page.getByText('Résultat partiel', { exact: true }).waitFor();
+    await page.locator('#run-status').getByText('Résultat partiel', { exact: true }).waitFor();
     mode = 'error'; await page.locator('#followup').fill('Nouvelle vérification'); await page.locator('#followup-send').click();
-    await page.getByText('Traitement interrompu', { exact: true }).waitFor();
+    await page.locator('#run-status').getByText('Traitement interrompu', { exact: true }).waitFor();
     mode = 'hold'; await page.locator('#followup').fill('Vérification lente'); await page.locator('#followup-send').click();
-    await page.getByText('En cours', { exact: true }).waitFor();
+    await page.locator('#run-status').getByText('En cours', { exact: true }).waitFor();
     await page.locator('#account').click(); await page.locator('#access-key').fill('beta'); await page.locator('#connect').click();
     await page.getByText('Connecté : beta').waitFor();
     await page.getByRole('link', { name: 'Mes demandes', exact: true }).click();
