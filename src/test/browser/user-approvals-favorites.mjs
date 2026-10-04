@@ -91,6 +91,7 @@ try {
     let release; hold = new Promise(resolve => { release = resolve; }); await page.locator('#refresh-approvals').click(); await page.locator('#approval-note').getByText('Actualisation des plans…', { exact: true }).waitFor();
     await login('beta'); release(); await page.waitForLoadState('networkidle'); await page.getByRole('link', { name: 'Actions prêtes à l’emploi', exact: true }).click(); await page.locator('#favorites').getByText('Ajoutez une action', { exact: false }).waitFor();
     assert.equal(await page.locator('#approvals-link').isVisible(), false); assert.equal(await page.locator('#approval-list').innerText(), ''); assert.equal(await page.locator('#linked-plan').innerText(), '');
+    assert.equal(await page.locator('#review-content').textContent(), ''); assert.equal(await page.locator('#plan-objective').inputValue(), '', 'account changes also clear closed dialog contents');
     assert.equal(await page.evaluate(() => window.hacked), undefined); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)); assert.deepEqual(errors, []);
     await context.close();
   }

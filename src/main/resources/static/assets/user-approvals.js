@@ -18,7 +18,9 @@ export function userApprovals({ onPlan }) {
   function reset(nextRoles = []) {
     generation++; roles = nextRoles; tasks = []; bindings = {}; linked = null; loading = false; refreshQueued = false;
     clearTimeout(timer); pending.clear(); confirmation = null; planning = null;
-    $('#approval-list').replaceChildren(); $('#linked-plan').replaceChildren(); message('');
+    $('#approval-list').replaceChildren(); $('#linked-plan').replaceChildren(); $('#review-content').replaceChildren(); message('');
+    $('#plan-objective').value = ''; $('#plan-error').textContent = '';
+    for (const id of ['review-title', 'review-consequence', 'review-error']) $('#' + id).textContent = '';
     for (const id of ['plan-dialog', 'review-dialog']) if ($('#' + id).open) $('#' + id).close();
     $('#approvals-link').hidden = !canOperate(); $('#prepare-plan').hidden = !canOperate();
     $('#linked-plan-section').hidden = !canOperate(); $('#plan-submit').disabled = false;
