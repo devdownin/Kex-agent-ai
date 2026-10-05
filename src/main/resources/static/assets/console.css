@@ -1967,6 +1967,15 @@ dialog h2 { margin: 0 0 6px; font-size: 15px; }
   display: grid;
   gap: 8px;
 }
+.mcp-service-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  min-width: 0;
+}
+.mcp-service-card h4, .mcp-service-card h5, .mcp-service-card p { margin: 0; }
+.mcp-service-card .dump { max-height: 240px; overflow: auto; }
 .drawer-tool {
   display: flex;
   flex-direction: column;

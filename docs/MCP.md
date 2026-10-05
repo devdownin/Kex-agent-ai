@@ -128,6 +128,19 @@ handshake et découvre les outils avant tout enregistrement. Il permet ensuite d
 modifier, rafraîchir, diagnostiquer ou retirer le serveur, de limiter les outils présentés au
 modèle, et de les associer à des capacités métier.
 
+Dans **Connexions MCP → Détails**, chaque service présente son objectif déclaré, ses paramètres
+requis ou facultatifs, un exemple à adapter et le contrat complet. Les informations sont récupérées
+à la sélection, même pour une connexion désactivée, sans l'activer pour l'agent. L'état de récupération
+est distinct de l'état d'activation : chargement, informations récupérées, aucun service exposé,
+aucun service autorisé ou échec de connexion avec relance.
+
+Les permissions Kex et les effets déclarés par le serveur sont présentés séparément. Une annotation
+de lecture ou d'effet destructif reste une déclaration ; une absence d'annotation est affichée
+comme un effet non précisé. **Utiliser ce service** prépare un prompt dans le chat avec la connexion,
+le service et les paramètres à compléter, en conservant le brouillon existant. Le bouton n'envoie
+aucun message et n'exécute aucun outil ; une connexion désactivée doit être activée par un
+administrateur avant que l'agent puisse l'utiliser.
+
 Les connexions de la console restent en mémoire tant que `KEX_MCP_STORAGE_KEY` est vide. Une fois
 cette clé définie, la configuration complète — en-têtes, bearer et environnement compris — est
 écrite sous forme chiffrée et authentifiée AES-GCM dans `.kex/mcp-servers.enc` (chemin surchargeable

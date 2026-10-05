@@ -6,12 +6,13 @@
 
 import {
   $, ago, api, busy, circuitStateTag, confirmAction, definition, el, empty, exampleFromSchema, freshnessTag,
-  openDrawer, params, registerDrawer, render, report, schemaErrors, setDrawerParam, setParams, stamp, stateTag, toast,
+  dismissDrawer, openDrawer, params, registerDrawer, render, report, schemaErrors, setDrawerParam, setParams, stamp, stateTag, toast,
 } from './core.js';
 import * as kafka from './kafka.js';
 import * as knowledge from './knowledge.js';
 import * as memory from './memory.js';
 import * as summaries from './summaries.js';
+import { discoveryState, exampleArguments, parameterRows, servicePrompt, toolEffects } from './mcp-services.js';
 
 // Cache du dernier relevé : la recherche filtre dessus plutôt que de refaire un appel réseau par
 // caractère saisi — l'endpoint n'a pas de paramètre de recherche et n'a pas à en gagner un pour ça.
@@ -332,7 +333,55 @@ function openToolDrawer(server, tool) {
     definition('Latence moyenne', el('span', null,
       metric?.averageDurationMs == null ? '—' : `${Math.round(metric.averageDurationMs)} ms`)),
   );
+  body.append(serviceDetails(server, tool));
   openDrawer(`Outil MCP · ${tool.name}`, body);
+}
+
+function serviceDetails(server, tool) {
+  const managed = runtimeServers.get(server.connection);
+  const card = el('article', 'mcp-service-card stack');
+  card.append(el('h4', null, tool.name), definition('Objectif',
+    el('span', null, tool.description || 'Objectif non fourni par le serveur.')));
+  const permissions = el('div', 'stack');
+  permissions.append(el('p', null, 'Service autorisé par les filtres Kex.'),
+    el('p', 'muted', managed && !managed.enabled
+      ? 'Connexion désactivée : ce service est indisponible pour l’agent.'
+      : 'Connexion active : les règles Kex restent appliquées lors de l’exécution.'));
+  if (managed?.allowedTools?.length) permissions.append(el('p', 'muted',
+    `Accès limité à ${managed.allowedTools.length} service(s) dans la configuration.`));
+  card.append(definition('Permissions', permissions));
+  const effects = el('ul');
+  toolEffects(tool).forEach(label => effects.append(el('li', null, label)));
+  card.append(definition('Effets de bord', effects), el('p', 'hint',
+    'Les déclarations du serveur ne remplacent pas les règles de permission et de validation Kex.'));
+  card.append(el('h5', null, 'Paramètres'));
+  const rows = parameterRows(tool.inputSchema);
+  if (rows.length) {
+    const table = el('table', 'grid'); const head = el('tr');
+    ['Paramètre', 'Obligation', 'Type', 'Description'].forEach(label => head.append(el('th', null, label)));
+    const thead = el('thead'); thead.append(head); table.append(thead);
+    const tbody = el('tbody');
+    rows.forEach(row => {
+      const line = el('tr');
+      line.append(el('td', 'mono', row.name), el('td', null, row.required ? 'Requis' : 'Facultatif'),
+        el('td', null, row.type), el('td', null, row.description + (row.choices ? ` · Valeurs : ${row.choices}` : '')));
+      tbody.append(line);
+    });
+    table.append(tbody); const scroll = el('div', 'scroll-x'); scroll.append(table); card.append(scroll);
+  } else card.append(el('p', 'muted', 'Aucun paramètre simple décrit. Consultez le contrat pour les contraintes éventuelles.'));
+  card.append(el('h5', null, 'Exemple de paramètres à adapter'),
+    el('pre', 'dump', JSON.stringify(exampleArguments(tool.inputSchema), null, 2)));
+  const contract = el('details', 'advanced');
+  contract.append(el('summary', null, 'Contrat complet fourni par le serveur'),
+    el('pre', 'dump', JSON.stringify(tool.inputSchema || {}, null, 2)));
+  card.append(contract);
+  const use = el('button', 'primary', 'Utiliser ce service'); use.type = 'button';
+  use.addEventListener('click', () => {
+    dismissDrawer();
+    location.hash = `#/chat?serviceDraft=1&draft=${encodeURIComponent(servicePrompt(server, tool))}`;
+  });
+  card.append(use, el('p', 'hint', 'Prépare un prompt à relire et compléter dans le chat. Aucun appel n’est lancé.'));
+  return card;
 }
 
 function openServerDrawer(server, updateUrl = true, inspected = false) {
@@ -340,6 +389,11 @@ function openServerDrawer(server, updateUrl = true, inspected = false) {
   if (updateUrl) setDrawerParam('mcp', server.connection);
   const state = managed && !managed.enabled ? 'UNKNOWN' : (server.initialized ? 'OK' : 'UNKNOWN');
   const body = el('div', 'stack');
+  const discovery = el('div', 'mcp-discovery-state');
+  const phase = managed && !inspected ? 'loading' : inspected ? 'ready' : 'idle';
+  const status = discoveryState(server, phase);
+  discovery.append(stateTag(status.state, status.label));
+  body.append(discovery);
   const context = [
     `Connexion MCP : ${server.connection}`,
     `Serveur : ${server.serverName || 'Non annoncé'}`,
@@ -351,7 +405,7 @@ function openServerDrawer(server, updateUrl = true, inspected = false) {
   body.append(platformContextActions(`Serveur MCP · ${server.connection}`, context, server.connection));
   body.append(
     definition('État', stateTag(state,
-      managed && !managed.enabled ? 'Désactivé' : (server.initialized ? 'Initialisé' : 'Pas de handshake'))),
+      managed && !managed.enabled ? 'Connexion désactivée' : (server.initialized ? 'Connexion active' : 'Connexion non établie'))),
     definition('Connexion', el('code', 'technical-id', server.connection)),
     definition('Serveur', el('span', null, server.serverName || 'Non annoncé')),
     definition('Version', el('span', null, server.version || '—')),
@@ -367,20 +421,16 @@ function openServerDrawer(server, updateUrl = true, inspected = false) {
   const tools = server.tools || [];
   body.append(el('h3', 'drawer-sub', 'Outils exposés'));
   if (!tools.length) {
-    const placeholder = empty(managed && !inspected ? 'Récupération des services…' : 'Aucun outil exposé.',
+    const placeholder = empty(managed && !inspected ? 'Récupération des services…' : status.label,
       managed && !inspected ? 'Chargement des services du serveur…'
-        : 'Le serveur ne fournit aucun outil autorisé.');
+        : server.reportedToolCount > 0 ? 'Les permissions Kex excluent les services déclarés par ce serveur.'
+          : 'Ce serveur ne déclare aucun service dans son catalogue d’outils.');
     placeholder.dataset.mcpPreviewPlaceholder = '';
     body.append(placeholder);
   } else {
     const list = el('div', 'drawer-tool-list');
     tools.forEach((tool) => {
-      const button = el('button', 'drawer-tool');
-      button.type = 'button';
-      button.append(el('strong', null, tool.name));
-      if (tool.description) button.append(el('span', 'muted', tool.description));
-      button.addEventListener('click', () => openToolDrawer(server, tool));
-      list.append(button);
+      list.append(serviceDetails(server, tool));
     });
     body.append(list);
   }
@@ -416,6 +466,8 @@ function openServerDrawer(server, updateUrl = true, inspected = false) {
       .catch(() => {
         if (!body.isConnected || $('#drawer').hidden) return;
         body.querySelector('[data-mcp-preview-placeholder]')?.remove();
+        const failed = discoveryState(server, 'error');
+        discovery.replaceChildren(stateTag(failed.state, failed.label));
         body.append(empty('Impossible de récupérer les services du serveur.',
           'Vérifiez l’adresse, les identifiants et la disponibilité du serveur.',
           { label: 'Réessayer', onClick: () => openServerDrawer(server, false) }));

@@ -16,5 +16,11 @@ import java.util.List;
  *                            n'exposant pas sa connexion à ce niveau-là
  */
 public record McpServerInfo(String connection, String serverName, String version, String protocolVersion,
-                            boolean initialized, String circuitBreakerState, List<McpToolInfo> tools) {
+                            boolean initialized, String circuitBreakerState, List<McpToolInfo> tools,
+                            int reportedToolCount) {
+    public McpServerInfo(String connection, String serverName, String version, String protocolVersion,
+                          boolean initialized, String circuitBreakerState, List<McpToolInfo> tools) {
+        this(connection, serverName, version, protocolVersion, initialized, circuitBreakerState,
+                tools, tools.size());
+    }
 }

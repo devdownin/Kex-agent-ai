@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE);
 const assets = new URL('../../main/resources/static/assets/', import.meta.url);
-const html = '<div id="servers"></div><div id="mcp-storage-status"></div><section id="drawer" hidden><h2 id="drawer-title"></h2><div id="drawer-body"></div><button id="drawer-close">Fermer</button></section>';
+const html = '<div id="servers"></div><div id="mcp-storage-status"></div><textarea id="prompt"></textarea><section id="drawer" hidden><h2 id="drawer-title"></h2><div id="drawer-body"></div><button id="drawer-close">Fermer</button></section>';
 const server = createServer(async (request, response) => {
   try {
     const path = new URL(request.url, 'http://localhost').pathname;
@@ -22,7 +22,13 @@ try {
   let delayed = null;
   const detail = { connection: 'new-server', serverName: 'Services métier', version: '1.2',
     protocolVersion: '2025-06-18', initialized: true,
-    tools: [{ name: 'list_topics', description: 'Consulter les topics disponibles', inputSchema: { type: 'object' } }] };
+    reportedToolCount: 1,
+    tools: [{ name: 'list_topics', description: 'Consulter les topics disponibles',
+      annotations: { readOnlyHint: true, destructiveHint: false },
+      inputSchema: { type: 'object', required: ['topic'], properties: {
+        topic: { type: 'string', description: 'Topic à examiner', examples: ['orders'] },
+        limit: { type: 'integer', description: 'Nombre de résultats' },
+      } } }] };
   await page.route('**/api/agent/mcp/**', async route => {
     const path = new URL(route.request().url()).pathname;
     let body = [];
@@ -43,13 +49,34 @@ try {
   await select();
   await page.waitForFunction(() => document.querySelector('#drawer-body').textContent.includes('Consulter les topics disponibles'));
   assert.match(await page.textContent('#drawer-body'), /Services métier/);
-  assert.match(await page.textContent('#drawer-body'), /Désactivé/);
+  assert.match(await page.textContent('#drawer-body'), /Connexion désactivée/);
+  assert.match(await page.textContent('.mcp-discovery-state'), /Informations récupérées/);
+  assert.match(await page.textContent('.mcp-service-card'), /Lecture seule déclarée/);
+  const rows = await page.locator('.mcp-service-card tbody tr').allTextContents();
+  assert.match(rows[0], /topicRequisstringTopic à examiner/);
+  assert.match(rows[1], /limitFacultatifintegerNombre de résultats/);
+  assert.match(await page.locator('.mcp-service-card pre').first().textContent(), /"topic": "orders"/);
   assert.equal(previews, 1);
   console.log('✓ la sélection charge les informations et descriptions sans activation');
+  await page.fill('#prompt', 'Mon brouillon existant');
+  await page.getByRole('button', { name: 'Utiliser ce service' }).click();
+  assert.ok(page.url().includes('#/chat?serviceDraft=1'));
+  assert.equal(await page.locator('#drawer').evaluate(node => node.hidden), true);
+  await page.evaluate(async () => (await import('/assets/chat.js')).prefill());
+  const draft = await page.inputValue('#prompt');
+  assert.ok(draft.startsWith('Mon brouillon existant\n\n'));
+  assert.match(draft, /list_topics/); assert.match(draft, /new-server/);
+  assert.match(draft, /"topic": "orders"/); assert.match(draft, /\[à compléter\]/);
+  assert.equal(previews, 1, 'la préparation ne rappelle pas le serveur');
+  assert.ok(!page.url().includes('serviceDraft='));
+  await page.evaluate(async () => (await import('/assets/chat.js')).prefill());
+  assert.equal(await page.inputValue('#prompt'), draft, 'le brouillon est consommé une seule fois');
+  console.log('✓ les paramètres et effets sont lisibles ; Utiliser prépare un prompt sans envoi ni perte du brouillon');
   await page.evaluate(async () => (await import('/assets/core.js')).closeDrawer());
   fail = true;
   await select();
   await page.waitForFunction(() => document.querySelector('#drawer-body').textContent.includes('Impossible de récupérer'));
+  assert.match(await page.textContent('.mcp-discovery-state'), /Échec de connexion/);
   assert.doesNotMatch(await page.textContent('#drawer-body'), /Chargement des services/);
   fail = false;
   await page.getByRole('button', { name: 'Réessayer' }).click();

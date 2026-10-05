@@ -682,14 +682,15 @@ export async function prefill() {
   const draft = params().get('draft');
   if (!draft) return;
   const field = $('#prompt');
-  if (!field.value) {
-    field.value = draft;
+  const serviceDraft = params().get('serviceDraft') === '1';
+  if (!field.value || serviceDraft) {
+    field.value = serviceDraft && field.value.trim() ? `${field.value.trimEnd()}\n\n${draft}` : draft;
     // Posé par script, donc sans l'événement `input` qui grandit d'habitude le composer : sans cet
     // appel, un brouillon de plusieurs lignes reste coincé dans une zone d'une seule ligne tant que
     // l'opérateur n'a pas lui-même tapé un caractère.
     resizeComposer(field);
   }
-  setParams({ draft: null });
+  setParams({ draft: null, serviceDraft: null });
   field.focus();
 }
 

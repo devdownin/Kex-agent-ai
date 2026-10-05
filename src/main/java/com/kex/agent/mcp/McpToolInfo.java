@@ -5,5 +5,9 @@ package com.kex.agent.mcp;
 import java.util.Map;
 
 /** @param inputSchema schéma JSON des arguments, tel que déclaré par le serveur — jamais réinterprété ici */
-public record McpToolInfo(String name, String description, Map<String, Object> inputSchema) {
+public record McpToolInfo(String name, String description, Map<String, Object> inputSchema,
+                          Map<String, Boolean> annotations, boolean readOnlyByPolicy) {
+    public McpToolInfo(String name, String description, Map<String, Object> inputSchema) {
+        this(name, description, inputSchema, Map.of(), false);
+    }
 }
