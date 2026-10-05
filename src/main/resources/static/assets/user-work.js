@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 import { $, el } from './core.js';
 import { drawEvidence } from './user-evidence.js';
-import { activity, parseResponse } from './user-experience.js';
+import { activity } from './user-experience.js';
+import { presentedResponse } from './user-presentation.js';
 const date = at => at && Number.isFinite(Date.parse(at)) ? new Date(at).toLocaleString('fr-FR') : 'Date non fournie';
 export function drawWork({ identity, history, tasks, examined, historyState, taskState }) {
   $('#work-note').textContent = !identity ? 'Connectez-vous pour retrouver votre travail.' : 'Votre compte et votre espace uniquement. Ouvrir un élément ne lance aucune action.';
@@ -40,16 +41,18 @@ export function drawRunActivity(request) {
   $('#activity-delay').textContent = silent ? 'Aucune nouvelle information reçue depuis au moins une minute. Le traitement peut continuer côté serveur. Actualisez le suivi ; ne relancez pas la même action sans vérifier son état.' : '';
 }
 export function resultSections(host, answer) {
-  const parsed = answer?.completed ? parseResponse(answer.text) : null;
+  const parsed = presentedResponse(answer);
   if (parsed?.kind === 'clarification') return;
-  const conclusion = (typeof parsed?.conclusion === 'string' && parsed.conclusion.trim()) || parsed?.observations || answer?.text || 'Aucune conclusion disponible.';
-  host.append(el('h3', null, 'Conclusion'));
+  const conclusion = parsed?.decision?.situation || (typeof parsed?.conclusion === 'string' && parsed.conclusion.trim()) || parsed?.observations || answer?.text || 'Aucune conclusion disponible.';
+  host.append(el('h3', null, 'Situation'));
   drawEvidence(host, conclusion.length > 500 ? conclusion.slice(0, 500) + '…' : conclusion, answer?.sources);
+  host.append(el('h3', null, 'Impact'), el('div', 'answer', parsed?.decision?.impact || 'Impact non précisé dans la réponse.'));
+  host.append(el('h3', null, 'Action proposée'), el('div', 'answer', parsed?.decision?.action || parsed?.nextAction || 'Vérifier les éléments disponibles avant de poursuivre.'));
+  host.append(el('h3', null, 'À vérifier'), el('div', 'answer', parsed?.decision?.verify || parsed?.uncertainties || 'Les limites ne sont pas structurées : examinez les preuves avant de conclure.'));
   const sourceDetails = el('details'); sourceDetails.append(el('summary', null, 'Sources')); host.append(sourceDetails);
   if (answer?.sources?.length) answer.sources.forEach(s => {
     const source = el('details'); source.append(el('summary', null, `${s.source || s.id || 'Source sans nom'} · ${date(s.observedAt)}`), el('pre', null, s.excerpt || 'Extrait non fourni')); sourceDetails.append(source);
   });
   else sourceDetails.append(el('p', null, 'Aucune source consultable fournie pour cette réponse.'));
-  host.append(el('h3', null, 'Limites'), el('div', 'answer', parsed?.uncertainties || 'Les limites ne sont pas structurées dans cette réponse. Examinez le texte complet et les preuves avant de conclure.'));
-  host.append(el('h3', null, 'Prochaine action'), el('div', 'answer', parsed?.nextAction || 'Vérifier les éléments disponibles ; demandez une précision si nécessaire.'));
+
 }

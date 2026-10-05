@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 import { $, api, credentials, el, failure, headers } from './core.js';
+import { presentedResponse, drawValidation, drawConsultations } from './user-presentation.js';
 import { resultIssue, drawEvidence, drawFindings, drawToolEvidence } from './user-evidence.js';
 import { drawTables, drawJson, resultStatus, rememberDetails, drawExports, drawMetrics } from './user-results.js';
 import { drawWork, drawRunActivity, resultSections } from './user-work.js';
@@ -254,7 +255,8 @@ function drawDetail() {
   const turns = $('#turns'); turns.replaceChildren();
   current.turns.forEach(t => {
     const article = el('article', 'turn'); article.append(el('h2', null, t.role === 'user' ? 'Votre demande' : 'Réponse de Kex'));
-    const result = t.role === 'agent' && t.completed ? parseResponse(t.text) : null;
+    const result = t.role === 'agent' ? presentedResponse(t) : null;
+    if (t.role === 'agent' && t.completed) drawValidation(article, t);
     if (result?.kind === 'result') {
       [['Ce que j’ai constaté', result.observations], ['Ce qui reste incertain', result.uncertainties], ['Prochaine action', result.nextAction]].forEach(([title, content]) => {
         article.append(el('h3', null, title));
@@ -267,13 +269,14 @@ function drawDetail() {
       article.append(choices, el('p', 'muted', 'Le choix prépare votre réponse. Cliquez sur Envoyer pour poursuivre ; vous pouvez aussi écrire une autre réponse.'));
     } else if (t.role === 'agent' && t.completed) drawEvidence(article, t.text || 'Aucun résultat reçu.', t.sources);
     else article.append(el('div', 'answer', t.role === 'agent' && current.status === 'RUNNING' && t === current.turns.at(-1) ? 'Kex prépare votre réponse…' : t.text || 'En attente de la réponse…'));
-    if (t.role === 'agent' && t.completed && result?.kind !== 'clarification') { const provenance = { sources: t.sources || [], tools: t.tools || [], receivedAt: t.receivedAt || null }; drawFindings(article, result?.findings, t.sources, t.tools); drawMetrics(article, Array.isArray(result?.metrics) ? result.metrics.map(m => ({ ...m, provenance })) : []); drawTables(article, result?.tables, provenance); drawJson(article, t.text, provenance); drawExports(article, t, provenance); }
+    if (t.role === 'agent' && t.completed && result?.kind !== 'clarification') { const provenance = { sources: t.sources || [], tools: t.tools || [], presentation: t.presentation || null, receivedAt: t.receivedAt || null }; drawFindings(article, result?.findings, t.sources, t.tools); drawMetrics(article, Array.isArray(result?.metrics) ? result.metrics.map(m => ({ ...m, provenance })) : []); drawTables(article, result?.tables, provenance); drawJson(article, t.text, provenance); drawExports(article, t, provenance); }
     if (t.error) article.append(el('p', 'error', t.error));
     if (t.sources?.length) {
       const d = el('details'); d.append(el('summary', null, 'Sources consultées'));
       t.sources.forEach(s => { d.append(el('p', null, `${s.source || s.id} · ${date(s.observedAt)}`), el('pre', 'muted', s.excerpt)); });
       article.append(d);
     }
+    if (t.role === 'agent') drawConsultations(article, t, t === current.turns.filter(turn => turn.role === 'agent').at(-1) && current.serverId && !active && !current.loadingDetail && current.status !== 'RUNNING' ? tool => send('Reprendre la consultation en lecture seule : ' + tool, current, tool) : null);
     rememberDetails(article, identity); turns.append(article);
   });
   if (current.tools.length) {
@@ -372,7 +375,7 @@ async function authenticate() {
     return false;
   }
 }
-async function send(message, request = null) {
+async function send(message, request = null, recovery = null) {
   if (active || !identity || contextLoading) return;
   if (message.length + contextText(request?.context || contextValue()).length > 30000) throw new Error('Réduisez la demande ou les pièces jointes : 30000 caractères maximum avec le contexte.');
   if (!request) {
@@ -389,7 +392,7 @@ async function send(message, request = null) {
   const firstCall = request.tools.length;
   try {
     const durable = !!request.serverId || (serverHistory && !request.conversationId);
-    const response = await fetch(durable ? '/api/agent/workspace/requests/stream' : '/api/agent/chat/stream', { method: 'POST', headers: headers({ 'Content-Type': 'application/json', Accept: 'text/event-stream' }), body: JSON.stringify(durable ? { id: request.serverId || null, message, context: request.context } : { message: responsePrompt(message + contextText(request.context)), conversationId: request.conversationId }), signal: controller.signal });
+    const response = await fetch(recovery ? `/api/agent/workspace/requests/${encodeURIComponent(request.serverId)}/recover/stream` : durable ? '/api/agent/workspace/requests/stream' : '/api/agent/chat/stream', { method: 'POST', headers: headers({ 'Content-Type': 'application/json', Accept: 'text/event-stream' }), body: JSON.stringify(recovery ? { revision: request.revision, tool: recovery } : durable ? { id: request.serverId || null, message, context: request.context } : { message: responsePrompt(message + contextText(request.context)), conversationId: request.conversationId }), signal: controller.signal });
     if (!response.ok) throw await failure(response);
     delete request.detailError;
     for await (const event of events(response)) {
@@ -409,7 +412,7 @@ async function send(message, request = null) {
     answer.completed = complete && !answer.error;
     answer.receivedAt = new Date().toISOString();
     if (request.status === 'COMPLETE' && parseResponse(answer.text)?.kind === 'clarification') request.status = 'NEEDS_INPUT';
-    if (complete && canonical) { request.updatedAt = canonical.updatedAt; request.revision = canonical.revision; answer.receivedAt = canonical.updatedAt; }
+    if (complete && canonical) { request.updatedAt = canonical.updatedAt; request.revision = canonical.revision; answer.receivedAt = canonical.updatedAt; answer.presentation = canonical.turns?.at(-1)?.presentation; }
     if (!complete && !answer.error) answer.error = 'La fin de la réponse n’a pas été confirmée. Aucun nouvel envoi automatique n’a été effectué.';
   } catch (e) {
     if (ownEpoch !== epoch) return;

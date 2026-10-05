@@ -15,11 +15,15 @@ import jakarta.validation.constraints.Size;
 public record WorkspaceRequest(String id, long revision, String title, String conversationId,
         String status, Instant updatedAt, List<Turn> turns, List<AgentEvent.ToolCall> tools,
         Context context, String taskId) {
-    public record Turn(String role, String text, boolean completed, List<KnowledgeSource> sources, String error, List<AgentEvent.ToolCall> tools, Instant receivedAt) {
+    public record Turn(String role, String text, boolean completed, List<KnowledgeSource> sources, String error, List<AgentEvent.ToolCall> tools, Instant receivedAt, WorkspaceResultContract.Report presentation) {
         public Turn(String role, String text, boolean completed, List<KnowledgeSource> sources, String error) {
-            this(role, text, completed, sources, error, List.of(), null);
+            this(role, text, completed, sources, error, List.of(), null, null);
+        }
+        public Turn(String role, String text, boolean completed, List<KnowledgeSource> sources, String error, List<AgentEvent.ToolCall> tools, Instant receivedAt) {
+            this(role, text, completed, sources, error, tools, receivedAt, null);
         }
     }
+    public record Recovery(long revision, @NotBlank @Size(max = 200) String tool) { }
     public record Attachment(@NotBlank @Size(max = 200) String name,
             @NotBlank @Size(max = 5000) String text) { }
     public record Context(@Size(max = 500) String process, @Size(max = 500) String period,

@@ -196,6 +196,7 @@ jobs:
           node src/test/frontend/user-stream.mjs
           node src/test/frontend/user-experience.mjs
           node src/test/frontend/user-results.mjs
+          node src/test/frontend/user-presentation.mjs
           node src/test/frontend/user-evidence.mjs
           node src/test/frontend/user-notifications.mjs
           node src/test/frontend/user-context.mjs

@@ -39,17 +39,18 @@ class WorkspaceServiceTest {
     WorkspaceStore store;
     WorkspaceService service;
     ObjectProvider<TaskService> tasks;
+    final com.kex.agent.tools.ToolInvocationPolicy policy = mock(com.kex.agent.tools.ToolInvocationPolicy.class);
     @BeforeEach void setup() {
         store = new WorkspaceStore(mapper, directory);
         tasks = mock(ObjectProvider.class);
-        service = new WorkspaceService(store, agent, mapper, Clock.fixed(now, ZoneOffset.UTC), tasks);
+        service = new WorkspaceService(store, agent, mapper, Clock.fixed(now, ZoneOffset.UTC), tasks, policy);
         when(agent.stream(anyString(), anyString(), anyString())).thenAnswer(call -> new AgentStream(call.getArgument(1), Flux.just(new AgentEvent.Token("Réponse"))));
     }
     WorkspaceRequest.Input input(String id) { return new WorkspaceRequest.Input(id, "Vérifier les commandes", new WorkspaceRequest.Context("orders", "ce matin", "production", List.of(new WorkspaceRequest.Attachment("orders.csv", "id,etat\n1,OK")))); }
     @Test void un_autre_appareil_retrouve_les_faits_sans_rejouer_le_modele() {
         var events = service.stream(alice, input(null)).collectList().block();
         assertThat(events).extracting(e -> e.event()).containsExactly("request", "conversation", "token", "snapshot", "done");
-        var history = new WorkspaceService(new WorkspaceStore(mapper, directory), agent, mapper, Clock.fixed(now, ZoneOffset.UTC), tasks);
+        var history = new WorkspaceService(new WorkspaceStore(mapper, directory), agent, mapper, Clock.fixed(now, ZoneOffset.UTC), tasks, policy);
         var request = history.list(alice).getFirst();
         assertThat(request.status()).isEqualTo("COMPLETE"); assertThat(request.turns().getLast().text()).isEqualTo("Réponse");
         assertThat(request.context().files().getFirst().text()).contains("1,OK");
@@ -70,6 +71,22 @@ class WorkspaceServiceTest {
         assertThat(full.context()).isEqualTo(first.context()); assertThat(full.conversationId()).isEqualTo(first.conversationId());
         assertThat(service.list(alice).getFirst().turns()).hasSize(2);
     }
+    @Test void une_reprise_ne_peut_cibler_qu_une_lecture_en_echec_du_dernier_tour() {
+        var failed = new AgentEvent.ToolCall("read", 2, true);
+        when(agent.stream(anyString(), anyString(), anyString())).thenAnswer(call -> new AgentStream(call.getArgument(1), Flux.just(failed, new AgentEvent.Token("Partiel"))));
+        service.stream(alice, input(null)).blockLast(); var request = service.list(alice).getFirst();
+        assertThatThrownBy(() -> service.resumeRead(bob, request.id(), new WorkspaceRequest.Recovery(request.revision(), "read"))).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.resumeRead(alice, request.id(), new WorkspaceRequest.Recovery(request.revision() - 1, "read"))).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.resumeRead(alice, request.id(), new WorkspaceRequest.Recovery(request.revision(), "write"))).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.resumeRead(alice, request.id(), new WorkspaceRequest.Recovery(request.revision(), "read"))).isInstanceOf(ResponseStatusException.class);
+        when(policy.isReadOnly("read")).thenReturn(true);
+        when(agent.streamReadOnly(anyString(), anyString(), anyString(), org.mockito.ArgumentMatchers.eq(java.util.Set.of("read"))))
+                .thenAnswer(call -> new AgentStream(call.getArgument(1), Flux.just(new AgentEvent.ToolCall("read", 1, false), new AgentEvent.Token("Complété"))));
+        service.resumeRead(alice, request.id(), new WorkspaceRequest.Recovery(request.revision(), "read")).blockLast();
+        var completed = service.get(alice, request.id()); assertThat(completed.status()).isEqualTo("COMPLETE");
+        assertThat(completed.turns().getLast().presentation().consultations()).singleElement().satisfies(c -> assertThat(c.status()).isEqualTo("COMPLETE"));
+        assertThatThrownBy(() -> service.resumeRead(alice, request.id(), new WorkspaceRequest.Recovery(completed.revision(), "read"))).isInstanceOf(ResponseStatusException.class);
+    }
     @Test void les_preuves_outils_restent_liees_au_bon_tour_apres_rechargement() {
         var evidence = new AgentEvent.ToolCall("read_lag", 2, false, now.toString(), "{\"lag\":12}");
         when(agent.stream(anyString(), anyString(), anyString())).thenAnswer(call -> new AgentStream(call.getArgument(1), Flux.just(evidence, new AgentEvent.Token("Lag 12"))));
@@ -77,7 +94,7 @@ class WorkspaceServiceTest {
         var first = service.list(alice).getFirst();
         when(agent.stream(anyString(), anyString(), anyString())).thenAnswer(call -> new AgentStream(call.getArgument(1), Flux.just(new AgentEvent.Token("Précision"))));
         service.stream(alice, new WorkspaceRequest.Input(first.id(), "Préciser", null)).blockLast();
-        var restored = new WorkspaceService(new WorkspaceStore(mapper, directory), agent, mapper, Clock.fixed(now, ZoneOffset.UTC), tasks).get(alice, first.id());
+        var restored = new WorkspaceService(new WorkspaceStore(mapper, directory), agent, mapper, Clock.fixed(now, ZoneOffset.UTC), tasks, policy).get(alice, first.id());
         assertThat(restored.turns().get(1).tools()).containsExactly(evidence);
         assertThat(restored.turns().get(1).receivedAt()).isEqualTo(now);
         assertThat(restored.turns().getLast().tools()).isEmpty();

@@ -9,6 +9,10 @@ const root = resolve('src/main/resources/static');
 const unsafe = '<img src=x onerror="window.hacked=true">';
 const request = (id, status, text) => ({ id, title: ({ input: 'précision', result: 'résultat', free: 'réponse libre' })[id] || id, status, conversationId: 'c-' + id, updatedAt: '2026-10-04T10:00:00Z', turns: [{ role: 'user', text: id }, { role: 'agent', text, completed: status !== 'RUNNING', sources: id === 'result' ? [{ id: 'measurement-orders', validUntil: '2026-10-04T10:00:00Z', source: 'Mesure commandes ' + unsafe, observedAt: '2026-10-04T09:00:00Z', excerpt: 'Lag = 0' }] : [] }], tools: [] });
 const initial = [request('traitement', 'RUNNING', ''), request('input', 'NEEDS_INPUT', JSON.stringify({ kind: 'clarification', question: 'Quelle période ?', choices: [{ label: 'Hier', value: 'Hier' }, { label: 'Ce matin', value: 'Ce matin' }] })), request('result', 'COMPLETE', JSON.stringify({ kind: 'result', observations: 'Aucun retard observé [source:measurement-orders] ' + unsafe, uncertainties: 'Mesure limitée à une période', nextAction: 'Vérifier la prochaine période', tables: [{ title: 'Retards par processus', columns: ['Processus', 'Lag (messages)'], rows: [['orders ' + unsafe, 12], ['customers', 2]] }], metrics: [{ label: 'Lag du matin', value: 12, unit: 'messages', period: 'Ce matin', comparison: { value: 18, period: 'Hier matin' }, points: [{ at: '2026-10-04T08:00:00Z', value: 18 }, { at: '2026-10-04T09:00:00Z', value: 12 }] }], findings: [{ text: 'Constat sans preuve reçue', sourceIds: ['invented'] }], data: { apiKey: 'do-not-export', authorization: 'Bearer private' } })), request('free', 'COMPLETE', 'Texte libre lisible'), request('empty', 'PARTIAL', ''), request('error', 'ERROR', 'Détails partiels'), request('denied', 'COMPLETE', 'Ancien résultat')];
+const failedRequest = initial.find(r => r.id === 'error'); failedRequest.revision = 3;
+failedRequest.turns.at(-1).tools = [{tool:'read_lag',failed:true}];
+failedRequest.turns.at(-1).presentation = {text:null,warnings:['Réponse partielle non structurée'],consultations:[{tool:'read_lag',status:'ERROR',recoverable:true}]};
+let recoveryCalls = [];
 const plan = { id: 'p1', revision: 1, bindingFingerprint: 'exact', status: 'DRAFT', updatedAt: '2026-10-04T10:00:00Z', plan: { objective: 'Vérifier orders', preconditions: ['Accès aux mesures'], steps: [{ description: 'Lire orders', binding: 'read', arguments: { topic: 'orders', period: 'ce matin' } }] }, results: [{ status: 'PENDING' }] };
 let historyFailure = false; let taskFailure = false; let posts = 0; let stream; let held; let heldStarted;
 const server = createServer(async (req, res) => {
@@ -17,6 +21,12 @@ const server = createServer(async (req, res) => {
   if (req.url === '/api/agent/whoami') return json({ name: user, tenant: 'team', roles: [user === 'alice' ? 'OPERATOR' : 'CHAT'] });
   if (req.url === '/api/agent/skills/available') return json([]);
   if (req.url === '/api/agent/workspace/requests') { if (held && user === 'alice') { heldStarted(); await held; } return json(user === 'alice' ? initial : [], historyFailure ? 503 : 200); }
+  if (req.url === '/api/agent/workspace/requests/error/recover/stream') {
+    let body = ''; for await (const chunk of req) body += chunk; recoveryCalls.push(JSON.parse(body));
+    const text = JSON.stringify({kind:'result',observations:'Lecture complétée',uncertainties:'Période limitée',nextAction:'Vérifier',decision:{situation:'Mesure récupérée',impact:'Retard à examiner',action:'Observer la prochaine période',verify:'Valider le périmètre'}});
+    const done = {...request('error','COMPLETE',text),revision:5}; done.turns.at(-1).presentation={text,warnings:['Série invalide rejetée'],consultations:[{tool:'read_lag',status:'COMPLETE',recoverable:false}]};
+    res.writeHead(200,{'Content-Type':'text/event-stream'}); res.end(`event: request\ndata: {"id":"error"}\n\nevent: conversation\ndata: c-error\n\nevent: token\ndata: ${text}\n\nevent: snapshot\ndata: ${JSON.stringify(done)}\n\nevent: done\ndata: response-complete\n\n`); return;
+  }
   if (req.url.startsWith('/api/agent/workspace/requests/') && req.url !== '/api/agent/workspace/requests/stream') return req.url.endsWith('/denied') ? json({}, 403) : json(initial.find(r => r.id === decodeURIComponent(req.url.split('/').at(-1))));
   if (req.url === '/api/agent/tasks') return json([plan], taskFailure ? 503 : 200);
   if (req.url === '/api/agent/tasks/bindings') return json({ read: { readOnly: true, connection: 'kafka', tool: 'query' } });
@@ -29,14 +39,14 @@ const url = `http://127.0.0.1:${server.address().port}/app`;
 async function login(page, user) { await page.locator('#account').click(); await page.locator('#access-key').fill(user); await page.locator('#connect').click(); await page.getByText('Connecté : ' + user, { exact: true }).waitFor(); }
 try {
   for (const width of [1440, 390]) {
-    historyFailure = taskFailure = false; posts = 0; stream = held = null;
+    historyFailure = taskFailure = false; posts = 0; recoveryCalls = []; stream = held = null;
     const context = await browser.newContext({ viewport: { width, height: 900 } }); const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(String(e)));
     await page.goto(url); await page.locator('#work').waitFor({ state: 'visible' }); await login(page, 'alice');
     await page.locator('#work-decisions').getByRole('link', { name: 'Vérifier orders', exact: true }).waitFor();
     assert.equal(await page.locator('#work-running a').count(), 1); assert.equal(await page.locator('#work-decisions a').count(), 2); assert.equal(await page.locator('#work-results a').count(), 5); assert.equal(posts, 0);
     await page.locator('#work-running a').click(); await page.locator('#activity-delay').waitFor({ state: 'visible' }); assert.match(await page.locator('#activity-delay').innerText(), /peut continuer/); assert.match(await page.locator('#last-activity').innerText(), /04\/10\/2026/);
     await page.getByRole('link', { name: 'Mon travail', exact: true }).click(); await page.locator('#work-results').getByRole('link', { name: 'résultat', exact: true }).click();
-    const recap = page.locator('#completion-summary'); await recap.getByRole('heading', { name: 'Conclusion', exact: true }).waitFor();
+    const recap = page.locator('#completion-summary'); await recap.getByRole('heading', { name: 'Situation', exact: true }).waitFor();
     assert.match(await recap.innerText(), /Aucun retard observé/); assert.match(await recap.innerText(), /Mesure limitée/); assert.match(await recap.innerText(), /Vérifier la prochaine période/); await recap.getByText('Sources', { exact: true }).click(); await recap.locator('details details summary').click(); assert.match(await recap.innerText(), /Lag = 0/); assert.equal(await recap.locator('img').count(), 0);
     const reference = page.locator('#turns .evidence-reference').first(); await reference.getByRole('button').click();
     assert.match(await reference.innerText(), /Lag = 0/); assert.match(await reference.innerText(), /Validité expirée/);
@@ -73,7 +83,15 @@ try {
     historyFailure = taskFailure = false; let release; let started; held = new Promise(r => { release = r; }); const startedPromise = new Promise(r => { started = r; }); heldStarted = started;
     await page.locator('#refresh-work').click(); await startedPromise; await login(page, 'bob'); release(); held = null; await page.waitForLoadState('networkidle');
     assert.equal(await page.locator('#work a[href^="#/request/"]').count(), 0); assert.equal(await page.locator('#work a[href="#/approvals"]').count(), 0); assert.equal(posts, 1);
-    assert.equal(await page.evaluate(() => window.hacked), undefined); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)); assert.deepEqual(errors, []); await context.close();
+    assert.equal(await page.evaluate(() => window.hacked), undefined); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)); assert.deepEqual(errors, []);
+    await login(page, 'alice'); await page.evaluate(() => { location.hash = '#/request/error'; });
+    const retry = page.getByRole('button', {name:'Reprendre uniquement cette lecture',exact:true}); await retry.waitFor(); assert.equal(recoveryCalls.length,0);
+    await retry.click(); await recap.getByText('Mesure récupérée',{exact:true}).waitFor();
+    assert.deepEqual(recoveryCalls,[{revision:3,tool:'read_lag'}]);
+    assert.match(await recap.innerText(),/Retard à examiner/); assert.match(await recap.innerText(),/Observer la prochaine période/); assert.match(await recap.innerText(),/Valider le périmètre/);
+    const validation = page.locator('#turns .result-validation').last(); await validation.locator('summary').click(); assert.match(await validation.innerText(),/Série invalide rejetée/);
+    assert.equal(await page.getByRole('button',{name:'Reprendre uniquement cette lecture',exact:true}).count(),0);
+    assert.deepEqual(errors,[]); await context.close();
   }
   console.log('✓ restitution : tableaux triables/filtrables, JSON coloré et export masqué ; mon travail : états, sources, réponse libre, activité silencieuse, flux en cours, données indisponibles et isolation après réponse tardive sur ordinateur et mobile');
 } finally { stream?.end(); await browser.close(); await new Promise(done => server.close(done)); }

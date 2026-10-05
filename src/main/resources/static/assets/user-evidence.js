@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 import { el } from './core.js';
+import { findingQuality } from './user-presentation.js';
 
 const date = value => Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('fr-FR') : 'Date non fournie';
 export function resultIssue(request) {
@@ -52,7 +53,7 @@ export function validFindings(findings) {
 export function drawFindings(host, findings, sources, tools = []) {
   const rows = validFindings(findings); if (!rows.length) return;
   const section = el('section', 'result-findings'); section.append(el('h3', null, 'Constats et preuves associées'));
-  rows.forEach(f => { const item = el('article'); drawEvidence(item, f.text + ' ' + f.sourceIds.map(id => `[source:${id}]`).join(' '), sources);
+  rows.forEach(f => { const item = el('article'); const quality = findingQuality(f, sources); item.append(el('p', 'finding-quality', quality.label)); quality.notes.forEach(note => item.append(el('p', 'source-missing', note))); if (quality.contradictions.length >= 2) drawEvidence(item, 'Sources en contradiction signalée : ' + quality.contradictions.map(id => `[source:${id}]`).join(' '), sources); drawEvidence(item, f.text + ' ' + f.sourceIds.map(id => `[source:${id}]`).join(' '), sources);
     (f.toolNames || []).forEach(name => { const calls = (tools || []).filter(t => t.tool === name); if (calls.length) drawToolEvidence(item, calls); else item.append(el('p', 'source-missing', `Outil ${name} : aucun résultat fourni pour cette réponse.`)); }); section.append(item); }); host.append(section);
 }
 

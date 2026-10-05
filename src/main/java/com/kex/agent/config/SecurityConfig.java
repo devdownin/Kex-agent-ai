@@ -79,7 +79,7 @@ class SecurityConfig {
                                 "/api/agent/chat/stream").hasAnyRole("CHAT", "OPERATOR", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/agent/workspace/requests", "/api/agent/workspace/requests/*")
                                 .hasAnyRole("CHAT", "OPERATOR", "ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/agent/workspace/requests/stream")
+                        .requestMatchers(HttpMethod.POST, "/api/agent/workspace/requests/stream", "/api/agent/workspace/requests/*/recover/stream")
                                 .hasAnyRole("CHAT", "OPERATOR", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/agent/workspace/requests/*/plan")
                                 .hasAnyRole("OPERATOR", "ADMIN")
