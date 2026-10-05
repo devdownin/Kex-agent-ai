@@ -384,7 +384,7 @@ function serviceDetails(server, tool) {
   return card;
 }
 
-function openServerDrawer(server, updateUrl = true, inspected = false) {
+function openServerDrawer(server, updateUrl = true, inspected = false, refresh = false) {
   const managed = runtimeServers.get(server.connection);
   if (updateUrl) setDrawerParam('mcp', server.connection);
   const state = managed && !managed.enabled ? 'UNKNOWN' : (server.initialized ? 'OK' : 'UNKNOWN');
@@ -394,6 +394,18 @@ function openServerDrawer(server, updateUrl = true, inspected = false) {
   const status = discoveryState(server, phase);
   discovery.append(stateTag(status.state, status.label));
   body.append(discovery);
+  if (server.retrievedAt) {
+    const retrieved = el('time', null, stamp(server.retrievedAt)); retrieved.dateTime = server.retrievedAt;
+    body.append(definition('Catalogue récupéré le', retrieved));
+  }
+  if (server.refreshError) body.append(el('p', 'hint', server.refreshError));
+  if (managed) {
+    const update = el('button', 'ghost', 'Actualiser le catalogue'); update.type = 'button';
+    update.dataset.catalogRefresh = '';
+    update.disabled = !inspected;
+    update.addEventListener('click', () => openServerDrawer(server, false, false, true));
+    body.append(update);
+  }
   const context = [
     `Connexion MCP : ${server.connection}`,
     `Serveur : ${server.serverName || 'Non annoncé'}`,
@@ -405,7 +417,7 @@ function openServerDrawer(server, updateUrl = true, inspected = false) {
   body.append(platformContextActions(`Serveur MCP · ${server.connection}`, context, server.connection));
   body.append(
     definition('État', stateTag(state,
-      managed && !managed.enabled ? 'Connexion désactivée' : (server.initialized ? 'Connexion active' : 'Connexion non établie'))),
+      managed && !managed.enabled ? 'Connexion désactivée' : (managed?.enabled ? 'Connexion activée' : (server.initialized ? 'Connexion active' : 'Connexion non établie')))),
     definition('Connexion', el('code', 'technical-id', server.connection)),
     definition('Serveur', el('span', null, server.serverName || 'Non annoncé')),
     definition('Version', el('span', null, server.version || '—')),
@@ -421,7 +433,8 @@ function openServerDrawer(server, updateUrl = true, inspected = false) {
   const tools = server.tools || [];
   body.append(el('h3', 'drawer-sub', 'Outils exposés'));
   if (!tools.length) {
-    const placeholder = empty(managed && !inspected ? 'Récupération des services…' : status.label,
+    const placeholder = empty(managed && !inspected ? 'Récupération des services…'
+      : server.reportedToolCount > 0 ? 'Aucun outil autorisé' : 'Aucun outil exposé',
       managed && !inspected ? 'Chargement des services du serveur…'
         : server.reportedToolCount > 0 ? 'Les permissions Kex excluent les services déclarés par ce serveur.'
           : 'Ce serveur ne déclare aucun service dans son catalogue d’outils.');
@@ -433,6 +446,11 @@ function openServerDrawer(server, updateUrl = true, inspected = false) {
       list.append(serviceDetails(server, tool));
     });
     body.append(list);
+  }
+  if (inspected || server.retrievedAt) {
+    appendCatalogSection(body, 'Ressources', server.resources, server.supportedCapabilities?.includes('resources'), 'resources');
+    appendCatalogSection(body, 'Modèles de ressources', server.resourceTemplates, server.supportedCapabilities?.includes('resources'), 'templates');
+    appendCatalogSection(body, 'Prompts du serveur', server.prompts, server.supportedCapabilities?.includes('prompts'), 'prompts');
   }
 
   if (managed) {
@@ -459,7 +477,7 @@ function openServerDrawer(server, updateUrl = true, inspected = false) {
   // La liste ne contient aucun client actif pour les connexions installées désactivées.
   // Inspecter à la sélection, sans les activer ni contacter tous les serveurs au sondage.
   if (managed && !inspected) {
-    api(`/api/agent/mcp/servers/${encodeURIComponent(server.connection)}/preview`)
+    api(`/api/agent/mcp/servers/${encodeURIComponent(server.connection)}/preview${refresh ? '?refresh=true' : ''}`)
       .then((details) => {
         if (body.isConnected && !$('#drawer').hidden) openServerDrawer(details, false, true);
       })
@@ -468,11 +486,40 @@ function openServerDrawer(server, updateUrl = true, inspected = false) {
         body.querySelector('[data-mcp-preview-placeholder]')?.remove();
         const failed = discoveryState(server, 'error');
         discovery.replaceChildren(stateTag(failed.state, failed.label));
+        body.querySelector('[data-catalog-refresh]')?.removeAttribute('disabled');
         body.append(empty('Impossible de récupérer les services du serveur.',
           'Vérifiez l’adresse, les identifiants et la disponibilité du serveur.',
-          { label: 'Réessayer', onClick: () => openServerDrawer(server, false) }));
+          { label: 'Réessayer', onClick: () => openServerDrawer(server, false, false, true) }));
       });
   }
+}
+
+function appendCatalogSection(body, title, rows = [], supported = false, kind) {
+  const section = el('section', 'stack mcp-catalog-section'); section.dataset.catalogKind = kind;
+  section.append(el('h3', 'drawer-sub', `${title} · ${rows.length}`));
+  if (!supported) section.append(el('p', 'muted', 'Cette capacité n’est pas proposée par le serveur.'));
+  else if (!rows.length) section.append(el('p', 'muted', 'Aucune entrée exposée dans cette catégorie.'));
+  else rows.forEach(item => {
+    const card = el('article', 'mcp-service-card stack');
+    card.append(el('h4', null, item.name || item.uri || item.uriTemplate),
+      el('p', null, item.description || 'Description non fournie par le serveur.'));
+    if (item.uri || item.uriTemplate) card.append(definition(kind === 'templates' ? 'Modèle d’URI' : 'URI',
+      el('code', null, item.uri || item.uriTemplate)));
+    if (item.mimeType) card.append(definition('Type de contenu', el('span', null, item.mimeType)));
+    if (item.size != null) card.append(definition('Taille annoncée', el('span', null, `${item.size} octet(s)`)));
+    if (kind === 'prompts') {
+      const args = el('ul');
+      (item.arguments || []).forEach(arg => args.append(el('li', null,
+        `${arg.name} · ${arg.required ? 'Requis' : 'Facultatif'} · ${arg.description || 'Description non fournie'}`)));
+      card.append(el('h5', null, 'Arguments du prompt'),
+        item.arguments?.length ? args : el('p', 'muted', 'Aucun argument déclaré.'));
+    }
+    section.append(card);
+  });
+  section.append(el('p', 'hint', kind === 'prompts'
+    ? 'Présentation du prompt déclaré ; aucun prompt n’est exécuté.'
+    : 'Métadonnées uniquement ; aucun contenu de ressource n’est lu.'));
+  body.append(section);
 }
 
 

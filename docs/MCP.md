@@ -141,6 +141,19 @@ le service et les paramètres à compléter, en conservant le brouillon existant
 aucun message et n'exécute aucun outil ; une connexion désactivée doit être activée par un
 administrateur avant que l'agent puisse l'utiliser.
 
+La fiche présente également les **ressources**, leurs **modèles d'URI** et les **prompts du serveur**,
+avec les arguments requis ou facultatifs de ces derniers. La découverte respecte les capacités
+annoncées et parcourt les pages du catalogue ; elle ne lit aucun contenu de ressource et ne lance
+aucun prompt. Une catégorie non proposée est distinguée d'une liste vide.
+
+Le dernier catalogue complet est conservé **en mémoire côté serveur**, avec sa date de récupération.
+Rouvrir la fiche réutilise ce catalogue ; **Actualiser le catalogue** force une nouvelle découverte.
+Si celle-ci échoue, les dernières informations restent visibles avec leur date d'origine et un
+état obsolète explicite. Ce cache disparaît au redémarrage de Kex ; une modification de la connexion,
+une rotation de ses secrets ou son retrait l'invalide. Les permissions sur les outils sont vérifiées
+à chaque restitution. L'API conserve `GET /api/agent/mcp/servers/{connection}/preview` et accepte
+`?refresh=true` pour forcer l'actualisation.
+
 Les connexions de la console restent en mémoire tant que `KEX_MCP_STORAGE_KEY` est vide. Une fois
 cette clé définie, la configuration complète — en-têtes, bearer et environnement compris — est
 écrite sous forme chiffrée et authentifiée AES-GCM dans `.kex/mcp-servers.enc` (chemin surchargeable

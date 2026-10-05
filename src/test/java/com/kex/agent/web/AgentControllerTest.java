@@ -127,6 +127,15 @@ class AgentControllerTest {
     }
 
     @Test
+    void actualise_explicitement_le_catalogue_mcp() {
+        given(toolCatalog.inspect("runbook", true)).willReturn(new McpServerInfo(
+                "runbook", "runbook-mcp", "1.0", "2025-06-18", true, null, List.of()));
+        assertThat(mvc.get().uri("/api/agent/mcp/servers/runbook/preview?refresh=true")).hasStatusOk();
+        verify(toolCatalog).inspect("runbook", true);
+        verify(toolCatalog, never()).setEnabled("runbook", true);
+    }
+
+    @Test
     void ajoute_un_serveur_mcp_dynamique() {
         McpServerRegistration registration = new McpServerRegistration(
                 "runbook", "https://mcp.example.net", "/mcp", "secret");

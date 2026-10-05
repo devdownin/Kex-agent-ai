@@ -42,6 +42,9 @@ public final class FakeMcpServer implements AutoCloseable {
     private final List<String> methods = new CopyOnWriteArrayList<>();
     private final List<Integer> unauthorized = new CopyOnWriteArrayList<>();
     private volatile String toolsList = DEFAULT_TOOLS_LIST;
+    private volatile String capabilities = "{\"tools\":{},\"resources\":{}}";
+    private volatile String failedMethod;
+    private final Map<String, String> catalogResults = new ConcurrentHashMap<>();
     private final Map<String, String> toolCallResults = new ConcurrentHashMap<>();
 
     public FakeMcpServer() throws IOException {
@@ -65,6 +68,21 @@ public final class FakeMcpServer implements AutoCloseable {
     /** Remplace le catalogue {@code tools/list} par défaut (un seul outil, {@code echo}). */
     public FakeMcpServer withToolsList(String toolsListJson) {
         this.toolsList = toolsListJson;
+        return this;
+    }
+
+    public FakeMcpServer withCapabilities(String json) {
+        capabilities = json;
+        return this;
+    }
+
+    public FakeMcpServer withCatalogResult(String method, String json) {
+        catalogResults.put(method, json);
+        return this;
+    }
+
+    public FakeMcpServer failMethod(String method) {
+        failedMethod = method;
         return this;
     }
 
@@ -95,16 +113,24 @@ public final class FakeMcpServer implements AutoCloseable {
                 return;
             }
             // L'identifiant est réémis tel quel : le SDK peut l'envoyer en nombre comme en chaîne.
+            if (method.equals(failedMethod)) {
+                respond(exchange, "{\"jsonrpc\":\"2.0\",\"id\":%s,\"error\":{\"code\":-32603,\"message\":\"Unavailable\"}}"
+                        .formatted(JSON.writeValueAsString(id)));
+                return;
+            }
             respond(exchange, "{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}"
                     .formatted(JSON.writeValueAsString(id), result(method, request)));
         }
     }
 
     private String result(String method, JsonNode request) {
+        String pageKey = method + ":" + request.path("params").path("cursor").asText("");
+        if (catalogResults.containsKey(pageKey)) return catalogResults.get(pageKey);
+        if (catalogResults.containsKey(method)) return catalogResults.get(method);
         return switch (method) {
             case "initialize" -> """
-                    {"protocolVersion":"2025-06-18","capabilities":{"tools":{},"resources":{}},
-                     "serverInfo":{"name":"faux-serveur","version":"1.0.0"}}""";
+                    {"protocolVersion":"2025-06-18","capabilities":%s,
+                     "serverInfo":{"name":"faux-serveur","version":"1.0.0"}}""".formatted(capabilities);
             case "tools/list" -> toolsList;
             case "tools/call" -> toolCallResults.getOrDefault(toolName(request), DEFAULT_CALL_RESULT);
             case "resources/list" -> """
@@ -112,6 +138,8 @@ public final class FakeMcpServer implements AutoCloseable {
                      "description":"Une ressource","mimeType":"text/plain"}]}""";
             case "resources/read" -> """
                     {"contents":[{"uri":"test://ressource","mimeType":"text/plain","text":"contenu"}]}""";
+            case "resources/templates/list" -> "{\"resourceTemplates\":[]}";
+            case "prompts/list" -> "{\"prompts\":[]}";
             default -> "{}";
         };
     }

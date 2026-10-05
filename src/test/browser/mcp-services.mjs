@@ -20,9 +20,15 @@ try {
   let previews = 0;
   let fail = false;
   let delayed = null;
+  let refreshFails = false;
   const detail = { connection: 'new-server', serverName: 'Services métier', version: '1.2',
     protocolVersion: '2025-06-18', initialized: true,
     reportedToolCount: 1,
+    retrievedAt: '2026-10-04T19:00:00Z', cached: false, stale: false,
+    supportedCapabilities: ['tools', 'resources', 'prompts'],
+    resources: [{ uri: 'test://orders', name: 'Commandes', description: 'Données de commandes', mimeType: 'application/json' }],
+    resourceTemplates: [{ uriTemplate: 'test://orders/{id}', name: 'Commande par identifiant', description: 'Une commande' }],
+    prompts: [{ name: 'triage', description: 'Analyser une anomalie', arguments: [{ name: 'topic', description: 'Topic concerné', required: true }] }],
     tools: [{ name: 'list_topics', description: 'Consulter les topics disponibles',
       annotations: { readOnlyHint: true, destructiveHint: false },
       inputSchema: { type: 'object', required: ['topic'], properties: {
@@ -38,7 +44,9 @@ try {
       previews++;
       if (delayed) await delayed;
       if (fail) return route.fulfill({ status: 502, contentType: 'application/json', body: '{}' });
-      body = detail;
+      body = refreshFails && route.request().url().includes('refresh=true')
+        ? { ...detail, cached: true, stale: true, refreshError: 'Actualisation impossible. Le dernier catalogue est conservé.' }
+        : detail;
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
@@ -57,7 +65,22 @@ try {
   assert.match(rows[1], /limitFacultatifintegerNombre de résultats/);
   assert.match(await page.locator('.mcp-service-card pre').first().textContent(), /"topic": "orders"/);
   assert.equal(previews, 1);
+  assert.match(await page.textContent('[data-catalog-kind="resources"]'), /test:\/\/orders/);
+  assert.match(await page.textContent('[data-catalog-kind="templates"]'), /test:\/\/orders\/\{id\}/);
+  assert.match(await page.textContent('[data-catalog-kind="prompts"]'), /topic · Requis/);
   console.log('✓ la sélection charge les informations et descriptions sans activation');
+  const retrieved = await page.textContent('#drawer-body time');
+  refreshFails = true;
+  await page.getByRole('button', { name: 'Actualiser le catalogue' }).click();
+  await page.waitForFunction(() => document.querySelector('.mcp-discovery-state').textContent.includes('actualisation en échec'));
+  assert.equal(await page.textContent('#drawer-body time'), retrieved);
+  assert.match(await page.textContent('[data-catalog-kind="resources"]'), /Données de commandes/);
+  assert.match(await page.textContent('[data-catalog-kind="prompts"]'), /Analyser une anomalie/);
+  refreshFails = false;
+  await page.getByRole('button', { name: 'Actualiser le catalogue' }).click();
+  await page.waitForFunction(() => document.querySelector('.mcp-discovery-state').textContent.includes('Informations récupérées'));
+  console.log('✓ le catalogue daté, les ressources et prompts restent visibles après une actualisation en échec');
+  const previewsBeforeUse = previews;
   await page.fill('#prompt', 'Mon brouillon existant');
   await page.getByRole('button', { name: 'Utiliser ce service' }).click();
   assert.ok(page.url().includes('#/chat?serviceDraft=1'));
@@ -67,7 +90,7 @@ try {
   assert.ok(draft.startsWith('Mon brouillon existant\n\n'));
   assert.match(draft, /list_topics/); assert.match(draft, /new-server/);
   assert.match(draft, /"topic": "orders"/); assert.match(draft, /\[à compléter\]/);
-  assert.equal(previews, 1, 'la préparation ne rappelle pas le serveur');
+  assert.equal(previews, previewsBeforeUse, 'la préparation ne rappelle pas le serveur');
   assert.ok(!page.url().includes('serviceDraft='));
   await page.evaluate(async () => (await import('/assets/chat.js')).prefill());
   assert.equal(await page.inputValue('#prompt'), draft, 'le brouillon est consommé une seule fois');
