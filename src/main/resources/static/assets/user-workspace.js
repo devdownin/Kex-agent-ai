@@ -214,7 +214,8 @@ function drawDetail() {
   $('#prepare-plan').disabled = !!active || !!current.taskId;
   const task = attentionTasks.find(t => t.id === current.taskId);
   const visual = resultStatus(current, task);
-  $('#run-status').textContent = `${visual.icon} ${LABELS[current.status] || 'État non disponible'}`;
+  const statusIcon = el('span', null, visual.icon + ' '); statusIcon.setAttribute('aria-hidden', 'true');
+  $('#run-status').replaceChildren(statusIcon, el('span', null, LABELS[current.status] || 'État non disponible'));
   $('#run-status').className = 'result-status ' + visual.tone;
   drawRunActivity(current);
   const running = active?.request === current;
