@@ -213,3 +213,14 @@ Le bilan présente **Conclusion**, **Sources et observations**, **Limites** et *
 ## Comprendre une approbation
 
 Chaque plan et sa confirmation présentent l’objectif, le périmètre issu des paramètres exacts, les effets déclarés dans la configuration et les possibilités de refus avant lancement. Les étapes dont la lecture seule n’est pas explicitement déclarée exigent toujours une approbation ADMIN. Aucun retour arrière des effets déjà produits n’est garanti. Les préconditions, critères, preuves et paramètres techniques restent consultables. L’approbation ne lance pas le plan ; l’état, la révision et le contenu sont revalidés avant chaque décision.
+
+
+### Lire et exploiter un résultat
+
+Le bilan commence par une conclusion courte (500 caractères maximum), le contexte retenu et la date de réception. Cette date ne remplace pas celle des mesures : consultez les sources. Les observations et limites complètes restent dans la conversation.
+
+Les statuts combinent texte, symbole et couleur : vert uniquement pour le critère de plan confirmé par le serveur, orange pour une précision ou une réception partielle, rouge pour un échec signalé, gris pour une réponse reçue dont l’objectif reste à vérifier.
+
+Les réponses peuvent fournir `conclusion` et `tables` en complément de `observations`, `uncertainties` et `nextAction`. Chaque tableau contient `title`, `columns` et `rows` ; limites : 3 tableaux, 12 colonnes, 200 lignes et 2000 caractères par cellule. Les titres de colonne indiquent les unités. Les tableaux valides sont triables et filtrables, avec défilement local et en-têtes fixes sur mobile. Les tableaux invalides restent consultables dans le JSON et ne sont pas interprétés.
+
+La vue « Voir le JSON formaté » propose coloration syntaxique, recherche, copie et téléchargement. Les champs sensibles reconnus (mot de passe, jeton, clé API, autorisation, etc.) et valeurs Bearer sont masqués dans cette vue et ses exports ; cela ne garantit pas la détection de tout secret contenu dans un texte libre. La réponse d’origine n’est pas modifiée. Les réponses libres ou interrompues restent lisibles sans être converties arbitrairement en données structurées.

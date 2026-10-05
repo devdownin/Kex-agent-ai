@@ -41,7 +41,8 @@ export function drawRunActivity(request) {
 export function resultSections(host, answer) {
   const parsed = answer?.completed ? parseResponse(answer.text) : null;
   if (parsed?.kind === 'clarification') return;
-  host.append(el('h3', null, 'Conclusion'), el('div', 'answer', parsed?.observations || answer?.text || 'Aucune conclusion disponible.'));
+  const conclusion = (typeof parsed?.conclusion === 'string' && parsed.conclusion.trim()) || parsed?.observations || answer?.text || 'Aucune conclusion disponible.';
+  host.append(el('h3', null, 'Conclusion'), el('div', 'answer', conclusion.length > 500 ? conclusion.slice(0, 500) + '…' : conclusion));
   host.append(el('h3', null, 'Sources et observations'));
   if (answer?.sources?.length) answer.sources.forEach(s => {
     const source = el('details'); source.append(el('summary', null, `${s.source || s.id || 'Source sans nom'} · ${date(s.observedAt)}`), el('pre', null, s.excerpt || 'Extrait non fourni')); host.append(source);

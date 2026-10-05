@@ -8,7 +8,7 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright')
 const root = resolve('src/main/resources/static');
 const unsafe = '<img src=x onerror="window.hacked=true">';
 const request = (id, status, text) => ({ id, title: ({ input: 'précision', result: 'résultat', free: 'réponse libre' })[id] || id, status, conversationId: 'c-' + id, updatedAt: '2026-10-04T10:00:00Z', turns: [{ role: 'user', text: id }, { role: 'agent', text, completed: status !== 'RUNNING', sources: id === 'result' ? [{ source: 'Mesure commandes ' + unsafe, observedAt: '2026-10-04T09:00:00Z', excerpt: 'Lag = 0' }] : [] }], tools: [] });
-const initial = [request('traitement', 'RUNNING', ''), request('input', 'NEEDS_INPUT', JSON.stringify({ kind: 'clarification', question: 'Quelle période ?', choices: [{ label: 'Hier', value: 'Hier' }, { label: 'Ce matin', value: 'Ce matin' }] })), request('result', 'COMPLETE', JSON.stringify({ kind: 'result', observations: 'Aucun retard observé ' + unsafe, uncertainties: 'Mesure limitée à une période', nextAction: 'Vérifier la prochaine période' })), request('free', 'COMPLETE', 'Texte libre lisible')];
+const initial = [request('traitement', 'RUNNING', ''), request('input', 'NEEDS_INPUT', JSON.stringify({ kind: 'clarification', question: 'Quelle période ?', choices: [{ label: 'Hier', value: 'Hier' }, { label: 'Ce matin', value: 'Ce matin' }] })), request('result', 'COMPLETE', JSON.stringify({ kind: 'result', observations: 'Aucun retard observé ' + unsafe, uncertainties: 'Mesure limitée à une période', nextAction: 'Vérifier la prochaine période', tables: [{ title: 'Retards par processus', columns: ['Processus', 'Lag (messages)'], rows: [['orders ' + unsafe, 12], ['customers', 2]] }], data: { apiKey: 'do-not-export', authorization: 'Bearer private' } })), request('free', 'COMPLETE', 'Texte libre lisible')];
 const plan = { id: 'p1', revision: 1, bindingFingerprint: 'exact', status: 'DRAFT', updatedAt: '2026-10-04T10:00:00Z', plan: { objective: 'Vérifier orders', preconditions: ['Accès aux mesures'], steps: [{ description: 'Lire orders', binding: 'read', arguments: { topic: 'orders', period: 'ce matin' } }] }, results: [{ status: 'PENDING' }] };
 let historyFailure = false; let taskFailure = false; let posts = 0; let stream; let held; let heldStarted;
 const server = createServer(async (req, res) => {
@@ -38,6 +38,18 @@ try {
     await page.getByRole('link', { name: 'Mon travail', exact: true }).click(); await page.locator('#work-results').getByRole('link', { name: 'résultat', exact: true }).click();
     const recap = page.locator('#completion-summary'); await recap.getByRole('heading', { name: 'Conclusion', exact: true }).waitFor();
     assert.match(await recap.innerText(), /Aucun retard observé/); assert.match(await recap.innerText(), /Mesure limitée/); assert.match(await recap.innerText(), /Vérifier la prochaine période/); await recap.locator('summary').click(); assert.match(await recap.innerText(), /Lag = 0/); assert.equal(await recap.locator('img').count(), 0);
+    assert.equal(await page.locator('#run-status').evaluate(e => e.classList.contains('unknown')), true);
+    const table = page.locator('#turns .result-table'); await table.getByRole('table').waitFor();
+    await table.getByRole('button', { name: 'Trier par Lag (messages)', exact: true }).click();
+    assert.equal(await table.locator('tbody tr').first().locator('td').last().innerText(), '2');
+    await table.getByRole('searchbox').fill('orders'); assert.equal(await table.locator('tbody tr').count(), 1);
+    await table.getByRole('searchbox').fill('missing'); assert.match(await table.innerText(), /Aucune ligne/); await table.getByRole('searchbox').fill('');
+    const json = page.locator('#turns .result-json'); await json.locator('summary').click();
+    assert.match(await json.locator('code').innerText(), /Masqué/); assert.doesNotMatch(await json.locator('code').innerText(), /do-not-export|Bearer private/);
+    await json.getByRole('searchbox').fill('customers'); await json.getByText('Texte trouvé dans le JSON.', { exact: true }).waitFor();
+    const downloaded = page.waitForEvent('download'); await json.getByRole('button', { name: 'Télécharger le JSON' }).click();
+    const download = await downloaded; const exported = await readFile(await download.path(), 'utf8'); assert.doesNotMatch(exported, /do-not-export|Bearer private/); assert.equal(JSON.parse(exported).kind, 'result');
+    assert.equal(await page.locator('#turns img').count(), 0);
     await recap.getByRole('button', { name: 'Marquer ce résultat comme examiné' }).click(); await page.getByRole('link', { name: 'Mon travail', exact: true }).click(); assert.match(await page.locator('#work-results').innerText(), /Résultat examiné/);
     await page.locator('#work-results').getByRole('link', { name: 'réponse libre', exact: true }).click(); await recap.getByText('Texte libre lisible', { exact: true }).waitFor(); assert.match(await recap.innerText(), /Texte libre lisible/); assert.match(await recap.innerText(), /Aucune source consultable/);
     let releaseRefresh; let refreshStarted; held = new Promise(r => { releaseRefresh = r; }); const refreshWaiting = new Promise(r => { refreshStarted = r; }); heldStarted = refreshStarted;
@@ -52,5 +64,5 @@ try {
     assert.equal(await page.locator('#work a[href^="#/request/"]').count(), 0); assert.equal(await page.locator('#work a[href="#/approvals"]').count(), 0); assert.equal(posts, 1);
     assert.equal(await page.evaluate(() => window.hacked), undefined); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)); assert.deepEqual(errors, []); await context.close();
   }
-  console.log('✓ mon travail : états, sources, réponse libre, activité silencieuse, flux en cours, données indisponibles et isolation après réponse tardive sur ordinateur et mobile');
+  console.log('✓ restitution : tableaux triables/filtrables, JSON coloré et export masqué ; mon travail : états, sources, réponse libre, activité silencieuse, flux en cours, données indisponibles et isolation après réponse tardive sur ordinateur et mobile');
 } finally { stream?.end(); await browser.close(); await new Promise(done => server.close(done)); }
