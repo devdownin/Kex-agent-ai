@@ -64,3 +64,22 @@ export function servicePrompt(server, tool) {
     'Demande-moi les précisions nécessaires. Respecte les permissions et les validations Kex avant toute action.',
   ].join('\n\n');
 }
+
+export function serviceAvailability(server, managed) {
+  if (managed && !managed.enabled) return { state: 'UNKNOWN', label: 'Indisponible : connexion désactivée', detail: 'Vous pouvez préparer une demande ; un opérateur doit activer la connexion avant utilisation.' };
+  if (server.stale) return { state: 'WARNING', label: 'Disponibilité à revalider', detail: 'Le catalogue est conservé après un échec d’actualisation. Vérifiez la connexion avant utilisation.' };
+  if (server.circuitBreakerState === 'OPEN') return { state: 'ERROR', label: 'Temporairement indisponible', detail: 'La protection de la connexion est ouverte. Consultez le diagnostic avant utilisation.' };
+  if (!server.initialized) return { state: 'UNKNOWN', label: 'Disponibilité non confirmée', detail: 'Le catalogue décrit le service mais la connexion n’est pas confirmée.' };
+  return { state: 'OK', label: 'Disponible à la dernière récupération', detail: 'La disponibilité peut changer. Les permissions et validations sont recontrôlées à l’exécution.' };
+}
+export function expectedResult(tool) {
+  const schema = tool.outputSchema;
+  return schema && typeof schema === 'object' && !Array.isArray(schema) && Object.keys(schema).length
+    ? { declared: true, description: typeof schema.description === 'string' && schema.description.trim() ? schema.description : 'Structure du résultat déclarée par le serveur.', fields: parameterRows(schema), example: exampleArguments(schema) }
+    : { declared: false, description: 'Résultat attendu non décrit par le serveur. Aucun exemple de réponse ne peut être garanti.', fields: [] };
+}
+export function discoveryFailure(status) {
+  if ([401, 403].includes(status)) return { title: 'Accès refusé', detail: 'Vérifiez vos droits Kex. Le détail des services n’est pas accessible avec cet accès.', retry: false };
+  if (status === 404) return { title: 'Connexion introuvable ou inaccessible', detail: 'Actualisez la liste des connexions et vérifiez vos droits.', retry: true };
+  return { title: 'Impossible de récupérer les services du serveur.', detail: 'Vérifiez l’adresse, les identifiants et la disponibilité du serveur. Une erreur de récupération ne signifie pas que le catalogue est vide.', retry: true };
+}

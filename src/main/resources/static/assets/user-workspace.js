@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 import { $, api, credentials, el, failure, headers } from './core.js';
+import { resultIssue, drawEvidence, drawFindings } from './user-evidence.js';
 import { drawTables, drawJson, resultStatus } from './user-results.js';
 import { drawWork, drawRunActivity, resultSections } from './user-work.js';
 import { userOnboarding } from './user-onboarding.js';
@@ -180,13 +181,14 @@ function route() {
   current = request;
   if (request) {
     drawDetail();
-    if (request.serverId && request.summaryOnly && !request.loadingDetail) {
+    if (request.serverId && request.summaryOnly && !request.loadingDetail && active?.request !== request) {
       const own = epoch; request.loadingDetail = true; drawDetail();
       api(`/api/agent/workspace/requests/${encodeURIComponent(request.serverId)}`).then(row => {
-        if (own !== epoch) return;
+        if (own !== epoch || active?.request === request) return;
+        delete request.detailError;
         const localId = request.id; Object.assign(request, row, { id: localId, summaryOnly: false });
         save(); if (current === request) { drawDetail(); approvals.request(request); }
-      }).catch(() => { if (own === epoch) $('#notice').textContent = 'Le détail complet n’a pas pu être chargé. Actualisez avant de poursuivre.'; }).finally(() => { request.loadingDetail = false; if (own === epoch && current === request) drawDetail(); });
+      }).catch(error => { if (own === epoch) { request.detailError = { status: error.status || 0 }; $('#notice').textContent = 'Le détail complet n’a pas pu être chargé. Actualisez avant de poursuivre.'; } }).finally(() => { request.loadingDetail = false; if (own === epoch && current === request) drawDetail(); });
     }
   }
   approvals.request(request);
@@ -217,6 +219,13 @@ function drawDetail() {
   const statusIcon = el('span', null, visual.icon + ' '); statusIcon.setAttribute('aria-hidden', 'true');
   $('#run-status').replaceChildren(statusIcon, el('span', null, LABELS[current.status] || 'État non disponible'));
   $('#run-status').className = 'result-status ' + visual.tone;
+  const issue = resultIssue(current); const issueHost = $('#result-issue'); issueHost.replaceChildren(); issueHost.hidden = !issue;
+  if (issue) {
+    issueHost.dataset.kind = issue.kind; issueHost.append(el('h2', null, issue.title), el('p', null, issue.text));
+    const choices = { account: ['Vérifier mon accès', () => $('#account').click()], refresh: ['Actualiser le suivi', () => $('#refresh-current').click()], prepare: ['Préparer une demande précisée', () => reprepare(current)] };
+    const [label, action] = choices[issue.action]; const control = button(label, action); control.disabled = !!active; issueHost.append(control);
+  }
+
   drawRunActivity(current);
   const running = active?.request === current;
   $('#stop').hidden = !running; $('#refresh-current').disabled = !!active;
@@ -247,7 +256,8 @@ function drawDetail() {
     const result = t.role === 'agent' && t.completed ? parseResponse(t.text) : null;
     if (result?.kind === 'result') {
       [['Ce que j’ai constaté', result.observations], ['Ce qui reste incertain', result.uncertainties], ['Prochaine action', result.nextAction]].forEach(([title, content]) => {
-        article.append(el('h3', null, title), el('div', 'answer', content));
+        article.append(el('h3', null, title));
+        if (title === 'Ce que j’ai constaté') drawEvidence(article, content, t.sources); else article.append(el('div', 'answer', content));
       });
     } else if (result?.kind === 'clarification') {
       article.append(el('h3', null, result.question));
@@ -255,7 +265,7 @@ function drawDetail() {
       result.choices.forEach(c => { const choice = button(c.label, () => { $('#followup').value = c.value; $('#followup').focus(); }); choice.disabled = !!active || !current.conversationId; choices.append(choice); });
       article.append(choices, el('p', 'muted', 'Le choix prépare votre réponse. Cliquez sur Envoyer pour poursuivre ; vous pouvez aussi écrire une autre réponse.'));
     } else article.append(el('div', 'answer', t.role === 'agent' && current.status === 'RUNNING' && t === current.turns.at(-1) ? 'Kex prépare votre réponse…' : t.text || 'En attente de la réponse…'));
-    if (t.role === 'agent' && t.completed && result?.kind !== 'clarification') { drawTables(article, result?.tables); drawJson(article, t.text); }
+    if (t.role === 'agent' && t.completed && result?.kind !== 'clarification') { drawFindings(article, result?.findings, t.sources); drawTables(article, result?.tables); drawJson(article, t.text); }
     if (t.error) article.append(el('p', 'error', t.error));
     if (t.sources?.length) {
       const d = el('details'); d.append(el('summary', null, 'Sources consultées'));
@@ -379,6 +389,7 @@ async function send(message, request = null) {
     const durable = !!request.serverId || (serverHistory && !request.conversationId);
     const response = await fetch(durable ? '/api/agent/workspace/requests/stream' : '/api/agent/chat/stream', { method: 'POST', headers: headers({ 'Content-Type': 'application/json', Accept: 'text/event-stream' }), body: JSON.stringify(durable ? { id: request.serverId || null, message, context: request.context } : { message: responsePrompt(message + contextText(request.context)), conversationId: request.conversationId }), signal: controller.signal });
     if (!response.ok) throw await failure(response);
+    delete request.detailError;
     for await (const event of events(response)) {
       if (ownEpoch !== epoch) return;
       if (event.name === 'request') { const saved = JSON.parse(event.data); request.serverId = saved.id; }
@@ -400,6 +411,7 @@ async function send(message, request = null) {
   } catch (e) {
     if (ownEpoch !== epoch) return;
     request.status = e.name === 'AbortError' ? 'INTERRUPTED' : 'ERROR';
+    answer.httpStatus = e.status || 0;
     answer.error = e.name === 'AbortError' ? 'Réception arrêtée. Cela ne garantit pas l’annulation des actions déjà engagées.' : e.message;
     if (e.status === 401) $('#notice').textContent = 'Votre accès a été refusé. Reconnectez-vous avant de poursuivre.';
   } finally {

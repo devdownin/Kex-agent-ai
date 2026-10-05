@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 import { $, el } from './core.js';
+import { drawEvidence } from './user-evidence.js';
 import { activity, parseResponse } from './user-experience.js';
 const date = at => at && Number.isFinite(Date.parse(at)) ? new Date(at).toLocaleString('fr-FR') : 'Date non fournie';
 export function drawWork({ identity, history, tasks, examined, historyState, taskState }) {
@@ -42,7 +43,8 @@ export function resultSections(host, answer) {
   const parsed = answer?.completed ? parseResponse(answer.text) : null;
   if (parsed?.kind === 'clarification') return;
   const conclusion = (typeof parsed?.conclusion === 'string' && parsed.conclusion.trim()) || parsed?.observations || answer?.text || 'Aucune conclusion disponible.';
-  host.append(el('h3', null, 'Conclusion'), el('div', 'answer', conclusion.length > 500 ? conclusion.slice(0, 500) + '…' : conclusion));
+  host.append(el('h3', null, 'Conclusion'));
+  drawEvidence(host, conclusion.length > 500 ? conclusion.slice(0, 500) + '…' : conclusion, answer?.sources);
   host.append(el('h3', null, 'Sources et observations'));
   if (answer?.sources?.length) answer.sources.forEach(s => {
     const source = el('details'); source.append(el('summary', null, `${s.source || s.id || 'Source sans nom'} · ${date(s.observedAt)}`), el('pre', null, s.excerpt || 'Extrait non fourni')); host.append(source);

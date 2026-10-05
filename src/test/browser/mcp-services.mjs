@@ -18,7 +18,7 @@ const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage();
   let previews = 0;
-  let fail = false;
+  let fail = false; let denied = false; let noOutput = false;
   let delayed = null;
   let refreshFails = false;
   const detail = { connection: 'new-server', serverName: 'Services métier', version: '1.2',
@@ -31,6 +31,7 @@ try {
     prompts: [{ name: 'triage', description: 'Analyser une anomalie', arguments: [{ name: 'topic', description: 'Topic concerné', required: true }] }],
     tools: [{ name: 'list_topics', description: 'Consulter les topics disponibles',
       annotations: { readOnlyHint: true, destructiveHint: false },
+      outputSchema: { type: 'object', required: ['count'], properties: { count: { type: 'integer', description: 'Nombre de topics' } } },
       inputSchema: { type: 'object', required: ['topic'], properties: {
         topic: { type: 'string', description: 'Topic à examiner', examples: ['orders'] },
         limit: { type: 'integer', description: 'Nombre de résultats' },
@@ -43,10 +44,11 @@ try {
     if (path.endsWith('/preview')) {
       previews++;
       if (delayed) await delayed;
+      if (denied) return route.fulfill({ status: 403, contentType: 'application/json', body: '{}' });
       if (fail) return route.fulfill({ status: 502, contentType: 'application/json', body: '{}' });
       body = refreshFails && route.request().url().includes('refresh=true')
         ? { ...detail, cached: true, stale: true, refreshError: 'Actualisation impossible. Le dernier catalogue est conservé.' }
-        : detail;
+        : noOutput ? { ...detail, tools: detail.tools.map(t => ({ ...t, description: null, outputSchema: null })) } : detail;
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
@@ -64,6 +66,9 @@ try {
   assert.match(rows[0], /topicRequisstringTopic à examiner/);
   assert.match(rows[1], /limitFacultatifintegerNombre de résultats/);
   assert.match(await page.locator('.mcp-service-card pre').first().textContent(), /"topic": "orders"/);
+  assert.match(await page.textContent('.mcp-service-card'), /Indisponible : connexion désactivée/);
+  assert.match(await page.textContent('.mcp-expected-result'), /count.*integer.*Nombre de topics/s);
+  assert.match(await page.textContent('.mcp-expected-result'), /Ce n’est pas un résultat observé/);
   assert.equal(previews, 1);
   assert.match(await page.textContent('[data-catalog-kind="resources"]'), /test:\/\/orders/);
   assert.match(await page.textContent('[data-catalog-kind="templates"]'), /test:\/\/orders\/\{id\}/);
@@ -105,6 +110,11 @@ try {
   await page.getByRole('button', { name: 'Réessayer' }).click();
   await page.waitForFunction(() => document.querySelector('#drawer-body').textContent.includes('Consulter les topics disponibles'));
   console.log('✓ l’échec est explicite et le bouton Réessayer recharge les services');
+  await page.evaluate(async () => (await import('/assets/core.js')).closeDrawer());
+  denied = true; await select(); await page.getByText('Accès refusé', { exact: true }).waitFor(); assert.equal(await page.getByRole('button', { name: 'Réessayer' }).count(), 0);
+  denied = false; noOutput = true; await page.evaluate(async () => (await import('/assets/core.js')).closeDrawer()); await select();
+  await page.getByText('Objectif non fourni par le serveur.', { exact: true }).waitFor(); assert.match(await page.textContent('.mcp-expected-result'), /non décrit par le serveur/);
+  noOutput = false;
   await page.evaluate(async () => (await import('/assets/core.js')).closeDrawer());
   let release;
   delayed = new Promise(resolve => { release = resolve; });

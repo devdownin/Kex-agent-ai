@@ -106,6 +106,21 @@ class McpToolCatalogTest {
     }
 
     @Test
+    void preserve_le_contrat_de_sortie_declare_et_detecte_sa_modification() throws Exception {
+        var tool = new com.fasterxml.jackson.databind.ObjectMapper().readValue("""
+                {"name":"count","description":"Compter","inputSchema":{"type":"object"},
+                 "outputSchema":{"type":"object","required":["count"],"properties":{"count":{"type":"integer"}}}}
+                """, McpSchema.Tool.class);
+        given(client.listTools()).willReturn(new McpSchema.ListToolsResult(List.of(tool), null));
+        var result = catalog(true).servers().getFirst().tools().getFirst();
+        assertThat(result.outputSchema()).containsEntry("type", "object").containsEntry("required", List.of("count"));
+        var changed = new McpToolInfo(result.name(), result.description(), result.inputSchema(), result.annotations(),
+                result.readOnlyByPolicy(), Map.of("type", "string"));
+        assertThat(McpToolCatalog.compareTools(Map.of("count", result), Map.of("count", changed), Instant.now()).schemaChanged())
+                .containsExactly("count");
+    }
+
+    @Test
     void liste_un_serveur_injoignable_sans_echouer() {
         given(client.initialize()).willThrow(new IllegalStateException("connection refused"));
 
