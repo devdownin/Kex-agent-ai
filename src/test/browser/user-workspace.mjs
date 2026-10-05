@@ -76,7 +76,7 @@ try {
     await page.locator('#send').click(); await page.locator('#run-status').getByText('Réponse reçue', { exact: true }).waitFor();
     assert.match(await page.locator('#progress').innerText(), /reste à vérifier/);
     assert.equal(await page.locator('#turns img').count(), 0);
-    await page.getByText('Sources consultées').click(); assert.match(await page.locator('#turns').innerText(), /runbook/);
+    await page.getByText('Sources consultées', { exact: true }).click(); assert.match(await page.locator('#turns').innerText(), /runbook/);
     assert.equal(await page.evaluate(() => window.hacked), undefined);
     await page.locator('#open-expert').click();
     await page.waitForFunction(() => document.querySelector('#conversation-id')?.textContent === 'conv-1');
