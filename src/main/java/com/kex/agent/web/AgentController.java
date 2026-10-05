@@ -119,10 +119,13 @@ class AgentController {
         return switch (agentEvent) {
             case AgentEvent.Sources sources -> event("sources", sourcesJson(sources.sources()));
             case AgentEvent.Token token -> event("token", token.text());
-            case AgentEvent.ToolCall call -> event("tool",
-                    "{\"tool\":\"%s\",\"durationMillis\":%d,\"failed\":%b}"
-                            .formatted(call.tool(), call.durationMillis(), call.failed()));
+            case AgentEvent.ToolCall call -> event("tool", toolJson(call));
         };
+    }
+
+    private static String toolJson(AgentEvent.ToolCall call) {
+        try { return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(call); }
+        catch (com.fasterxml.jackson.core.JsonProcessingException ex) { throw new IllegalStateException("Outil non sérialisable", ex); }
     }
 
     private static String sourcesJson(List<com.kex.agent.knowledge.KnowledgeSource> sources) {

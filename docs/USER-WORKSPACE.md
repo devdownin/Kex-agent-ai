@@ -237,3 +237,27 @@ Un résultat peut aussi fournir `findings: [{text, sourceIds}]` pour présenter 
 ### Fiches des services MCP
 
 Dans la console experte, chaque service présente sa fonction déclarée, la disponibilité au dernier catalogue, ses paramètres obligatoires, ses effets déclarés, un exemple d’appel à adapter et le résultat attendu issu de `outputSchema`. Les exemples de sortie sont des structures proposées, pas des résultats observés. Sans description ou contrat de sortie, la fiche le signale explicitement. Une connexion désactivée peut être inspectée et servir à préparer un prompt ; elle reste indisponible pour l’agent avant activation. L’évolution du contrat de sortie apparaît dans les changements de schéma du diagnostic.
+
+### Restitution : preuves, détails, métriques et exports
+
+Les constats structurés peuvent préciser `sourceIds` et `toolNames`. Les références documentaires
+montrent la source, la date et la validité ; les outils associés montrent les appels réellement
+reçus pour cette réponse, avec date, état et résultat structuré lorsqu’il est disponible.
+Une association proposée par le modèle ne constitue pas une validation indépendante.
+Les résultats d’outils non JSON ou dépassant 4 000 caractères ne sont pas conservés comme preuves.
+Les champs sensibles reconnus sont masqués avant stockage et diffusion ; un ancien appel peut
+ne disposer ni de date ni de résultat. Ces absences sont signalées explicitement.
+
+« Sources », « Détails techniques » et « Données brutes » restent dépliables ; leur préférence
+est mémorisée par identité sur ce navigateur. Les métriques utilisent `label`, `value`, `unit`,
+`period`, éventuellement `comparison: {value, period}` dans la même unité et
+`points: [{at, value}]`. Une courbe exige deux dates distinctes ; les valeurs exactes restent
+consultables dans un tableau. Aucune série n’est extrapolée pour combler des données manquantes.
+
+La synthèse est copiable et téléchargeable en Markdown. Chaque tableau est exportable en CSV,
+avec sources et date sur chaque ligne, et neutralisation des cellules interprétables comme formules.
+Les exports JSON conservent réponse, sources, appels d’outils et date de réception. La date de
+réception ne remplace pas la date de mesure. Les erreurs de récupération, refus d’accès,
+informations indisponibles et réponses vides gardent une action de vérification adaptée,
+sans relance automatique. Les fiches MCP détaillent paramètres, exemples, sortie déclarée et
+disponibilité ; les descriptions absentes sont indiquées sans inventer le contrat du service.

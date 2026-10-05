@@ -70,6 +70,18 @@ class WorkspaceServiceTest {
         assertThat(full.context()).isEqualTo(first.context()); assertThat(full.conversationId()).isEqualTo(first.conversationId());
         assertThat(service.list(alice).getFirst().turns()).hasSize(2);
     }
+    @Test void les_preuves_outils_restent_liees_au_bon_tour_apres_rechargement() {
+        var evidence = new AgentEvent.ToolCall("read_lag", 2, false, now.toString(), "{\"lag\":12}");
+        when(agent.stream(anyString(), anyString(), anyString())).thenAnswer(call -> new AgentStream(call.getArgument(1), Flux.just(evidence, new AgentEvent.Token("Lag 12"))));
+        service.stream(alice, input(null)).blockLast();
+        var first = service.list(alice).getFirst();
+        when(agent.stream(anyString(), anyString(), anyString())).thenAnswer(call -> new AgentStream(call.getArgument(1), Flux.just(new AgentEvent.Token("Précision"))));
+        service.stream(alice, new WorkspaceRequest.Input(first.id(), "Préciser", null)).blockLast();
+        var restored = new WorkspaceService(new WorkspaceStore(mapper, directory), agent, mapper, Clock.fixed(now, ZoneOffset.UTC), tasks).get(alice, first.id());
+        assertThat(restored.turns().get(1).tools()).containsExactly(evidence);
+        assertThat(restored.turns().get(1).receivedAt()).isEqualTo(now);
+        assertThat(restored.turns().getLast().tools()).isEmpty();
+    }
     @Test void un_flux_actif_ne_peut_pas_etre_relance_et_une_fermeture_ne_signifie_pas_reussite() {
         var sink = Sinks.many().unicast().<AgentEvent>onBackpressureBuffer();
         when(agent.stream(anyString(), anyString(), anyString())).thenAnswer(call -> new AgentStream(call.getArgument(1), sink.asFlux()));
