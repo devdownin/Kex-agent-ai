@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Kex Agent AI Contributors
 import { $, api, credentials, el, failure, headers } from './core.js';
+import { drawTables, drawJson, resultStatus } from './user-results.js';
 import { drawWork, drawRunActivity, resultSections } from './user-work.js';
 import { userOnboarding } from './user-onboarding.js';
 import { userNotifications } from './user-notifications.js';
@@ -211,7 +212,11 @@ function drawDetail() {
   $('#favorite-request').disabled = !!active || !identity;
   $('#reprepare-request').disabled = !!active || !identity;
   $('#prepare-plan').disabled = !!active || !!current.taskId;
-  $('#run-status').textContent = LABELS[current.status] || 'État non disponible';
+  const task = attentionTasks.find(t => t.id === current.taskId);
+  const visual = resultStatus(current, task);
+  const statusIcon = el('span', null, visual.icon + ' '); statusIcon.setAttribute('aria-hidden', 'true');
+  $('#run-status').replaceChildren(statusIcon, el('span', null, LABELS[current.status] || 'État non disponible'));
+  $('#run-status').className = 'result-status ' + visual.tone;
   drawRunActivity(current);
   const running = active?.request === current;
   $('#stop').hidden = !running; $('#refresh-current').disabled = !!active;
@@ -227,6 +232,9 @@ function drawDetail() {
   $('#progress').replaceChildren(...steps.map(s => el('li', null, s)));
   const recap = $('#completion-summary'); recap.replaceChildren(); const bilan = summary(current, attentionTasks.find(t => t.id === current.taskId)); recap.hidden = !bilan;
   if (bilan) {
+    recap.append(el('p', 'result-status ' + visual.tone, `${visual.icon} ${visual.label}`));
+    const scope = current.context;
+    recap.append(el('p', 'muted', `Périmètre : ${[scope?.process, scope?.environment, scope?.period].filter(Boolean).join(' · ') || 'Non renseigné'}. Réponse reçue : ${date(current.updatedAt)}. La date des mesures figure dans les sources lorsqu’elle est fournie.`));
     recap.append(el('h2', null, bilan.title), el('p', null, bilan.evidence), el('p', null, bilan.limits));
     const answer = current.turns.filter(t => t.role === 'agent').at(-1); resultSections(recap, answer);
     recap.append(button('Marquer ce résultat comme examiné', () => { examined.push(`${current.id}:${current.updatedAt}`); examined = examined.slice(-200); try { localStorage.setItem(examinedKey(), JSON.stringify(examined)); } catch { $('#notice').textContent = 'La marque de lecture reste en mémoire.'; } drawAttention(); }));
@@ -247,6 +255,7 @@ function drawDetail() {
       result.choices.forEach(c => { const choice = button(c.label, () => { $('#followup').value = c.value; $('#followup').focus(); }); choice.disabled = !!active || !current.conversationId; choices.append(choice); });
       article.append(choices, el('p', 'muted', 'Le choix prépare votre réponse. Cliquez sur Envoyer pour poursuivre ; vous pouvez aussi écrire une autre réponse.'));
     } else article.append(el('div', 'answer', t.role === 'agent' && current.status === 'RUNNING' && t === current.turns.at(-1) ? 'Kex prépare votre réponse…' : t.text || 'En attente de la réponse…'));
+    if (t.role === 'agent' && t.completed && result?.kind !== 'clarification') { drawTables(article, result?.tables); drawJson(article, t.text); }
     if (t.error) article.append(el('p', 'error', t.error));
     if (t.sources?.length) {
       const d = el('details'); d.append(el('summary', null, 'Sources consultées'));
