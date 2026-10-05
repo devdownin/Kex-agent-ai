@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM eclipse-temurin:21-jdk AS build
+FROM eclipse-temurin:25-jdk AS build
 WORKDIR /build
 # Le wrapper Maven plutôt qu'une image maven:*-temurin-21 : la version de Maven est celle
 # du dépôt, et la construction ne dépend pas de l'existence d'un tag amont.
@@ -12,7 +12,7 @@ COPY src/ src/
 RUN --mount=type=cache,target=/root/.m2 \
     ./mvnw -B --no-transfer-progress -DskipTests package
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 WORKDIR /app
 COPY --from=build /build/target/*.jar /app/app.jar
 # Pas de HEALTHCHECK ici : l'image JRE n'embarque ni curl ni wget, et les installer pour
