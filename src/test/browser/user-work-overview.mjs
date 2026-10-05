@@ -7,8 +7,8 @@ import { resolve } from 'node:path';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
 const root = resolve('src/main/resources/static');
 const unsafe = '<img src=x onerror="window.hacked=true">';
-const request = (id, status, text) => ({ id, title: ({ input: 'précision', result: 'résultat', free: 'réponse libre' })[id] || id, status, conversationId: 'c-' + id, updatedAt: '2026-10-04T10:00:00Z', turns: [{ role: 'user', text: id }, { role: 'agent', text, completed: status !== 'RUNNING', sources: id === 'result' ? [{ source: 'Mesure commandes ' + unsafe, observedAt: '2026-10-04T09:00:00Z', excerpt: 'Lag = 0' }] : [] }], tools: [] });
-const initial = [request('traitement', 'RUNNING', ''), request('input', 'NEEDS_INPUT', JSON.stringify({ kind: 'clarification', question: 'Quelle période ?', choices: [{ label: 'Hier', value: 'Hier' }, { label: 'Ce matin', value: 'Ce matin' }] })), request('result', 'COMPLETE', JSON.stringify({ kind: 'result', observations: 'Aucun retard observé ' + unsafe, uncertainties: 'Mesure limitée à une période', nextAction: 'Vérifier la prochaine période', tables: [{ title: 'Retards par processus', columns: ['Processus', 'Lag (messages)'], rows: [['orders ' + unsafe, 12], ['customers', 2]] }], data: { apiKey: 'do-not-export', authorization: 'Bearer private' } })), request('free', 'COMPLETE', 'Texte libre lisible')];
+const request = (id, status, text) => ({ id, title: ({ input: 'précision', result: 'résultat', free: 'réponse libre' })[id] || id, status, conversationId: 'c-' + id, updatedAt: '2026-10-04T10:00:00Z', turns: [{ role: 'user', text: id }, { role: 'agent', text, completed: status !== 'RUNNING', sources: id === 'result' ? [{ id: 'measurement-orders', validUntil: '2026-10-04T10:00:00Z', source: 'Mesure commandes ' + unsafe, observedAt: '2026-10-04T09:00:00Z', excerpt: 'Lag = 0' }] : [] }], tools: [] });
+const initial = [request('traitement', 'RUNNING', ''), request('input', 'NEEDS_INPUT', JSON.stringify({ kind: 'clarification', question: 'Quelle période ?', choices: [{ label: 'Hier', value: 'Hier' }, { label: 'Ce matin', value: 'Ce matin' }] })), request('result', 'COMPLETE', JSON.stringify({ kind: 'result', observations: 'Aucun retard observé [source:measurement-orders] ' + unsafe, uncertainties: 'Mesure limitée à une période', nextAction: 'Vérifier la prochaine période', tables: [{ title: 'Retards par processus', columns: ['Processus', 'Lag (messages)'], rows: [['orders ' + unsafe, 12], ['customers', 2]] }], findings: [{ text: 'Constat sans preuve reçue', sourceIds: ['invented'] }], data: { apiKey: 'do-not-export', authorization: 'Bearer private' } })), request('free', 'COMPLETE', 'Texte libre lisible'), request('empty', 'PARTIAL', ''), request('error', 'ERROR', 'Détails partiels'), request('denied', 'COMPLETE', 'Ancien résultat')];
 const plan = { id: 'p1', revision: 1, bindingFingerprint: 'exact', status: 'DRAFT', updatedAt: '2026-10-04T10:00:00Z', plan: { objective: 'Vérifier orders', preconditions: ['Accès aux mesures'], steps: [{ description: 'Lire orders', binding: 'read', arguments: { topic: 'orders', period: 'ce matin' } }] }, results: [{ status: 'PENDING' }] };
 let historyFailure = false; let taskFailure = false; let posts = 0; let stream; let held; let heldStarted;
 const server = createServer(async (req, res) => {
@@ -17,7 +17,7 @@ const server = createServer(async (req, res) => {
   if (req.url === '/api/agent/whoami') return json({ name: user, tenant: 'team', roles: [user === 'alice' ? 'OPERATOR' : 'CHAT'] });
   if (req.url === '/api/agent/skills/available') return json([]);
   if (req.url === '/api/agent/workspace/requests') { if (held && user === 'alice') { heldStarted(); await held; } return json(user === 'alice' ? initial : [], historyFailure ? 503 : 200); }
-  if (req.url.startsWith('/api/agent/workspace/requests/') && req.url !== '/api/agent/workspace/requests/stream') return json(initial.find(r => r.id === decodeURIComponent(req.url.split('/').at(-1))));
+  if (req.url.startsWith('/api/agent/workspace/requests/') && req.url !== '/api/agent/workspace/requests/stream') return req.url.endsWith('/denied') ? json({}, 403) : json(initial.find(r => r.id === decodeURIComponent(req.url.split('/').at(-1))));
   if (req.url === '/api/agent/tasks') return json([plan], taskFailure ? 503 : 200);
   if (req.url === '/api/agent/tasks/bindings') return json({ read: { readOnly: true, connection: 'kafka', tool: 'query' } });
   if (req.url === '/api/agent/workspace/requests/stream') { for await (const chunk of req) { /* Drain the request. */ } stream = res; res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.write('event: request\ndata: {"id":"live-request"}\n\nevent: conversation\ndata: live-conversation\n\nevent: tool\ndata: {"tool":"get_health","failed":false}\n\n'); return; }
@@ -33,11 +33,14 @@ try {
     const context = await browser.newContext({ viewport: { width, height: 900 } }); const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(String(e)));
     await page.goto(url); await page.locator('#work').waitFor({ state: 'visible' }); await login(page, 'alice');
     await page.locator('#work-decisions').getByRole('link', { name: 'Vérifier orders', exact: true }).waitFor();
-    assert.equal(await page.locator('#work-running a').count(), 1); assert.equal(await page.locator('#work-decisions a').count(), 2); assert.equal(await page.locator('#work-results a').count(), 2); assert.equal(posts, 0);
+    assert.equal(await page.locator('#work-running a').count(), 1); assert.equal(await page.locator('#work-decisions a').count(), 2); assert.equal(await page.locator('#work-results a').count(), 5); assert.equal(posts, 0);
     await page.locator('#work-running a').click(); await page.locator('#activity-delay').waitFor({ state: 'visible' }); assert.match(await page.locator('#activity-delay').innerText(), /peut continuer/); assert.match(await page.locator('#last-activity').innerText(), /04\/10\/2026/);
     await page.getByRole('link', { name: 'Mon travail', exact: true }).click(); await page.locator('#work-results').getByRole('link', { name: 'résultat', exact: true }).click();
     const recap = page.locator('#completion-summary'); await recap.getByRole('heading', { name: 'Conclusion', exact: true }).waitFor();
     assert.match(await recap.innerText(), /Aucun retard observé/); assert.match(await recap.innerText(), /Mesure limitée/); assert.match(await recap.innerText(), /Vérifier la prochaine période/); await recap.locator('summary').click(); assert.match(await recap.innerText(), /Lag = 0/); assert.equal(await recap.locator('img').count(), 0);
+    const reference = page.locator('#turns .evidence-reference').first(); await reference.getByRole('button').click();
+    assert.match(await reference.innerText(), /Lag = 0/); assert.match(await reference.innerText(), /Validité expirée/);
+    assert.match(await page.locator('#turns .source-missing').innerText(), /invented.*Source non fournie/);
     assert.equal(await page.locator('#run-status').evaluate(e => e.classList.contains('unknown')), true);
     const table = page.locator('#turns .result-table'); await table.getByRole('table').waitFor();
     await table.getByRole('button', { name: 'Trier par Lag (messages)', exact: true }).click();
@@ -52,6 +55,12 @@ try {
     assert.equal(await page.locator('#turns img').count(), 0);
     await recap.getByRole('button', { name: 'Marquer ce résultat comme examiné' }).click(); await page.getByRole('link', { name: 'Mon travail', exact: true }).click(); assert.match(await page.locator('#work-results').innerText(), /Résultat examiné/);
     await page.locator('#work-results').getByRole('link', { name: 'réponse libre', exact: true }).click(); await recap.getByText('Texte libre lisible', { exact: true }).waitFor(); assert.match(await recap.innerText(), /Texte libre lisible/); assert.match(await recap.innerText(), /Aucune source consultable/);
+    for (const [id, kind] of [['empty', 'empty'], ['error', 'error'], ['denied', 'denied']]) {
+      await page.evaluate(id => { location.hash = '#/request/' + id; }, id); await page.locator('#result-issue[data-kind="' + kind + '"]').waitFor({ state: 'visible' });
+      if (kind === 'denied') assert.equal(await page.locator('#result-issue').getByRole('button', { name: 'Vérifier mon accès' }).count(), 1);
+      assert.equal(posts, 0, 'Afficher une erreur ne relance rien');
+    }
+    await page.evaluate(() => { location.hash = '#/request/free'; }); await recap.getByText('Texte libre lisible', { exact: true }).waitFor();
     let releaseRefresh; let refreshStarted; held = new Promise(r => { releaseRefresh = r; }); const refreshWaiting = new Promise(r => { refreshStarted = r; }); heldStarted = refreshStarted;
     await page.locator('#refresh-current').click(); await refreshWaiting;
     await page.getByRole('link', { name: 'Nouvelle demande', exact: true }).click(); await page.locator('#prompt').fill('Nouvelle consultation'); await page.locator('#send').click(); await page.locator('#run-activity').getByText('État du processus consulté', { exact: false }).waitFor(); assert.equal(await page.locator('#refresh-current').isDisabled(), true, 'la réception active ne doit pas être remplacée par une ancienne copie serveur');

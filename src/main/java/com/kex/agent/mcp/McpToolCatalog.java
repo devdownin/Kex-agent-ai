@@ -970,9 +970,15 @@ public class McpToolCatalog implements AutoCloseable {
                         if (declared.path(hint).isBoolean()) annotations.put(hint, declared.path(hint).booleanValue());
                     }
                     return new McpToolInfo(tool.name(), tool.description(), tool.inputSchema(), Map.copyOf(annotations),
-                            isReadOnly(connectionName(client), tool.name()));
+                            isReadOnly(connectionName(client), tool.name()), declaredOutputSchema(tool));
                 })
                 .toList();
+    }
+
+    private Map<String, Object> declaredOutputSchema(McpSchema.Tool tool) {
+        var schema = objectMapper.valueToTree(tool).path("outputSchema");
+        if (!schema.isObject()) return null;
+        return objectMapper.convertValue(schema, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { });
     }
 
     private static Map<String, McpToolInfo> indexTools(List<McpToolInfo> tools) {
@@ -986,7 +992,8 @@ public class McpToolCatalog implements AutoCloseable {
         List<String> schemaChanged = current.entrySet().stream()
                 .filter(entry -> previous.containsKey(entry.getKey()))
                 .filter(entry -> !Objects.equals(previous.get(entry.getKey()).inputSchema(),
-                        entry.getValue().inputSchema()))
+                        entry.getValue().inputSchema())
+                        || !Objects.equals(previous.get(entry.getKey()).outputSchema(), entry.getValue().outputSchema()))
                 .map(Map.Entry::getKey)
                 .sorted()
                 .toList();

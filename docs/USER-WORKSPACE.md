@@ -224,3 +224,16 @@ Les statuts combinent texte, symbole et couleur : vert uniquement pour le critè
 Les réponses peuvent fournir `conclusion` et `tables` en complément de `observations`, `uncertainties` et `nextAction`. Chaque tableau contient `title`, `columns` et `rows` ; limites : 3 tableaux, 12 colonnes, 200 lignes et 2000 caractères par cellule. Les titres de colonne indiquent les unités. Les tableaux valides sont triables et filtrables, avec défilement local et en-têtes fixes sur mobile. Les tableaux invalides restent consultables dans le JSON et ne sont pas interprétés.
 
 La vue « Voir le JSON formaté » propose coloration syntaxique, recherche, copie et téléchargement. Les champs sensibles reconnus (mot de passe, jeton, clé API, autorisation, etc.) et valeurs Bearer sont masqués dans cette vue et ses exports ; cela ne garantit pas la détection de tout secret contenu dans un texte libre. La réponse d’origine n’est pas modifiée. Les réponses libres ou interrompues restent lisibles sans être converties arbitrairement en données structurées.
+
+
+### Résultats incomplets et preuves
+
+Le suivi distingue l’absence de contenu reçu, une information temporairement indisponible, un refus d’accès, une réception interrompue et un résultat partiel. Les actions proposées ouvrent la connexion, actualisent le suivi ou préparent une demande à préciser ; elles ne relancent jamais automatiquement le traitement. Vérifiez les effets déjà engagés avant un nouvel envoi.
+
+Les citations `[source:<id>]` renvoient uniquement aux sources effectivement reçues avec la réponse. Leur bouton affiche le nom, la date d’observation, la validité et l’extrait à proximité du constat. Une référence inconnue est marquée « Source non fournie » et une validité passée « Validité expirée ». L’association proposée par le modèle n’est pas une preuve automatique : vérifiez l’extrait. Les sources consultées mais non citées restent dans les détails.
+
+Un résultat peut aussi fournir `findings: [{text, sourceIds}]` pour présenter des constats séparés (20 maximum, 10 références par constat). Les identifiants absents des sources reçues ne sont jamais validés comme preuves.
+
+### Fiches des services MCP
+
+Dans la console experte, chaque service présente sa fonction déclarée, la disponibilité au dernier catalogue, ses paramètres obligatoires, ses effets déclarés, un exemple d’appel à adapter et le résultat attendu issu de `outputSchema`. Les exemples de sortie sont des structures proposées, pas des résultats observés. Sans description ou contrat de sortie, la fiche le signale explicitement. Une connexion désactivée peut être inspectée et servir à préparer un prompt ; elle reste indisponible pour l’agent avant activation. L’évolution du contrat de sortie apparaît dans les changements de schéma du diagnostic.

@@ -31,3 +31,12 @@ const prompt = servicePrompt({ connection: 'my-mcp' }, { name: 'search', descrip
 assert.match(prompt, /my-mcp/); assert.match(prompt, /search/); assert.match(prompt, /"topic": "orders"/);
 assert.match(prompt, /\[à compléter\]/); assert.match(prompt, /validations Kex/);
 console.log('✓ services MCP : paramètres, exemples, états et effets déclarés sans déduction du nom');
+
+const { serviceAvailability, expectedResult, discoveryFailure } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+assert.match(serviceAvailability({ initialized: true }, { enabled: false }).label, /désactivée/);
+assert.match(serviceAvailability({ stale: true }, { enabled: true }).label, /revalider/);
+assert.match(serviceAvailability({ initialized: false }).label, /non confirmée/);
+assert.equal(expectedResult({ name: 'known' }).declared, false);
+const output = expectedResult({ outputSchema: { type: 'object', required: ['count'], properties: { count: { type: 'integer', description: 'Nombre de topics' } } } });
+assert.equal(output.declared, true); assert.equal(output.fields[0].required, true); assert.deepEqual(output.example, { count: 0 });
+assert.equal(discoveryFailure(403).retry, false); assert.match(discoveryFailure(503).detail, /catalogue est vide/);

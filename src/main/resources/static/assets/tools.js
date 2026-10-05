@@ -12,7 +12,8 @@ import * as kafka from './kafka.js';
 import * as knowledge from './knowledge.js';
 import * as memory from './memory.js';
 import * as summaries from './summaries.js';
-import { discoveryState, exampleArguments, parameterRows, servicePrompt, toolEffects } from './mcp-services.js';
+import { redact } from './user-results.js';
+import { serviceAvailability, expectedResult, discoveryFailure, discoveryState, exampleArguments, parameterRows, servicePrompt, toolEffects } from './mcp-services.js';
 
 // Cache du dernier relevé : la recherche filtre dessus plutôt que de refaire un appel réseau par
 // caractère saisi — l'endpoint n'a pas de paramètre de recherche et n'a pas à en gagner un pour ça.
@@ -342,6 +343,10 @@ function serviceDetails(server, tool) {
   const card = el('article', 'mcp-service-card stack');
   card.append(el('h4', null, tool.name), definition('Objectif',
     el('span', null, tool.description || 'Objectif non fourni par le serveur.')));
+  const availability = serviceAvailability(server, managed);
+  card.append(definition('Disponibilité', stateTag(availability.state, availability.label)), el('p', 'hint', availability.detail));
+  if (server.retrievedAt) card.append(definition('Informations récupérées le', el('span', null, stamp(server.retrievedAt))));
+
   const permissions = el('div', 'stack');
   permissions.append(el('p', null, 'Service autorisé par les filtres Kex.'),
     el('p', 'muted', managed && !managed.enabled
@@ -370,10 +375,19 @@ function serviceDetails(server, tool) {
     table.append(tbody); const scroll = el('div', 'scroll-x'); scroll.append(table); card.append(scroll);
   } else card.append(el('p', 'muted', 'Aucun paramètre simple décrit. Consultez le contrat pour les contraintes éventuelles.'));
   card.append(el('h5', null, 'Exemple de paramètres à adapter'),
-    el('pre', 'dump', JSON.stringify(exampleArguments(tool.inputSchema), null, 2)));
+    el('pre', 'dump', JSON.stringify(redact(exampleArguments(tool.inputSchema)), null, 2)));
+
+  card.append(el('h5', null, 'Exemple d’appel MCP — à adapter, non exécuté'), el('pre', 'dump', JSON.stringify(redact({ name: tool.name, arguments: exampleArguments(tool.inputSchema) }), null, 2)));
+  const expected = expectedResult(tool); const outcome = el('section', 'mcp-expected-result stack');
+  outcome.append(el('h5', null, 'Résultat attendu'), el('p', null, expected.description));
+  if (expected.fields.length) {
+    const list = el('ul'); expected.fields.forEach(field => list.append(el('li', null, `${field.name} · ${field.type} · ${field.required ? 'Requis' : 'Facultatif'} · ${field.description}`))); outcome.append(list);
+  }
+  if (expected.declared) outcome.append(el('p', 'hint', 'Exemple de structure proposé à partir du contrat, à adapter. Ce n’est pas un résultat observé.'), el('pre', 'dump', JSON.stringify(redact(expected.example), null, 2)));
+  card.append(outcome);
   const contract = el('details', 'advanced');
   contract.append(el('summary', null, 'Contrat complet fourni par le serveur'),
-    el('pre', 'dump', JSON.stringify(tool.inputSchema || {}, null, 2)));
+    el('pre', 'dump', JSON.stringify(redact({ inputSchema: tool.inputSchema || {}, outputSchema: tool.outputSchema ?? null }), null, 2)));
   card.append(contract);
   const use = el('button', 'primary', 'Utiliser ce service'); use.type = 'button';
   use.addEventListener('click', () => {
@@ -481,15 +495,14 @@ function openServerDrawer(server, updateUrl = true, inspected = false, refresh =
       .then((details) => {
         if (body.isConnected && !$('#drawer').hidden) openServerDrawer(details, false, true);
       })
-      .catch(() => {
+      .catch(error => {
         if (!body.isConnected || $('#drawer').hidden) return;
         body.querySelector('[data-mcp-preview-placeholder]')?.remove();
         const failed = discoveryState(server, 'error');
         discovery.replaceChildren(stateTag(failed.state, failed.label));
         body.querySelector('[data-catalog-refresh]')?.removeAttribute('disabled');
-        body.append(empty('Impossible de récupérer les services du serveur.',
-          'Vérifiez l’adresse, les identifiants et la disponibilité du serveur.',
-          { label: 'Réessayer', onClick: () => openServerDrawer(server, false, false, true) }));
+        const issue = discoveryFailure(error.status);
+        body.append(empty(issue.title, issue.detail, issue.retry ? { label: 'Réessayer', onClick: () => openServerDrawer(server, false, false, true) } : undefined));
       });
   }
 }
