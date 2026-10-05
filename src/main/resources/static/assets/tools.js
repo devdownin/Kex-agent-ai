@@ -335,7 +335,7 @@ function openToolDrawer(server, tool) {
   openDrawer(`Outil MCP · ${tool.name}`, body);
 }
 
-function openServerDrawer(server, updateUrl = true) {
+function openServerDrawer(server, updateUrl = true, inspected = false) {
   const managed = runtimeServers.get(server.connection);
   if (updateUrl) setDrawerParam('mcp', server.connection);
   const state = managed && !managed.enabled ? 'UNKNOWN' : (server.initialized ? 'OK' : 'UNKNOWN');
@@ -367,8 +367,11 @@ function openServerDrawer(server, updateUrl = true) {
   const tools = server.tools || [];
   body.append(el('h3', 'drawer-sub', 'Outils exposés'));
   if (!tools.length) {
-    body.append(empty('Aucun outil exposé.',
-      'Le serveur est connu mais son catalogue d’outils est vide ou n’a pas encore été chargé.'));
+    const placeholder = empty(managed && !inspected ? 'Récupération des services…' : 'Aucun outil exposé.',
+      managed && !inspected ? 'Chargement des services du serveur…'
+        : 'Le serveur ne fournit aucun outil autorisé.');
+    placeholder.dataset.mcpPreviewPlaceholder = '';
+    body.append(placeholder);
   } else {
     const list = el('div', 'drawer-tool-list');
     tools.forEach((tool) => {
@@ -403,6 +406,21 @@ function openServerDrawer(server, updateUrl = true) {
     body.append(actions);
   }
   openDrawer(`Serveur MCP · ${server.connection}`, body);
+  // La liste ne contient aucun client actif pour les connexions installées désactivées.
+  // Inspecter à la sélection, sans les activer ni contacter tous les serveurs au sondage.
+  if (managed && !inspected) {
+    api(`/api/agent/mcp/servers/${encodeURIComponent(server.connection)}/preview`)
+      .then((details) => {
+        if (body.isConnected && !$('#drawer').hidden) openServerDrawer(details, false, true);
+      })
+      .catch(() => {
+        if (!body.isConnected || $('#drawer').hidden) return;
+        body.querySelector('[data-mcp-preview-placeholder]')?.remove();
+        body.append(empty('Impossible de récupérer les services du serveur.',
+          'Vérifiez l’adresse, les identifiants et la disponibilité du serveur.',
+          { label: 'Réessayer', onClick: () => openServerDrawer(server, false) }));
+      });
+  }
 }
 
 

@@ -191,6 +191,7 @@ jobs:
           node src/test/browser/ui-controls.mjs
           node src/test/browser/forecasts.mjs
           node src/test/browser/process-associations.mjs
+          node src/test/browser/mcp-services.mjs
           node src/test/browser/tasks.mjs
           node src/test/frontend/user-stream.mjs
           node src/test/frontend/user-experience.mjs

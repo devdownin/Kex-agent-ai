@@ -220,6 +220,11 @@ class AgentController {
         return toolCatalog.diagnostics(connection);
     }
 
+    @GetMapping("/mcp/servers/{connection}/preview")
+    McpServerInfo previewServer(@PathVariable String connection) {
+        return toolCatalog.inspect(connection);
+    }
+
     @GetMapping("/mcp/configuration")
     McpConfigurationBundle exportMcpConfiguration() {
         return toolCatalog.exportConfiguration();
