@@ -27,9 +27,10 @@ export function tableRows(table, term = '', column = null, descending = false) {
   if (column !== null) rows.sort((a, b) => (typeof a[column] === 'number' && typeof b[column] === 'number' ? a[column] - b[column] : String(a[column] ?? '').localeCompare(String(b[column] ?? ''), 'fr', { numeric: true })) * (descending ? -1 : 1));
   return rows;
 }
-export function drawTables(host, tables) {
+export function drawTables(host, tables, provenance = {}) {
   validTables(tables).forEach(table => {
     const section = el('section', 'result-table'); section.append(el('h3', null, table.title));
+    const csv = el('button', null, 'Exporter ce tableau en CSV'); csv.type = 'button'; csv.addEventListener('click', () => downloadResult('tableau-kex.csv', tableCsv(table, provenance), 'text/csv;charset=utf-8')); section.append(csv);
     const label = el('label', null, 'Filtrer les lignes'); const input = el('input'); input.type = 'search'; label.append(input); section.append(label);
     const count = el('p', 'muted'); count.setAttribute('role', 'status');
     const wrap = el('div', 'table-scroll'); wrap.tabIndex = 0; wrap.setAttribute('role', 'region'); wrap.setAttribute('aria-label', table.title || 'Tableau de résultat');
@@ -48,9 +49,9 @@ export function drawTables(host, tables) {
     input.addEventListener('input', draw); draw();
   });
 }
-export function drawJson(host, raw) {
+export function drawJson(host, raw, provenance = null) {
   const value = jsonValue(raw); if (value === undefined) return;
-  const details = el('details', 'result-json'); details.append(el('summary', null, 'Voir le JSON formaté'));
+  const details = el('details', 'result-json'); details.append(el('summary', null, 'Données brutes — JSON formaté'));
   const formatted = JSON.stringify(value, null, 2); const pre = el('pre'); const code = el('code');
   const tokens = /"(?:\\.|[^"\\])*"(?=\s*:)|"(?:\\.|[^"\\])*"|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
   let offset = 0;
@@ -63,9 +64,76 @@ export function drawJson(host, raw) {
   const label = el('label', null, 'Rechercher dans le JSON'); const search = el('input'); search.type = 'search'; label.append(search);
   const feedback = el('p', 'muted'); feedback.setAttribute('role', 'status');
   search.addEventListener('input', () => { const term = search.value.toLocaleLowerCase('fr'); feedback.textContent = term ? formatted.toLocaleLowerCase('fr').includes(term) ? 'Texte trouvé dans le JSON.' : 'Aucune correspondance.' : ''; code.querySelectorAll('span').forEach(s => s.classList.toggle('json-match', !!term && s.textContent.toLocaleLowerCase('fr').includes(term))); });
+  const exported = provenance ? JSON.stringify(redact({ response: value, ...provenance }), null, 2) : formatted;
   const controls = el('div', 'row'); const copy = el('button', null, 'Copier le JSON'); copy.type = 'button';
-  copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(formatted); feedback.textContent = 'JSON copié.'; } catch { feedback.textContent = 'Copie indisponible. Sélectionnez le texte ou téléchargez le JSON.'; } });
+  copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(exported); feedback.textContent = 'JSON copié.'; } catch { feedback.textContent = 'Copie indisponible. Sélectionnez le texte ou téléchargez le JSON.'; } });
   const download = el('button', null, 'Télécharger le JSON'); download.type = 'button';
-  download.addEventListener('click', () => { const url = URL.createObjectURL(new Blob([formatted], { type: 'application/json' })); const link = el('a'); link.href = url; link.download = 'resultat-kex.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
+  download.addEventListener('click', () => { const url = URL.createObjectURL(new Blob([exported], { type: 'application/json' })); const link = el('a'); link.href = url; link.download = 'resultat-kex.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
   controls.append(copy, download); details.append(el('p', 'muted', 'Les champs sensibles reconnus sont masqués dans cette vue et ses exports. Vérifiez le contenu avant partage.'), label, controls, feedback, pre); host.append(details);
+}
+
+// Préférences séparées par identité ; aucun contenu de réponse n’y est conservé.
+export function rememberDetails(host, scope) {
+  host.querySelectorAll('details').forEach(details => {
+    const label = details.querySelector('summary')?.textContent;
+    if (!label || details.dataset.preferenceBound) return;
+    details.dataset.preferenceBound = 'true';
+    const key = `kex-result-display:${scope}:${label}`;
+    try { const saved = localStorage.getItem(key); if (saved !== null) details.open = saved === 'true'; } catch { /* Affichage utilisable sans stockage. */ }
+    details.addEventListener('toggle', () => { try { localStorage.setItem(key, String(details.open)); } catch { /* Préférence non persistée. */ } });
+  });
+}
+export function exportBundle(turn, provenance = {}) {
+  const parsed = jsonValue(turn.text);
+  return redact({ response: parsed === undefined ? turn.text : parsed, sources: turn.sources || [], ...provenance });
+}
+export function markdownSummary(turn, provenance = {}) {
+  const data = exportBundle(turn, provenance); const r = data.response;
+  const content = r && typeof r === 'object' && r.kind === 'result'
+    ? [r.conclusion, r.observations, r.uncertainties, r.nextAction].filter(Boolean).join('\n\n') : typeof r === 'string' ? r : JSON.stringify(r, null, 2);
+  return `${content}\n\nRéponse reçue : ${data.receivedAt || 'Date non fournie'}\n\nSources :\n${data.sources.map(s => `- [source:${s.id}] ${s.source || s.id} — ${s.observedAt || 'Date non fournie'} — validité : ${s.validUntil || 'Non fournie'}\n  ${s.excerpt || 'Extrait non fourni'}`).join('\n') || 'Aucune source fournie'}\n`;
+}
+export function tableCsv(table, provenance = {}) {
+  const safe = redact(provenance);
+  // Les métadonnées suivent chaque ligne pour rester associées après filtrage dans un tableur.
+  const columns = [...table.columns, 'Sources (JSON)', 'Résultats outils (JSON)', 'Date de réponse'];
+  const sources = JSON.stringify(safe.sources || []);
+  const cell = value => { let v = String(value ?? ''); if (/^[\s]*[=+@-]/.test(v)) v = "'" + v; return '"' + v.replaceAll('"', '""') + '"'; };
+  const rows = table.rows.map(row => [...row.map((v, i) => secretKey.test(table.columns[i]) ? '[Masqué]' : redact(v)), sources, JSON.stringify(safe.tools || []), safe.receivedAt || 'Date non fournie']);
+  return '\uFEFF' + [columns, ...rows].map(row => row.map(cell).join(',')).join('\r\n');
+}
+function downloadResult(name, content, type) {
+  const url = URL.createObjectURL(new Blob([content], { type })); const a = el('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+export function drawExports(host, turn, provenance = {}) {
+  const controls = el('div', 'row'); const feedback = el('p', 'muted'); feedback.setAttribute('role', 'status');
+  const copy = el('button', null, 'Copier la synthèse en Markdown'); copy.type = 'button';
+  copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(markdownSummary(turn, provenance)); feedback.textContent = 'Synthèse et sources copiées.'; } catch { feedback.textContent = 'Copie indisponible ; utilisez le téléchargement Markdown.'; } });
+  const md = el('button', null, 'Télécharger le Markdown'); md.type = 'button'; md.addEventListener('click', () => downloadResult('synthese-kex.md', markdownSummary(turn, provenance), 'text/markdown;charset=utf-8'));
+  const json = el('button', null, 'Exporter les données et sources en JSON'); json.type = 'button'; json.addEventListener('click', () => downloadResult('resultat-kex-sources.json', JSON.stringify(exportBundle(turn, provenance), null, 2), 'application/json'));
+  controls.append(copy, md, json); host.append(controls, feedback);
+}
+export function validMetrics(metrics) {
+  return Array.isArray(metrics) ? metrics.slice(0, 12).filter(m => m && typeof m.label === 'string' && m.label.length <= 200 && typeof m.value === 'number' && Number.isFinite(m.value) && typeof m.unit === 'string' && m.unit.trim() && m.unit.length <= 80 && typeof m.period === 'string' && m.period.trim() && m.period.length <= 200) : [];
+}
+export function metricPoints(metric) {
+  if (!Array.isArray(metric.points) || metric.points.length > 200) return [];
+  const points = metric.points.filter(p => p && typeof p.value === 'number' && Number.isFinite(p.value) && typeof p.at === 'string' && Number.isFinite(Date.parse(p.at)));
+  // Une série mal formée ne doit pas sembler continue après suppression des trous.
+  return points.length === metric.points.length ? points.slice().sort((a, b) => Date.parse(a.at) - Date.parse(b.at)) : [];
+}
+export function drawMetrics(host, metrics) {
+  validMetrics(metrics).forEach(m => {
+    const section = el('section', 'result-metric'); section.append(el('h3', null, m.label), el('strong', null, `${m.value.toLocaleString('fr-FR')} ${m.unit}`), el('p', 'muted', `Période : ${m.period}`));
+    const c = m.comparison; const comparable = c && typeof c.value === 'number' && Number.isFinite(c.value) && typeof c.period === 'string' && c.period.trim();
+    section.append(el('p', null, comparable ? `Référence : ${c.value.toLocaleString('fr-FR')} ${m.unit} (${c.period}) · Écart : ${(m.value - c.value).toLocaleString('fr-FR')} ${m.unit}` : 'Référence de comparaison non fournie.'));
+    const points = metricPoints(m);
+    if (points.length >= 2 && Date.parse(points.at(-1).at) > Date.parse(points[0].at)) {
+      const ns = 'http://www.w3.org/2000/svg'; const svg = document.createElementNS(ns, 'svg'); svg.setAttribute('viewBox', '0 0 320 100'); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', `${m.label} : évolution en ${m.unit}, du ${points[0].at} au ${points.at(-1).at}. Valeurs exactes dans le tableau.`);
+      const low = Math.min(...points.map(p => p.value)); const high = Math.max(...points.map(p => p.value)); const start = Date.parse(points[0].at); const span = Date.parse(points.at(-1).at) - start;
+      const line = document.createElementNS(ns, 'polyline'); line.setAttribute('points', points.map(p => `${10 + (Date.parse(p.at) - start) / span * 300},${high === low ? 50 : 90 - (p.value - low) / (high - low) * 80}`).join(' ')); line.setAttribute('fill', 'none'); line.setAttribute('stroke', 'currentColor'); line.setAttribute('stroke-width', '2'); svg.append(line); section.append(svg, el('p', 'muted', `Min. : ${low} ${m.unit} · Max. : ${high} ${m.unit} · Du ${points[0].at} au ${points.at(-1).at}`));
+      drawTables(section, [{ title: m.label + ' — valeurs exactes', columns: ['Date', `Valeur (${m.unit})`], rows: points.map(p => [p.at, p.value]) }], m.provenance || {});
+    } else if (m.points?.length) section.append(el('p', 'muted', 'Courbe indisponible : au moins deux mesures datées distinctes et valides sont nécessaires.'));
+    host.append(section);
+  });
 }

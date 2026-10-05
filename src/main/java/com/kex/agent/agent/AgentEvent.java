@@ -12,6 +12,9 @@ public sealed interface AgentEvent {
     record Token(String text) implements AgentEvent {
     }
 
-    record ToolCall(String tool, long durationMillis, boolean failed) implements AgentEvent {
+    record ToolCall(String tool, long durationMillis, boolean failed, String observedAt, String result) implements AgentEvent {
+        public ToolCall(String tool, long durationMillis, boolean failed) {
+            this(tool, durationMillis, failed, null, null);
+        }
     }
 }

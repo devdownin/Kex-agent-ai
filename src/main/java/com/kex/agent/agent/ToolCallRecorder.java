@@ -32,7 +32,12 @@ public final class ToolCallRecorder {
     }
 
     public void record(String tool, long durationMillis, boolean failed) {
-        AgentEvent.ToolCall call = new AgentEvent.ToolCall(tool, durationMillis, failed);
+        record(tool, durationMillis, failed, null);
+    }
+
+    private void record(String tool, long durationMillis, boolean failed, Object result) {
+        AgentEvent.ToolCall call = new AgentEvent.ToolCall(tool, durationMillis, failed,
+                java.time.Instant.now().toString(), ToolResultEvidence.sanitize(result));
         calls.add(call);
         if (sink != null) {
             sink.tryEmitNext(call);
@@ -60,13 +65,14 @@ public final class ToolCallRecorder {
         }
         long start = System.nanoTime();
         boolean failed = true;
+        T result = null;
         try {
-            T result = call.get();
+            result = call.get();
             failed = false;
             return result;
         }
         finally {
-            recorder.record(tool, (System.nanoTime() - start) / 1_000_000, failed);
+            recorder.record(tool, (System.nanoTime() - start) / 1_000_000, failed, result);
         }
     }
 

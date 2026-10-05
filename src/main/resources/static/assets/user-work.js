@@ -45,11 +45,11 @@ export function resultSections(host, answer) {
   const conclusion = (typeof parsed?.conclusion === 'string' && parsed.conclusion.trim()) || parsed?.observations || answer?.text || 'Aucune conclusion disponible.';
   host.append(el('h3', null, 'Conclusion'));
   drawEvidence(host, conclusion.length > 500 ? conclusion.slice(0, 500) + '…' : conclusion, answer?.sources);
-  host.append(el('h3', null, 'Sources et observations'));
+  const sourceDetails = el('details'); sourceDetails.append(el('summary', null, 'Sources')); host.append(sourceDetails);
   if (answer?.sources?.length) answer.sources.forEach(s => {
-    const source = el('details'); source.append(el('summary', null, `${s.source || s.id || 'Source sans nom'} · ${date(s.observedAt)}`), el('pre', null, s.excerpt || 'Extrait non fourni')); host.append(source);
+    const source = el('details'); source.append(el('summary', null, `${s.source || s.id || 'Source sans nom'} · ${date(s.observedAt)}`), el('pre', null, s.excerpt || 'Extrait non fourni')); sourceDetails.append(source);
   });
-  else host.append(el('p', null, 'Aucune source consultable fournie pour cette réponse.'));
+  else sourceDetails.append(el('p', null, 'Aucune source consultable fournie pour cette réponse.'));
   host.append(el('h3', null, 'Limites'), el('div', 'answer', parsed?.uncertainties || 'Les limites ne sont pas structurées dans cette réponse. Examinez le texte complet et les preuves avant de conclure.'));
   host.append(el('h3', null, 'Prochaine action'), el('div', 'answer', parsed?.nextAction || 'Vérifier les éléments disponibles ; demandez une précision si nécessaire.'));
 }
