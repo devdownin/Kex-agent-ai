@@ -50,6 +50,12 @@ class WorkspaceResultContractTest {
                 List.of(new KnowledgeSource("s", "Ancienne", null, "2026-10-01T00:00:00Z", "Texte")), List.of(new AgentEvent.ToolCall("write", 1, true)), now, name -> false);
         assertThat(report.warnings()).hasSize(3); assertThat(report.consultations().getFirst().recoverable()).isFalse();
     }
+    @Test void une_reference_repetee_et_des_dates_equivalentes_ne_sont_pas_distinctes() throws Exception {
+        var report = validate(",\"findings\":[{\"text\":\"Constat\",\"contradictionIds\":[\"s1\",\"s1\"]}],\"metrics\":[{\"label\":\"Lag\",\"value\":12,\"unit\":\"messages\",\"period\":\"Ce matin\",\"points\":[{\"at\":\"2026-10-05T18:00:00Z\",\"value\":18},{\"at\":\"2026-10-05T18:00:00.000Z\",\"value\":12}]}]");
+        var json = new ObjectMapper().readTree(report.text());
+        assertThat(json.path("findings").get(0).path("contradictionIds").size()).isEqualTo(1);
+        assertThat(json.path("metrics").get(0).has("points")).isFalse();
+    }
     @Test void la_clarification_validee_conserve_ses_choix() throws Exception {
         String raw = "{\"kind\":\"clarification\",\"question\":\"Quand ?\",\"choices\":[{\"label\":\"Hier\",\"value\":\"Hier\"},{\"label\":\"Ce matin\",\"value\":\"Ce matin\"}]}";
         var report = WorkspaceResultContract.validate(raw, List.of(), List.of(), now, name -> false);

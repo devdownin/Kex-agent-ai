@@ -14,7 +14,7 @@ export function findingQuality(finding, sources = [], now = Date.now()) {
   if (evidence.some(s => Number.isFinite(Date.parse(s.validUntil)) && Date.parse(s.validUntil) <= now)) notes.push('Source à validité expirée');
   if (evidence.some(s => Number.isFinite(Date.parse(s.observedAt)) && now - Date.parse(s.observedAt) > 7 * 86400000)) notes.push('Source observée il y a plus de 7 jours');
   if (evidence.some(s => !Number.isFinite(Date.parse(s.observedAt)))) notes.push('Horodatage de source absent ou invalide');
-  const contradictions = (finding.contradictionIds || []).filter(id => sources.some(s => s.id === id));
+  const contradictions = [...new Set((finding.contradictionIds || []).filter(id => sources.some(s => s.id === id)))];
   if (contradictions.length >= 2) notes.push('Contradiction signalée entre sources — à vérifier');
   return { label: type[finding.evidenceType] || 'Qualification non fournie', notes, contradictions };
 }

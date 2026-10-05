@@ -14,3 +14,5 @@ const quality=findingQuality({sourceIds:['s1','s2'],evidenceType:'INFERENCE',con
 assert.equal(quality.label,'Conclusion déduite'); assert.equal(quality.notes.length,4); assert.deepEqual(quality.contradictions,['s1','s2']);
 assert.equal(findingQuality({sourceIds:[],evidenceType:'HYPOTHESIS'},sources).label,'Hypothèse');
 console.log('✓ résultats normalisés, réponse rejetée, preuves anciennes/expirées, dates absentes et contradictions déclarées');
+
+assert.equal(findingQuality({contradictionIds:['s1','s1']},sources).notes.length,0,'Une seule source répétée ne constitue pas une contradiction');

@@ -113,9 +113,9 @@ public final class WorkspaceResultContract {
                         } else warnings.add("Comparaison rejetée : valeur, période ou unité incompatible.");
                     }
                     if (metric.has("points")) {
-                        var points = metric.get("points"); var dates = new java.util.HashSet<String>();
+                        var points = metric.get("points"); var dates = new java.util.HashSet<Instant>();
                         boolean valid = points.isArray() && points.size() <= 200;
-                        if (valid) for (JsonNode point : points) valid &= number(point.get("value")) && date(point.path("at").asText()) && dates.add(point.path("at").asText());
+                        if (valid) for (JsonNode point : points) valid &= number(point.get("value")) && date(point.path("at").asText()) && dates.add(Instant.parse(point.path("at").asText()));
                         if (valid) { var normalized = JSON.createArrayNode(); for (JsonNode point : points) { ObjectNode p = JSON.createObjectNode(); p.set("at", point.get("at")); p.set("value", point.get("value")); normalized.add(p); } m.set("points", normalized); }
                         else warnings.add("Série rejetée : dates ISO distinctes et valeurs numériques requises.");
                     }
@@ -143,8 +143,9 @@ public final class WorkspaceResultContract {
         var result = JSON.createArrayNode();
         if (values == null) return result;
         if (!values.isArray() || values.size() > 10) { warnings.add("Liste de preuves mal formée rejetée."); return result; }
+        var seen = new java.util.HashSet<String>();
         for (JsonNode value : values) {
-            if (text(value, 200) && known.contains(value.asText())) result.add(value.asText());
+            if (text(value, 200) && known.contains(value.asText())) { if (seen.add(value.asText())) result.add(value.asText()); }
             else warnings.add("Référence inconnue rejetée : seules les preuves réellement fournies sont associées.");
         }
         return result;
