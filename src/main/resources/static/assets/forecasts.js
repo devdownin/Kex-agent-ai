@@ -12,6 +12,7 @@ let autoEnabled = false;
 let reading = false;
 let request = null;
 let timer = null;
+let readinessRequest = null;
 let lastReadAt = null;
 const REFRESH_MS = 60_000;
 
@@ -36,19 +37,28 @@ function schedule() {
 
 export function setActive(value) {
   active = value;
-  if (!active) { generation++; request?.abort(); request = null; reading = false; }
+  if (!active) {
+    if (readinessRequest) {
+      readinessRequest.abort(); readinessRequest = null;
+      $('#forecast-readiness')?.replaceChildren();
+    }
+    generation++; request?.abort(); request = null; reading = false;
+  }
   schedule();
 }
 
 export function wire() {
   const checkbox = $('#forecast-auto-refresh');
   if (!checkbox || checkbox.dataset.wired) return;
+  $('#check-forecast-readiness')?.addEventListener('click', diagnoseReadiness);
   checkbox.dataset.wired = 'true'; checkbox.checked = autoEnabled;
   checkbox.addEventListener('change', () => { autoEnabled = checkbox.checked; schedule(); });
   document.addEventListener('visibilitychange', schedule);
   refreshStatus();
 }
 onCredentialChange(() => {
+  readinessRequest?.abort(); readinessRequest = null;
+  $('#forecast-readiness')?.replaceChildren();
   selection = '';
   environment = '';
   generation++;
@@ -354,6 +364,35 @@ function details(data, metric, breaches, resources) {
   analyse.href = `#/chat?draft=${encodeURIComponent(prompt)}`;
   wrap.append(panel, qualityPanel, resourcePanel(resources, metric, record), analyse);
   return wrap;
+}
+
+export async function diagnoseReadiness() {
+  readinessRequest?.abort();
+  const controller = new AbortController(); readinessRequest = controller;
+  const host = $('#forecast-readiness');
+  if (!host) return;
+  host.replaceChildren(el('p', 'hint', 'Vérification MCP en cours…'));
+  const deadline = setTimeout(() => controller.abort(), 15000);
+  try {
+    const data = await api(`${BASE}/readiness`, { signal: controller.signal });
+    if (controller !== readinessRequest || !active) return;
+    if (!Array.isArray(data.checks) || !numeric(data.checkedAt)) throw new Error('Diagnostic invalide');
+    const panel = section(data.ready ? 'Préparation MCP vérifiée' : 'Préparation MCP bloquée');
+    panel.append(el('p', 'hint', `Connexion : ${data.connection} · vérifié le ${time(data.checkedAt)}`));
+    const list = el('ul');
+    for (const check of data.checks) {
+      const item = el('li');
+      item.append(el('strong', null, `${check.id} · ${check.state} : `), el('span', null, check.detail));
+      if (check.action) item.append(el('p', 'hint', check.action));
+      list.append(item);
+    }
+    panel.append(list); host.replaceChildren(panel);
+  } catch (error) {
+    if (controller === readinessRequest && active) host.replaceChildren(errorState(error, diagnoseReadiness));
+  } finally {
+    clearTimeout(deadline);
+    if (controller === readinessRequest) readinessRequest = null;
+  }
 }
 
 export async function view() {

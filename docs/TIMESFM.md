@@ -15,14 +15,28 @@ dans la page MCP et son catalogue d'outils.
 
 Si le serveur répond mais n'annonce pas `kex_list_forecastable_metrics`, vérifier sa version
 et activer `explorer.forecasting.pilot.enabled=true` dans **KafkaExplorer**. Les outils de
-prévision sont conditionnés à cette propriété, désactivée par défaut. Le pilote exige aussi
-`explorer.forecasting.history.enabled=true`, `explorer.forecasting.inference.enabled=true`,
-une configuration PostgreSQL et des séries explicitement approuvées ; suivre la préparation
-ci-dessous avant de redémarrer KafkaExplorer puis d'actualiser son catalogue MCP.
+prévision sont conditionnés à cette propriété. Les versions récentes l’activent par défaut
+lorsque MCP est activé ; un catalogue vide est alors normal avant l’approbation de séries.
+Les séries approuvées exigent `explorer.forecasting.history.enabled=true`,
+`explorer.forecasting.inference.enabled=true` et une configuration PostgreSQL ; suivre la
+préparation ci-dessous avant de redémarrer KafkaExplorer puis d’actualiser son catalogue MCP.
 
 Un accès refusé demande une vérification des permissions ; un serveur indisponible demande
 une vérification de l'URL et du jeton. Un catalogue accessible mais vide demande l'enrôlement
 de séries et la vérification de leur périmètre d'accès, plutôt que la réactivation des outils.
+
+### Diagnostic depuis la page Prévisions
+
+**Vérifier la préparation MCP** appelle le diagnostic en lecture seule
+`GET /api/agent/forecasts/readiness`. Il affiche la connexion et la date du contrôle,
+une découverte fraîche des cinq outils, leur autorisation effective par la politique
+globale et la liste d’outils de la connexion, puis la lecture du catalogue autorisé.
+Chaque blocage comporte une vérification à effectuer. Une découverte interrompue
+laisse les outils **NOT_CHECKED** : elle ne prouve jamais leur absence.
+Un catalogue complet mais vide reste bloquant ; vérifier à la fois l’approbation des
+séries et le périmètre des environnements, topics et groupes côté KafkaExplorer.
+La préparation MCP ne certifie ni la qualité d’une prévision ni l’accès à chaque source :
+les contrôles du serveur s’appliquent à chaque lecture. Aucun calcul ni activation n’est lancé.
 
 ### Prérequis
 
