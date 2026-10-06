@@ -6,6 +6,26 @@ Kex ne charge pas le modèle, ne collecte pas de nouvelles données et n’activ
 
 ## Préparer KafkaExplorer
 
+### Si la page affiche un outil absent
+
+Le message générique « outil absent, accès refusé ou serveur indisponible » des anciennes
+versions de Kex ne prouve pas que l'outil manque : il regroupait tous les échecs d'appel.
+Vérifier la connexion configurée par `kex.agent.kafka.connection` (par défaut `kafka-explorer`)
+dans la page MCP et son catalogue d'outils.
+
+Si le serveur répond mais n'annonce pas `kex_list_forecastable_metrics`, vérifier sa version
+et activer `explorer.forecasting.pilot.enabled=true` dans **KafkaExplorer**. Les outils de
+prévision sont conditionnés à cette propriété, désactivée par défaut. Le pilote exige aussi
+`explorer.forecasting.history.enabled=true`, `explorer.forecasting.inference.enabled=true`,
+une configuration PostgreSQL et des séries explicitement approuvées ; suivre la préparation
+ci-dessous avant de redémarrer KafkaExplorer puis d'actualiser son catalogue MCP.
+
+Un accès refusé demande une vérification des permissions ; un serveur indisponible demande
+une vérification de l'URL et du jeton. Un catalogue accessible mais vide demande l'enrôlement
+de séries et la vérification de leur périmètre d'accès, plutôt que la réactivation des outils.
+
+### Prérequis
+
 Utiliser une version contenant le pilote TimesFM et les cinq outils canoniques de la
 [PR KafkaExplorer #454](https://github.com/devdownin/Kafkaexplorer/pull/454).
 Cette évolution est fusionnée dans KafkaExplorer depuis le 3 octobre 2026.
