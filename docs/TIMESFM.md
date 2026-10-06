@@ -1,4 +1,4 @@
-# Prévisions TimesFM dans Kex Agent AI
+# Prévisions TimesFM dans Kex-anHarness
 
 La vue **Pilotage → Prévisions** consulte les résultats déjà calculés par KafkaExplorer.
 L’agent peut les expliquer dans une conversation et les rapprocher des mesures actuelles.

@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🧭 Kex Agent AI
+# 🧭 Kex-anHarness
 
 ### Stop asking AI to guess. Give it real tools.
 
@@ -15,23 +15,27 @@
 [![MCP](https://img.shields.io/badge/MCP-stdio_·_SSE_·_streamable--HTTP-5A45FF)](docs/MCP.md)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-[Why Kex](#-why-kex-agent-ai) · [Highlights](#-highlights) · [Quick start](#-quick-start) · [What you can ask it](#-what-you-can-ask-it) · [How it works](#-how-it-works) · [Docs](#-documentation) · [🇫🇷 Français](README.fr.md)
+[Why Kex-anHarness](#-why-kex-anharness) · [Highlights](#-highlights) · [Quick start](#-quick-start) · [What you can ask it](#-what-you-can-ask-it) · [How it works](#-how-it-works) · [Docs](#-documentation) · [🇫🇷 Français](README.fr.md)
 
 </div>
 
 ---
 
+> **Project name:** Kex-anHarness (formerly Kex Agent AI). The GitHub repository URL remains
+> [devdownin/Kex-agent-ai](https://github.com/devdownin/Kex-agent-ai). Published image names, Maven artifacts and configuration keys
+> retain their existing identifiers.
+
 ## A governed general-purpose agent
 
 Kex uses Kafka as a strong reference integration, but the agent is general-purpose: MCP can connect files, GitHub, SQL and business systems. Its differentiator is governance—capability autonomy, confidence thresholds, human approvals and an audit trail. Long-term summaries, reviewed reusable skills, Slack/Teams/e-mail notifications, scheduled read-only tasks, local Ollama/vLLM routing, a Kex MCP server, curated MCP installation and optional per-task stdio container isolation are documented in [Governed general-purpose agent](docs/GOVERNED-GENERAL-AGENT.md).
 
-## ✨ Why Kex Agent AI?
+## ✨ Why Kex-anHarness?
 
 Most AI agent demos generate plausible answers from model memory.
 
-**Kex Agent AI goes and checks.**
+**Kex-anHarness goes and checks.**
 
-Kex Agent AI connects language models to real systems through the
+Kex-anHarness connects language models to real systems through the
 [Model Context Protocol (MCP)](https://modelcontextprotocol.io). It discovers tools at runtime,
 invokes them securely, explains its decisions, and keeps humans in control through a complete
 operations console.
@@ -190,7 +194,7 @@ with the capabilities that are *not* prompts at all.
 ```mermaid
 flowchart LR
     U([Client]) -->|Bearer + JSON| A
-    subgraph A["Kex Agent AI :8081"]
+    subgraph A["Kex-anHarness :8081"]
         C[ChatClient] --- M[(Conversation<br/>memory)]
         C --- T[MCP tool<br/>callbacks]
     end
