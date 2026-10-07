@@ -28,7 +28,7 @@ jobs:
   # ne se déclenche pas sur un tag — il ne couvre que `main` et les pull requests — donc s'y fier
   # publierait au mieux le résultat d'une autre révision.
   verify:
-    if: github.repository == 'devdownin/Kex-agent-ai'
+    if: github.repository == 'devdownin/Kex-anHarness'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 

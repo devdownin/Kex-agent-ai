@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   sync:
-    if: github.repository == 'devdownin/Kex-agent-ai'
+    if: github.repository == 'devdownin/Kex-anHarness'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

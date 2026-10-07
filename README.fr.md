@@ -4,9 +4,9 @@
 
 ### Un agent IA qui se sert vraiment de vos outils — Spring Boot 4, Spring AI 2, Java 25.
 
-[![CI](https://github.com/devdownin/Kex-agent-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/devdownin/Kex-agent-ai/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/devdownin/Kex-agent-ai/actions/workflows/codeql.yml/badge.svg)](https://github.com/devdownin/Kex-agent-ai/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/devdownin/Kex-agent-ai/badge)](https://scorecard.dev/viewer/?uri=github.com/devdownin/Kex-agent-ai)
+[![CI](https://github.com/devdownin/Kex-anHarness/actions/workflows/ci.yml/badge.svg)](https://github.com/devdownin/Kex-anHarness/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/devdownin/Kex-anHarness/actions/workflows/codeql.yml/badge.svg)](https://github.com/devdownin/Kex-anHarness/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/devdownin/Kex-anHarness/badge)](https://scorecard.dev/viewer/?uri=github.com/devdownin/Kex-anHarness)
 [![Java 25](https://img.shields.io/badge/Java-25-orange)](pom.xml)
 [![Spring Boot 4.1](https://img.shields.io/badge/Spring_Boot-4.1-6DB33F?logo=springboot&logoColor=white)](pom.xml)
 [![Spring AI 2.0](https://img.shields.io/badge/Spring_AI-2.0-6DB33F)](pom.xml)
@@ -19,8 +19,8 @@
 
 ---
 
-> **Nom du projet :** Kex-anHarness (anciennement Kex Agent AI). L’URL GitHub reste
-> [devdownin/Kex-agent-ai](https://github.com/devdownin/Kex-agent-ai). Les noms des images publiées, des artefacts Maven et les clés
+> **Nom du projet :** Kex-anHarness (anciennement Kex Agent AI). Le dépôt GitHub est désormais
+> [devdownin/Kex-anHarness](https://github.com/devdownin/Kex-anHarness). Les noms des images publiées, des artefacts Maven et les clés
 > de configuration conservent leurs identifiants existants.
 
 ## Un agent généraliste à gouvernance forte
