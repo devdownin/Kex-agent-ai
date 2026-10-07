@@ -1329,7 +1329,13 @@ await check('l’automatisation planifiée se supprime depuis la liste', async (
   // pas route() (voir CLAUDE.md), donc pas automations.panel() — le détour par une autre vue
   // fait relire la liste sous la simulation qui vient d'être posée.
   await page.goto(`${BASE}/#/overview`, { waitUntil: 'domcontentloaded' });
+  // Une navigation par fragment ne charge pas de document : attendre la vue réellement
+  // affichée évite que le retour vers Agent devance son événement hashchange.
+  await page.waitForSelector('#view-overview:not([hidden])');
+  const listLoaded = page.waitForResponse((response) =>
+    response.request().method() === 'GET' && response.url().endsWith('/api/agent/automations'));
   await page.goto(`${BASE}/#/agent`, { waitUntil: 'domcontentloaded' });
+  await listLoaded;
   await page.click('[data-agent-tab="automations"]');
   await page.waitForSelector('#automations-list table.grid');
   assert.match(await page.$eval('#automations-list', (node) => node.textContent), /Purge des topics de test/);
