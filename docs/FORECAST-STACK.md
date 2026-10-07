@@ -95,3 +95,12 @@ TimesFM, authentification MCP/agent et découverte des cinq outils. Il ne requie
 aucune clé LLM réelle et n'appelle pas le LLM. Le catalogue doit rester vide avant
 approbation. Il ne prétend pas mesurer la justesse des prévisions ou la qualité du modèle.
 Les volumes CI sont supprimés après le job ; les volumes locaux sont conservés.
+
+### Noms des variables Spring
+
+Les clés Docker suivent la conversion Spring : points remplacés par `_`, tirets
+supprimés, puis majuscules. Ainsi `explorer.mcp.require-tls` devient
+`EXPLORER_MCP_REQUIRETLS`, et non `EXPLORER_MCP_REQUIRE_TLS`. La stack locale
+positionne cette propriété à `false` car ses échanges MCP se font en HTTP.
+Le diagnostic signale explicitement HTTP 426 si le serveur exige encore TLS.
+Les URLs JDBC/inférence et la liste des environnements suivent la même convention.

@@ -76,7 +76,7 @@ services:
       EXPLORER_MCP_AUTH_TOKEN: ${EXPLORER_MCP_AUTH_TOKEN:?requis, generer avec openssl rand -hex 32}
       # Exception explicite : stack en clair sur la boucle locale. Partout ailleurs, laisser
       # l'exigence TLS active et terminer TLS devant.
-      EXPLORER_MCP_REQUIRE_TLS: "false"
+      EXPLORER_MCP_REQUIRETLS: "false"
       EXPLORER_MCP_READONLY: "${EXPLORER_MCP_READONLY:-true}"
     volumes:
       - explorer_logs:/app/logs

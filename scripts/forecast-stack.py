@@ -53,7 +53,7 @@ def check_mcp(settings):
             pass
     except urllib.error.HTTPError as error:
         if error.code != 401:
-            raise ValueError('MCP unauthenticated request did not return 401') from error
+            raise urllib.error.HTTPError(url, error.code, 'MCP refused request', None, None) from error
     else:
         raise ValueError('MCP accepted an unauthenticated request')
     headers['Authorization'] = 'Bearer ' + settings['services']['explorer']['environment']['EXPLORER_MCP_AUTH_TOKEN']
@@ -102,7 +102,9 @@ def diagnose(settings):
         try:
             check()
             print('OK · ' + name)
-        except (subprocess.SubprocessError, OSError, ValueError):
+        except (subprocess.SubprocessError, OSError, ValueError) as error:
+            if isinstance(error, urllib.error.HTTPError):
+                print(f'  HTTP {error.code} · ' + ('TLS exigé : vérifier EXPLORER_MCP_REQUIRETLS pour cette stack locale.' if error.code == 426 else 'Vérifier la configuration du serveur MCP.'))
             failed = True
             print('BLOQUÉ · ' + name + '\n  Action : ' + action)
     try:
@@ -123,6 +125,7 @@ def diagnose(settings):
 
 def demo(settings):
     """Create real data and an eligible metric; no automatic source approval or fake history."""
+    topic = 'forecast.demo.orders'
     compose('--profile', 'forecast-demo', 'run', '--rm', '--no-deps', 'forecast-demo-seed')
     base = base_url(settings, 'explorer')
     metrics = request(base + '/api/metrics')
