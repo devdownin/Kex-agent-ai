@@ -43,7 +43,7 @@ export function userNotifications() {
     if (preferences.desktop && document.hidden && 'Notification' in globalThis && Notification.permission === 'granted') {
       try {
         const own = generation;
-        const alert = new Notification('Kex Agent', { body: LABELS[type], tag: `kex-${id}` }); desktop.add(alert);
+        const alert = new Notification('Kex-anHarness', { body: LABELS[type], tag: `kex-${id}` }); desktop.add(alert);
         alert.onclose = () => desktop.delete(alert);
         alert.onclick = () => { if (own === generation) { window.focus(); location.hash = target; } alert.close(); };
       } catch { /* Le centre de notifications reste disponible si le navigateur refuse l’alerte. */ }

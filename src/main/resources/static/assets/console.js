@@ -975,7 +975,7 @@ async function route() {
     $('#crumb').textContent = VIEWS[view].title;
     // Le titre suit la vue : un onglet parmi dix ne se retrouve pas, et un signet pris sur un
     // écran précis reviendrait avec le nom de l'application pour seul repère.
-    document.title = `${VIEWS[view].title} — Kex Agent Control Center`;
+    document.title = `${VIEWS[view].title} — Kex-anHarness Control Center`;
     $('#announcer').textContent = VIEWS[view].title;
     // `main` garde son défilement d'un écran à l'autre — ce n'est qu'un attribut `hidden` qui
     // change, pas un nouveau document. Sans ça, quitter un long tableau de processus scrollé

@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   sync:
-    if: github.repository == 'devdownin/Kex-agent-ai'
+    if: github.repository == 'devdownin/Kex-anHarness'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -44,5 +44,5 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ vars.DOCKERHUB_REPOSITORY || 'compagnonsdudev/kex-agent-ai' }}
           readme-filepath: ./DOCKERHUB.md
-          short-description: ${{ github.event.repository.description }}
+          short-description: "Kex-anHarness: governed AI agent with MCP tools, supervision and human approvals."
           enable-url-completion: false

@@ -28,7 +28,7 @@ jobs:
   # ne se déclenche pas sur un tag — il ne couvre que `main` et les pull requests — donc s'y fier
   # publierait au mieux le résultat d'une autre révision.
   verify:
-    if: github.repository == 'devdownin/Kex-agent-ai'
+    if: github.repository == 'devdownin/Kex-anHarness'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -233,7 +233,7 @@ jobs:
           sbom: true
           tags: ${{ steps.version.outputs.tags }}
           labels: |
-            org.opencontainers.image.title=Kex Agent AI
+            org.opencontainers.image.title=Kex-anHarness
             org.opencontainers.image.description=Agent IA outillé par MCP, branché sur Kafka SQL Explorer
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}

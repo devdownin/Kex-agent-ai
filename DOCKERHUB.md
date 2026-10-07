@@ -9,7 +9,7 @@ served by the agent itself, no build step and no CDN. The console manages MCP co
 shows session activity and lifecycle, and includes a Playground for tools, resources and parameterized
 resource templates.
 
-- **Source, issues and full documentation:** https://github.com/devdownin/Kex-agent-ai
+- **Source, issues and full documentation:** https://github.com/devdownin/Kex-anHarness
 - **Licence:** GPL-3.0-or-later
 
 ## Tags
@@ -53,7 +53,7 @@ curl -X POST localhost:8081/api/agent/chat \
 
 The whole stack — Kafka 4.3 (KRaft), Explorer with its MCP server on, and this agent wired to it —
 is one `docker compose up` away from
-[the repository](https://github.com/devdownin/Kex-agent-ai#-quick-start).
+[the repository](https://github.com/devdownin/Kex-anHarness#-quick-start).
 
 ## MCP from the browser
 
@@ -82,7 +82,7 @@ Configure topic policies and DLQ routes on **Kafka SQL Explorer**, not on the ag
 For a baseline that survives Explorer restarts or works across replicas, configure its
 shared lag history directory on a writable volume with interprocess locking.
 See [Kafka SQL Explorer's deployment example](https://github.com/devdownin/Kafkaexplorer/blob/main/docs/DOCKERHUB.md#operational-mcp-reviews)
-and [the agent's MCP guide](https://github.com/devdownin/Kex-agent-ai/blob/main/docs/MCP.md).
+and [the agent's MCP guide](https://github.com/devdownin/Kex-anHarness/blob/main/docs/MCP.md).
 The agent distinguishes declarations from live observations and treats unavailable data
 as unmeasured.
 
@@ -99,7 +99,7 @@ as unmeasured.
 | `KEX_MCP_STDIO_ALLOWED_COMMANDS` | Explicit allowlist of executables accepted for stdio MCP servers |
 
 An unreachable MCP server never blocks startup: the agent boots, says so, and keeps serving what it
-still can. [Every setting, with its reasons](https://github.com/devdownin/Kex-agent-ai/blob/main/docs/CONFIGURATION.md).
+still can. [Every setting, with its reasons](https://github.com/devdownin/Kex-anHarness/blob/main/docs/CONFIGURATION.md).
 
 ## Health and observability
 
@@ -138,5 +138,5 @@ is forbidden.
 ## Project name
 
 The project is now called **Kex-anHarness**. The
-[GitHub repository](https://github.com/devdownin/Kex-agent-ai) and the published images keep their
-existing `kex-agent-ai` names; deployment commands above continue to use those names.
+[GitHub repository](https://github.com/devdownin/Kex-anHarness) uses the new name. Published images
+keep their existing `kex-agent-ai` names; deployment commands above continue to use those image names.
