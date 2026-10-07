@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🧭 Kex Agent AI
+# 🧭 Kex-anHarness
 
 ### Un agent IA qui se sert vraiment de vos outils — Spring Boot 4, Spring AI 2, Java 25.
 
@@ -19,13 +19,17 @@
 
 ---
 
+> **Nom du projet :** Kex-anHarness (anciennement Kex Agent AI). L’URL GitHub reste
+> [devdownin/Kex-agent-ai](https://github.com/devdownin/Kex-agent-ai). Les noms des images publiées, des artefacts Maven et les clés
+> de configuration conservent leurs identifiants existants.
+
 ## Un agent généraliste à gouvernance forte
 
 Kafka est une intégration de référence, pas une limite : Kex peut exploiter des serveurs MCP pour des fichiers, GitHub, SQL ou des systèmes métier. Sa différenciation reste la gouvernance — autonomie par capacité, seuils de confiance, validation humaine et audit. Voir [la vision et les extensions](docs/GOVERNED-GENERAL-AGENT.md).
 
 **La plupart des démos d'« agent IA » répondent de mémoire. Celui-ci va regarder.**
 
-Kex Agent AI est un service Spring Boot qui se connecte à des serveurs [MCP](https://modelcontextprotocol.io),
+Kex-anHarness est un service Spring Boot qui se connecte à des serveurs [MCP](https://modelcontextprotocol.io),
 découvre les outils qu'ils exposent et les présente à un modèle Claude — de sorte qu'une question
 comme *« quels topics n'ont rien reçu aujourd'hui ? »* devient une vraie interrogation d'un vrai
 cluster, pas une supposition bien tournée.
@@ -163,7 +167,7 @@ une compétence réutilisable, et les refus qui sont la vraie démonstration —
 ```mermaid
 flowchart LR
     U([Client]) -->|Bearer + JSON| A
-    subgraph A["Kex Agent AI :8081"]
+    subgraph A["Kex-anHarness :8081"]
         C[ChatClient] --- M[(Mémoire de<br/>conversation)]
         C --- T[Outils MCP]
     end

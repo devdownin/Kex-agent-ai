@@ -4,8 +4,11 @@ package com.kex.agent.kafka;
 
 import java.util.Map;
 
+import com.kex.agent.mcp.McpServerUnavailableException;
 import com.kex.agent.mcp.McpToolCatalog;
+import com.kex.agent.mcp.McpToolForbiddenException;
 import com.kex.agent.mcp.McpToolResult;
+import com.kex.agent.mcp.UnknownMcpServerException;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -101,7 +104,9 @@ public class ForecastViewService {
         }
         try {
             McpToolResult result = catalog.call(properties.connection(), tool, arguments);
-            if (result.error()) return Read.failed(tool + " : lecture refusée ou indisponible");
+            if (result.error()) return Read.failed(diagnose(tool,
+                    tool + " : lecture refusée ou indisponible sur « " + properties.connection()
+                            + " ». Vérifiez les diagnostics MCP et le périmètre autorisé."));
             JsonNode payload = payload(result);
             if (payload == null || !payload.isObject() || !payload.hasNonNull("data")) {
                 return Read.failed(tool + " : réponse invalide");
@@ -132,11 +137,39 @@ public class ForecastViewService {
             return new Read(data, payload.path("coverage"), payload.path("warnings"),
                     payload.path("truncated").asBoolean(false), null);
         }
+        catch (UnknownMcpServerException ex) {
+            return Read.failed("Connexion MCP « " + properties.connection()
+                    + " » introuvable. Vérifiez kex.agent.kafka.connection et la connexion dans la page MCP.");
+        }
+        catch (McpToolForbiddenException ex) {
+            return Read.failed("Accès refusé à " + tool + " sur « " + properties.connection()
+                    + " ». Vérifiez la politique d'accès et autorisez cet outil si nécessaire.");
+        }
+        catch (McpServerUnavailableException ex) {
+            return Read.failed("Serveur MCP « " + properties.connection()
+                    + " » indisponible. Vérifiez son état, son URL et son authentification dans la page MCP.");
+        }
         catch (Exception ex) {
             // Ne pas transmettre les détails d'une exception transport : ils peuvent contenir
             // des paramètres de connexion. L'état est visible et les diagnostics MCP restent disponibles.
-            return Read.failed(tool + " : outil absent, accès refusé ou serveur indisponible");
+            return Read.failed(diagnose(tool, tool + " : Erreur de récupération sur « " + properties.connection()
+                    + " », lecture indisponible. Vérifiez les diagnostics MCP puis réessayez."));
         }
+    }
+
+    private String diagnose(String tool, String fallback) {
+        // Une exception d'appel ne prouve pas l'absence d'un outil. Seul le catalogue d'un
+        // serveur initialisé permet de proposer l'activation du pilote plutôt qu'un réessai.
+        try {
+            if (!catalog.announcesTool(properties.connection(), tool)) {
+                return tool + " : outil non annoncé par « " + properties.connection()
+                        + " ». Vérifiez la version de KafkaExplorer et activez explorer.forecasting.pilot.enabled=true"
+                        + " avec l'historique, l'inférence et les séries approuvées configurés."
+                        + " Redémarrez KafkaExplorer puis actualisez son catalogue MCP.";
+            }
+        }
+        catch (RuntimeException ignored) { /* Le diagnostic ne doit pas masquer l'échec initial. */ }
+        return fallback;
     }
 
     private boolean validHistory(JsonNode history, String id) {

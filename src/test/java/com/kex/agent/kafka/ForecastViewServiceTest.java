@@ -5,14 +5,20 @@ package com.kex.agent.kafka;
 import java.util.List;
 import java.util.Map;
 
+import com.kex.agent.mcp.McpServerUnavailableException;
 import com.kex.agent.mcp.McpToolCatalog;
+import com.kex.agent.mcp.McpToolForbiddenException;
 import com.kex.agent.mcp.McpToolResult;
+import com.kex.agent.mcp.UnknownMcpServerException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -23,6 +29,11 @@ class ForecastViewServiceTest {
     private final ForecastViewService service = new ForecastViewService(catalog,
             new KafkaProperties("kafka-explorer", "topics", "lag", 200));
     private static final String ID = "approved-series";
+
+    @BeforeEach
+    void outil_annonce_par_defaut() {
+        when(catalog.announcesTool(anyString(), anyString())).thenReturn(true);
+    }
 
     @Test
     void lit_le_contrat_reel_sans_declencher_d_inference() {
@@ -72,6 +83,40 @@ class ForecastViewServiceTest {
             assertThat(disabled.metrics().unavailable()).contains("non configurée");
         }
         verify(catalog, never()).call(anyString(), anyString(), anyMap());
+    }
+
+    @Test
+    void distingue_connexion_absente_refus_et_panne_sans_exposer_les_secrets() {
+        doThrow(new UnknownMcpServerException("kafka-explorer"))
+                .when(catalog).call(anyString(), anyString(), anyMap());
+        assertThat(service.metrics().unavailable()).contains("kafka-explorer", "introuvable", "kex.agent.kafka.connection");
+        doThrow(new McpToolForbiddenException("kafka-explorer", "kex_list_forecastable_metrics"))
+                .when(catalog).call(anyString(), anyString(), anyMap());
+        assertThat(service.metrics().unavailable()).contains("Accès refusé", "autorisez").doesNotContain("outil absent");
+        doThrow(new McpServerUnavailableException("kafka-explorer", new RuntimeException("token=secret")))
+                .when(catalog).call(anyString(), anyString(), anyMap());
+        assertThat(service.metrics().unavailable()).contains("Serveur MCP", "indisponible", "authentification")
+                .doesNotContain("secret", "outil absent");
+    }
+
+    @Test
+    void outil_non_annonce_explique_la_configuration_du_pilote() {
+        when(catalog.call(anyString(), anyString(), anyMap())).thenThrow(new IllegalStateException("secret"));
+        when(catalog.announcesTool("kafka-explorer", "kex_list_forecastable_metrics")).thenReturn(false);
+        assertThat(service.metrics().unavailable()).contains("non annoncé", "kafka-explorer",
+                "explorer.forecasting.pilot.enabled=true", "historique", "inférence").doesNotContain("secret");
+        doReturn(new McpToolResult("kafka-explorer", "kex_list_forecastable_metrics", true, List.of("secret"), null))
+                .when(catalog).call(anyString(), anyString(), anyMap());
+        assertThat(service.metrics().unavailable()).contains("non annoncé", "explorer.forecasting.pilot.enabled=true")
+                .doesNotContain("secret");
+    }
+
+    @Test
+    void panne_d_un_outil_annonce_ou_du_diagnostic_ne_devient_pas_un_outil_absent() {
+        when(catalog.call(anyString(), anyString(), anyMap())).thenThrow(new IllegalStateException("secret"));
+        assertThat(service.metrics().unavailable()).contains("Erreur de récupération").doesNotContain("non annoncé", "secret");
+        when(catalog.announcesTool(anyString(), anyString())).thenThrow(new IllegalStateException("secret"));
+        assertThat(service.metrics().unavailable()).contains("Erreur de récupération").doesNotContain("secret");
     }
 
     @Test

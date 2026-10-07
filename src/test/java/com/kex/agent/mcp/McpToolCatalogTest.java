@@ -85,6 +85,31 @@ class McpToolCatalogTest {
     }
 
     @Test
+    void distingue_un_outil_absent_d_une_decouverte_en_echec() {
+        var tool = McpSchema.Tool.builder().name("kex_list_forecastable_metrics")
+                .inputSchema(Map.of("type", "object")).build();
+        given(client.listTools()).willReturn(new McpSchema.ListToolsResult(List.of(tool), null));
+        var catalog = catalog(true);
+        assertThat(catalog.announcesTool("kafka-explorer", "kex_list_forecastable_metrics")).isTrue();
+        assertThat(catalog.announcesTool("kafka-explorer", "missing")).isFalse();
+        assertThat(catalog.discoverTools("kafka-explorer")).extracting(McpToolInfo::name).containsExactly("kex_list_forecastable_metrics");
+        given(client.listTools()).willThrow(new IllegalStateException("Discovery failed"));
+        assertThatThrownBy(() -> catalog.announcesTool("kafka-explorer", "missing"))
+                .isInstanceOf(IllegalStateException.class).hasMessage("Discovery failed");
+        assertThatThrownBy(() -> catalog.discoverTools("kafka-explorer"))
+                .isInstanceOf(IllegalStateException.class).hasMessage("Discovery failed");
+        assertThatThrownBy(() -> catalog.announcesTool("other", "missing"))
+                .isInstanceOf(UnknownMcpServerException.class);
+    }
+
+    @Test
+    void diagnostic_refuse_un_handshake_incomplet() {
+        var catalog = catalog(false);
+        assertThatThrownBy(() -> catalog.discoverTools("kafka-explorer"))
+                .isInstanceOf(McpServerUnavailableException.class);
+    }
+
+    @Test
     void compare_les_outils_ajoutes_supprimes_et_les_schemas_modifies() {
         Instant comparedAt = Instant.parse("2026-09-19T10:15:30Z");
         Map<String, McpToolInfo> previous = Map.of(

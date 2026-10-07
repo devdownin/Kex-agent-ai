@@ -1,4 +1,4 @@
-# Kex Agent AI
+# Kex-anHarness
 
 **A governed AI agent for Kafka operations.** It watches your integration processes through MCP
 tools, explains what it sees, and asks a named human before it acts — every decision carrying its
@@ -134,3 +134,9 @@ of it the agent observes and recommends; it does not act. Where a capability can
 declared per capability, an execution mode can only narrow it, and anything below the confidence
 floor goes back to a human. Nothing here is a default you inherit by accident: an unlisted capability
 is forbidden.
+
+## Project name
+
+The project is now called **Kex-anHarness**. The
+[GitHub repository](https://github.com/devdownin/Kex-agent-ai) and the published images keep their
+existing `kex-agent-ai` names; deployment commands above continue to use those names.

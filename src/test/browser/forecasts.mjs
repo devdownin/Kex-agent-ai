@@ -33,6 +33,12 @@ const server = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (scenario === 'http-error') { res.writeHead(503); res.end('{"detail":"Serveur temporairement indisponible"}'); return; }
     let body;
+    if (req.url.endsWith('/readiness')) {
+      res.end(JSON.stringify({ connection: 'kafka-explorer', checkedAt: now, ready: scenario !== 'empty', checks: [
+        { id: 'connection', state: 'READY', detail: 'Découverte fraîche réussie', action: '' },
+        { id: 'visible-series', state: scenario === 'empty' ? 'BLOCKED' : 'READY', detail: scenario === 'empty' ? 'Aucune série autorisée visible' : 'Une série visible', action: scenario === 'empty' ? 'Vérifier les environnements autorisés.' : '' },
+      ] })); return;
+    }
     if (req.url.endsWith('/metrics')) metricReads++;
     if (req.url.endsWith('/resources')) {
       const id = req.url.split('/').at(-2);
@@ -57,7 +63,7 @@ const server = createServer(async (req, res) => {
   }
   if (req.url === '/') {
     res.setHeader('Content-Type', 'text/html');
-    res.end('<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/assets/console.css"><main style="margin:0;padding:16px;min-width:0"><h1>Prévisions</h1><label><input type="checkbox" id="forecast-auto-refresh"> Actualiser automatiquement (60 s)</label><p id="forecast-refresh-status"></p><div id="forecast-content"></div><section><h2>Risques à venir</h2><div id="forecast-dashboard-content"></div></section></main><script type="module">import * as f from "/assets/forecasts.js"; window.forecasts=f; f.wire(); f.setActive(true); f.view();</script>'); return;
+    res.end('<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/assets/console.css"><main style="margin:0;padding:16px;min-width:0"><h1>Prévisions</h1><label><input type="checkbox" id="forecast-auto-refresh"> Actualiser automatiquement (60 s)</label><p id="forecast-refresh-status"></p><button id="check-forecast-readiness">Vérifier la préparation MCP</button><div id="forecast-readiness"></div><div id="forecast-content"></div><section><h2>Risques à venir</h2><div id="forecast-dashboard-content"></div></section></main><script type="module">import * as f from "/assets/forecasts.js"; window.forecasts=f; f.wire(); f.setActive(true); f.view();</script>'); return;
   }
   try {
     if (!/^\/assets\/[a-z.-]+$/.test(req.url)) throw new Error('path');
@@ -72,6 +78,10 @@ try {
   const errors = []; page.on('pageerror', (error) => errors.push(String(error)));
   const base = `http://127.0.0.1:${server.address().port}`;
   async function load(mode) { scenario = mode; await page.goto(base); await page.waitForFunction(() => Boolean(window.forecasts)); await page.waitForFunction(() => !document.body.textContent.includes('Lecture des prévisions existantes…') && !document.body.textContent.includes('Lecture de l’historique et de la qualité…')); }
+  await load('empty');
+  await page.getByRole('button', { name: 'Vérifier la préparation MCP' }).click();
+  await page.getByText('Préparation MCP bloquée', { exact: true }).waitFor();
+  assert.match(await page.locator('#forecast-readiness').innerText(), /Vérifier les environnements autorisés/);
   await load('ready');
   assert.equal(await page.getByRole('link', { name: 'Topic : orders', exact: true }).getAttribute('href'), '#/integrations?topic=orders');
   assert.match(await page.getByRole('link', { name: 'Diagnostiquer le groupe : orders-consumer' }).getAttribute('href'), /#\/chat\?draft=/);

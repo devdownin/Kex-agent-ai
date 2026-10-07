@@ -119,6 +119,18 @@ public class McpToolCatalog implements AutoCloseable {
         return clients.stream().map(this::describe).toList();
     }
 
+    /** Une erreur de découverte ne doit pas être interprétée comme un outil absent. */
+    public boolean announcesTool(String connection, String tool) {
+        return listToolsStrict(client(connection)).stream().anyMatch(candidate -> tool.equals(candidate.name()));
+    }
+
+    /** Découverte fraîche pour les diagnostics, sans accepter un catalogue périmé. */
+    public List<McpToolInfo> discoverTools(String connection) {
+        McpSyncClient selected = client(connection);
+        if (!selected.isInitialized()) throw new McpServerUnavailableException(connection, new IllegalStateException("Handshake incomplet"));
+        return listToolsStrict(selected);
+    }
+
     /** Le client créé ici est déjà le test de connexion : rien n'est enregistré avant le handshake. */
     public synchronized McpServerInfo register(McpServerRegistration registration) {
         McpServerRegistration normalized = normalize(registration);
