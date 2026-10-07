@@ -1,0 +1,11 @@
+# Resource bounds for the isolated CI stack; not a production sizing recommendation.
+services:
+  kafka:
+    environment:
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+  explorer:
+    environment:
+      JAVA_TOOL_OPTIONS: -Xms256m -Xmx1024m
+  agent:
+    environment:
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx512m
