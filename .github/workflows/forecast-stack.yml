@@ -9,6 +9,7 @@ on:
       - 'scripts/forecast-stack.py'
       - 'scripts/forecast-demo-seed.sh'
       - 'ci/forecast-stack*'
+      - 'ci/test_forecast_stack.py'
       - 'Dockerfile'
       - 'src/main/java/com/kex/agent/kafka/**'
       - 'src/main/resources/application.yml'

@@ -89,5 +89,37 @@ class DiagnosticTest(unittest.TestCase):
         self.assertNotIn('private-agent-token', output.getvalue())
 
 
+class DemoMetricTest(unittest.TestCase):
+    def test_real_seed_is_followed_by_metric_creation_with_exact_source(self):
+        calls = []
+        def api(url, body=None):
+            calls.append((url, body))
+            if url.endswith('/api/metrics') and body is None:
+                return []
+            if url.endswith('/candidates'):
+                return {'metrics': [{'metricId': 'forecast-demo-lag', 'eligible': True}]}
+            return {}
+        settings = {'services': {'explorer': {'ports': [{'published': 18080}]}}}
+        with patch.object(stack, 'compose') as seed, patch.object(stack, 'request', side_effect=api), contextlib.redirect_stdout(io.StringIO()):
+            stack.demo(settings)
+        seed.assert_called_once_with('--profile', 'forecast-demo', 'run', '--rm', '--no-deps', 'forecast-demo-seed')
+        created = next(body for url, body in calls if url.endswith('/api/metrics') and body)
+        self.assertEqual(created['templateParams']['topic'], 'forecast.demo.orders')
+        self.assertEqual(created['templateParams']['group'], 'forecast-demo')
+
+    def test_existing_metric_is_preserved(self):
+        def api(url, body=None):
+            if url.endswith('/api/metrics'):
+                if body is not None:
+                    self.fail('Existing metric must not be overwritten')
+                return [{'id': 'forecast-demo-lag'}]
+            if url.endswith('/candidates'):
+                return {'metrics': [{'metricId': 'forecast-demo-lag', 'eligible': True}]}
+            return {}
+        settings = {'services': {'explorer': {'ports': [{'published': 8080}]}}}
+        with patch.object(stack, 'compose'), patch.object(stack, 'request', side_effect=api), contextlib.redirect_stdout(io.StringIO()):
+            stack.demo(settings)
+
+
 if __name__ == '__main__':
     unittest.main()
