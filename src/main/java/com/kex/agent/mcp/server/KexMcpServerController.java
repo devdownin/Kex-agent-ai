@@ -265,10 +265,10 @@ public class KexMcpServerController {
         }
         String requested = params.path("protocolVersion").asText();
         return result(id, Map.of("protocolVersion", PROTOCOLS.contains(requested) ? requested : PROTOCOL,
-                "serverInfo", Map.of("name", "kex-agent-ai", "version", serverVersion()),
+                "serverInfo", Map.of("name", "Kex-anHarness", "version", serverVersion()),
                 "capabilities", Map.of("tools", Map.of("listChanged", false),
                         "resources", Map.of("listChanged", false), "prompts", Map.of("listChanged", false)),
-                "instructions", "Read-only Kex supervision endpoint. Human approvals and all state changes "
+                "instructions", "Read-only Kex-anHarness supervision endpoint. Human approvals and all state changes "
                         + "stay in Kex's authenticated operator API and console."));
     }
 

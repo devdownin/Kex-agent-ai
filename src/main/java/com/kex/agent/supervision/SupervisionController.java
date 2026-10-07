@@ -187,7 +187,7 @@ class SupervisionController {
     @PostMapping("/notify/test")
     WebhookTestResult testNotification(Principal principal) {
         String actor = actor(principal);
-        Optional<String> failure = notifier.send("Test depuis Kex Agent AI",
+        Optional<String> failure = notifier.send("Test depuis Kex-anHarness",
                 "Déclenché manuellement par " + actor + " pour vérifier la configuration du webhook.");
         supervision.auditAction(actor, "Test du webhook de notification",
                 failure.isEmpty() ? "Envoyé" : "Échec : " + failure.get());

@@ -19,7 +19,7 @@ await check('le serveur MCP expose ses onglets et exécute un tool dans le playg
     const rpc = JSON.parse(request.postData() || '{}');
     nextId = rpc.id || nextId + 1;
     const results = {
-      initialize: { protocolVersion: '2025-06-18', serverInfo: { name: 'kex-agent-ai', version: 'test' }, capabilities: {} },
+      initialize: { protocolVersion: '2025-06-18', serverInfo: { name: 'Kex-anHarness', version: 'test' }, capabilities: {} },
       'tools/list': { tools: [{ name: 'kex_status', description: 'Current status', inputSchema: {
         type: 'object', required: ['scope'], properties: {
           scope: { type: 'string', description: 'Périmètre à inspecter' },

@@ -22,7 +22,7 @@ class OpenApiConfig {
     OpenAPI kexAgentOpenApi(ObjectProvider<BuildProperties> buildProperties) {
         return new OpenAPI()
                 .info(new Info()
-                        .title("Kex Agent AI")
+                        .title("Kex-anHarness")
                         .description("""
                                 Agent IA outillé par MCP. Toutes les routes `/api/**` exigent \
                                 `Authorization: Bearer <kex.agent.api-key>`.""")
