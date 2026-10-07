@@ -34,3 +34,9 @@ target/
 
 # Secrets docker compose
 .env
+
+# Private local forecast credentials and reviewed configuration
+.forecast-stack/
+
+# Python diagnostic bytecode
+__pycache__/

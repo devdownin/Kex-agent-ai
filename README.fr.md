@@ -412,3 +412,13 @@ L’espace utilisateur propose un contexte processus/période/environnement avec
 
 
 Un guide de premier usage explique demande, résultat et approbation, avec trois exemples choisis parmi les compétences disponibles et les demandes guidées. Chaque exemple prépare le formulaire sans le lancer. Le guide peut être rouvert ; son masquage est conservé par compte et locataire sur ce navigateur.
+
+## Stack complète avec TimesFM
+
+Pour lancer Kafka, KafkaExplorer, PostgreSQL, TimesFM et Kex-anHarness ensemble :
+
+```sh
+bin/forecast-stack.sh
+```
+
+[Configuration et démarrage](docs/FORECAST-STACK.md).

@@ -180,6 +180,17 @@
       <label class="forecast-refresh-option"><input type="checkbox" id="forecast-auto-refresh"> Actualiser automatiquement (60 s)</label>
       <p class="hint" id="forecast-refresh-status" role="status">Actualisation automatique désactivée · dernière lecture : aucune</p>
       <button type="button" class="ghost" id="check-forecast-readiness">Vérifier la préparation MCP</button>
+      <details class="panel" id="forecast-first-run">
+        <summary>Créer ma première prévision</summary>
+        <ol>
+          <li><strong>Préparer les services.</strong> Lancez la stack et utilisez « Vérifier la préparation MCP ». Un catalogue vide signifie que les séries restent à configurer.</li>
+          <li><strong>Choisir une métrique.</strong> Dans KafkaExplorer, ouvrez Metrics Forecast puis Configure a forecast. Le mode démo fournit la métrique forecast-demo-lag.</li>
+          <li><strong>Valider les sources.</strong> Déclarez topics, groupes, environnement et identités du collecteur. Exportez le YAML après validation.</li>
+          <li><strong>Démarrer la collecte.</strong> Enregistrez le YAML dans .forecast-stack/config/forecasts.yml et relancez la stack. Le panneau Metrics Forecast indique les points admissibles collectés sur 512 ; à une minute, le contexte couvre 512 minutes. Les trous peuvent prolonger cette attente.</li>
+          <li><strong>Lire le premier résultat.</strong> Actualisez cette page, sélectionnez la métrique et examinez la stratégie, les sources et la qualité. Les premiers résultats restent en observation (SHADOW). Utilisez « Analyser avec l’agent » pour une synthèse.</li>
+        </ol>
+        <p class="hint">La validation des sources et l’activation d’une prévision restent deux décisions distinctes. Aucune alerte n’est envoyée automatiquement.</p>
+      </details>
       <div id="forecast-readiness" aria-live="polite"></div>
       <div id="forecast-content" aria-live="polite"></div>
     </section>

@@ -1,0 +1,99 @@
+# Complete local stack: bin/forecast-stack.sh
+# Merge with docker-compose.yml; Kafka and the agent are inherited from the base.
+x-timesfm: &timesfm
+  build:
+    context: ${TIMESFM_BUILD_CONTEXT:-https://github.com/devdownin/Kafkaexplorer.git#31047ca9cdf2a1fe18c716d6b98dd0a5a3058663:services/timesfm}
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=512m
+  volumes:
+    - timesfm_models:/models
+  environment:
+    TIMESFM_TOKEN: ${TIMESFM_TOKEN:?required, run bin/forecast-stack.sh --prepare-only}
+    TIMESFM_CACHE_DIR: /models
+    HF_HOME: /models
+    TIMESFM_THREADS: ${TIMESFM_THREADS:-4}
+  cpus: ${TIMESFM_CPUS:-4.0}
+  mem_limit: ${TIMESFM_MEM_LIMIT:-8g}
+
+services:
+  forecast-demo-seed:
+    image: apache/kafka:4.3.1
+    profiles: [forecast-demo]
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./scripts/forecast-demo-seed.sh:/forecast-demo-seed.sh:ro
+    entrypoint: ["bash", "/forecast-demo-seed.sh"]
+
+  forecast-postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: forecasts
+      POSTGRES_USER: forecasts
+      POSTGRES_PASSWORD: ${FORECAST_POSTGRES_PASSWORD:?required, run bin/forecast-stack.sh --prepare-only}
+    volumes:
+      - forecast_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forecasts -d forecasts"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [timesfm_private]
+
+  forecast-model-prefetch:
+    <<: *timesfm
+    restart: "no"
+    command: ["exec /app/.venv/bin/python -m kex_timesfm.prefetch"]
+    networks: [default]
+
+  timesfm:
+    <<: *timesfm
+    command: ["exec /app/.venv/bin/uvicorn kex_timesfm.app:application --factory --host 0.0.0.0 --port 8000"]
+    depends_on:
+      forecast-model-prefetch:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3).read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 5m
+    networks: [timesfm_private]
+
+  explorer:
+    # Build the same pinned revision as the adapter, including all five forecast tools.
+    image: kex-forecast-explorer:local
+    build:
+      context: ${KAFKAEXPLORER_BUILD_CONTEXT:-https://github.com/devdownin/Kafkaexplorer.git#31047ca9cdf2a1fe18c716d6b98dd0a5a3058663}
+    depends_on:
+      forecast-postgres:
+        condition: service_healthy
+      timesfm:
+        condition: service_healthy
+    environment:
+      EXPLORER_FORECASTING_PILOT_ENABLED: "true"
+      EXPLORER_FORECASTING_INFERENCE_ENABLED: "true"
+      EXPLORER_FORECASTING_INFERENCE_SERVICE_URL: http://timesfm:8000
+      EXPLORER_FORECASTING_INFERENCE_TOKEN: ${TIMESFM_TOKEN:?required}
+      EXPLORER_FORECASTING_INFERENCE_TIMEOUT: ${TIMESFM_TIMEOUT:-35s}
+      EXPLORER_FORECASTING_HISTORY_JDBC_URL: jdbc:postgresql://forecast-postgres:5432/forecasts
+      EXPLORER_FORECASTING_HISTORY_USERNAME: forecasts
+      EXPLORER_FORECASTING_HISTORY_PASSWORD: ${FORECAST_POSTGRES_PASSWORD:?required}
+      SPRING_CONFIG_ADDITIONAL_LOCATION: optional:file:/app/forecast-config/forecasts.yml
+      EXPLORER_MCP_ALLOWED_FORECAST_ENVIRONMENTS: ${FORECAST_ENVIRONMENTS:-local}
+    volumes:
+      - ${FORECAST_CONFIG_DIR:-./.forecast-stack/config}:/app/forecast-config:ro
+    networks: [default, timesfm_private]
+
+networks:
+  timesfm_private:
+    internal: true
+
+volumes:
+  timesfm_models:
+  forecast_postgres:

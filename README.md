@@ -455,3 +455,13 @@ The user workspace supports explicit process/period/environment context and prev
 
 
 First-time users see a dismissible startup guide explaining requests, results and approvals, with three examples drawn from available team skills and guided starters. Examples prepare the existing form without running it. The guide can be reopened and its dismissal is scoped to the account and tenant on this browser.
+
+## Complete TimesFM stack
+
+Start Kafka, KafkaExplorer, PostgreSQL, TimesFM and Kex-anHarness together:
+
+```sh
+bin/forecast-stack.sh
+```
+
+[Configuration et démarrage](docs/FORECAST-STACK.md).
