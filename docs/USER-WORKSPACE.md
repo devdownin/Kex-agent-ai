@@ -261,3 +261,31 @@ réception ne remplace pas la date de mesure. Les erreurs de récupération, ref
 informations indisponibles et réponses vides gardent une action de vérification adaptée,
 sans relance automatique. Les fiches MCP détaillent paramètres, exemples, sortie déclarée et
 disponibilité ; les descriptions absentes sont indiquées sans inventer le contrat du service.
+
+### Contrat, preuves qualifiées et reprise ciblée (18, 12, 11, 13)
+
+Les réponses durables portent une `presentation` calculée côté serveur : JSON normalisé,
+limites de validation et état de chaque appel. Le contrat vérifie les champs obligatoires,
+les limites des tableaux, les nombres finis, unités et périodes, les dates ISO des séries,
+les références effectivement fournies, ainsi que les choix de clarification. Les éléments
+invalides sont écartés de la présentation et signalés ; le texte original reste disponible
+dans les données brutes. Les réponses anciennes ou reçues sans historique serveur sont
+explicitement indiquées comme non validées. La validation de structure ne certifie pas les faits.
+
+La synthèse présente Situation, Impact, Action proposée et À vérifier. `decision` peut fournir
+ces quatre textes ; les rubriques absentes restent explicites. Les constats utilisent
+`evidenceType` (OBSERVATION, INFERENCE, HYPOTHESIS) et éventuellement `contradictionIds`.
+Une observation déclarée sans référence identifiable est présentée comme hypothèse.
+Les qualifications et contradictions viennent de la réponse et restent à vérifier ; aucune
+note de confiance numérique n’est inventée. Les sources expirées, sans date exploitable ou
+observées il y a plus de sept jours sont signalées. Une source ancienne n’est pas automatiquement invalide.
+
+L’état des consultations distingue les appels terminés et les échecs. « Reprendre uniquement
+cette lecture » est proposé pour la dernière réponse si l’outil en échec est explicitement
+classé en lecture seule dans la politique serveur Kex. Le POST
+`/api/agent/workspace/requests/{id}/recover/stream` reçoit `{revision, tool}` : ownership,
+révision, dernier tour, état courant et politique sont recontrôlés. La reprise crée un nouveau
+tour dans le même contexte, avec une liste d’outils autorisés contenant uniquement l’outil choisi ;
+elle ne rejoue pas les arguments ni les opérations d’écriture. Les budgets, limites de débit,
+contrôles de paramètres et permissions habituels restent actifs. Une consultation réussie ou
+une mutation ne peut pas être reprise par cette route. Aucun échec n’entraîne de reprise automatique.

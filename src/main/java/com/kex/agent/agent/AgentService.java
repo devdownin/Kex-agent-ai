@@ -191,7 +191,12 @@ public class AgentService {
     }
 
     public AgentStream streamForTask(String owner, String conversationId, String message, String task) {
-        Conversation conversation = conversation(owner, conversationId, task, null);
+        return streamConversation(conversation(owner, conversationId, task, null), message);
+    }
+    public AgentStream streamReadOnly(String owner, String conversationId, String message, Set<String> allowedTools) {
+        return streamConversation(conversation(owner, conversationId, "CHAT", Set.copyOf(allowedTools)), message);
+    }
+    private AgentStream streamConversation(Conversation conversation, String message) {
         String id = conversation.id();
         Sinks.Many<AgentEvent> tools = Sinks.many().unicast().onBackpressureBuffer();
         ToolCallRecorder recorder = new ToolCallRecorder(tools);

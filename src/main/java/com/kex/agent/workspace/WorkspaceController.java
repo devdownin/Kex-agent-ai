@@ -27,6 +27,8 @@ class WorkspaceController {
     @GetMapping("/{id}") WorkspaceRequest get(Principal actor, @PathVariable String id) { return service.get(actor, id); }
     @PostMapping(path = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     Flux<ServerSentEvent<String>> stream(Principal actor, @Valid @RequestBody WorkspaceRequest.Input input) { return service.stream(actor, input); }
+    @PostMapping(path = "/{id}/recover/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    Flux<ServerSentEvent<String>> recover(Principal actor, @PathVariable String id, @Valid @RequestBody WorkspaceRequest.Recovery input) { return service.resumeRead(actor, id, input); }
     record Link(@NotBlank @Size(max = 100) String taskId) { }
     @PostMapping("/{id}/plan") WorkspaceRequest link(Principal actor, @PathVariable String id, @Valid @RequestBody Link input) { return service.link(actor, id, input.taskId()); }
 }

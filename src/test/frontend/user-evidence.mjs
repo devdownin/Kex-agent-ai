@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Kex Agent AI Contributors
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-const source = (await readFile('src/main/resources/static/assets/user-evidence.js', 'utf8')).replace("import { el } from './core.js';", '');
+const source = (await readFile('src/main/resources/static/assets/user-evidence.js', 'utf8')).replace("import { el } from './core.js';", '').replace("import { findingQuality } from './user-presentation.js';", '');
 const { resultIssue, citations, sourceValidity, validFindings } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 assert.equal(resultIssue({ status: 'COMPLETE', turns: [{ role: 'agent', completed: true, text: '' }] }).kind, 'empty');
 assert.equal(resultIssue({ status: 'ERROR', turns: [{ role: 'agent', httpStatus: 403 }] }).kind, 'denied');

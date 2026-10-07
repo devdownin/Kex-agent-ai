@@ -88,10 +88,10 @@ export function exportBundle(turn, provenance = {}) {
   return redact({ response: parsed === undefined ? turn.text : parsed, sources: turn.sources || [], ...provenance });
 }
 export function markdownSummary(turn, provenance = {}) {
-  const data = exportBundle(turn, provenance); const r = data.response;
+  const data = exportBundle(turn, provenance); const r = data.presentation?.text ? jsonValue(data.presentation.text) : data.response;
   const content = r && typeof r === 'object' && r.kind === 'result'
-    ? [r.conclusion, r.observations, r.uncertainties, r.nextAction].filter(Boolean).join('\n\n') : typeof r === 'string' ? r : JSON.stringify(r, null, 2);
-  return `${content}\n\nRéponse reçue : ${data.receivedAt || 'Date non fournie'}\n\nSources :\n${data.sources.map(s => `- [source:${s.id}] ${s.source || s.id} — ${s.observedAt || 'Date non fournie'} — validité : ${s.validUntil || 'Non fournie'}\n  ${s.excerpt || 'Extrait non fourni'}`).join('\n') || 'Aucune source fournie'}\n`;
+    ? [r.decision?.situation || r.conclusion, r.decision?.impact, r.observations, r.decision?.verify || r.uncertainties, r.decision?.action || r.nextAction].filter(Boolean).join('\n\n') : typeof r === 'string' ? r : JSON.stringify(r, null, 2);
+  return `${content}\n\nRéponse reçue : ${data.receivedAt || 'Date non fournie'}\n\nValidation : ${data.presentation?.text ? 'Structure contrôlée ; exactitude à vérifier' : 'Non disponible ou réponse non conforme'}\n${(data.presentation?.warnings || []).join('\n')}\n\nSources :\n${data.sources.map(s => `- [source:${s.id}] ${s.source || s.id} — ${s.observedAt || 'Date non fournie'} — validité : ${s.validUntil || 'Non fournie'}\n  ${s.excerpt || 'Extrait non fourni'}`).join('\n') || 'Aucune source fournie'}\n`;
 }
 export function tableCsv(table, provenance = {}) {
   const safe = redact(provenance);
