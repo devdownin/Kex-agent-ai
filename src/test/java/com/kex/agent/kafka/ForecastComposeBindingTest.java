@@ -32,7 +32,9 @@ class ForecastComposeBindingTest {
         // Compose resolves this operator setting before passing the environment to Spring.
         variables.replaceAll((key, value) -> value.equals("${FORECAST_ENVIRONMENTS:-local}") ? "local" : value);
         var environment = new StandardEnvironment();
-        environment.getPropertySources().addFirst(new SystemEnvironmentPropertySource("compose", variables));
+        // Use the standard source name so Boot applies environment-variable name mapping.
+        environment.getPropertySources().replace(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
+                new SystemEnvironmentPropertySource(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME, variables));
         var binder = Binder.get(environment);
         assertEquals(false, binder.bind("explorer.mcp.require-tls", Boolean.class).get());
         assertEquals("http://timesfm:8000", binder.bind("explorer.forecasting.inference.service-url", String.class).get());
